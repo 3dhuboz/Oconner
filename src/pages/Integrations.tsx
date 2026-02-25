@@ -1,18 +1,58 @@
 import React, { useEffect, useState } from 'react';
-import { Database, DollarSign, CheckCircle2, AlertCircle, Loader2, Mail, MessageSquare } from 'lucide-react';
+import { Database, DollarSign, CheckCircle2, AlertCircle, Loader2, Mail, MessageSquare, ExternalLink, Copy } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { cn } from '../utils';
+
+const IntegrationCard = ({ icon: Icon, title, status, statusColor, children, onAction, actionText, actionDisabled, isConnecting }: any) => {
+  const statusStyles: Record<string, string> = {
+    green: 'bg-emerald-100 text-emerald-700',
+    slate: 'bg-slate-100 text-slate-600',
+    amber: 'bg-amber-100 text-amber-700',
+  };
+
+  return (
+    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row gap-6 items-start sm:items-center justify-between">
+      <div className="flex gap-4 items-start">
+        <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center shrink-0", statusColor.bg)}>
+          <Icon className={cn("w-6 h-6", statusColor.text)} />
+        </div>
+        <div>
+          <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+            {title}
+            <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium", statusStyles[status.color])}>
+              {status.text === 'Connected' ? <CheckCircle2 className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
+              {status.text}
+            </span>
+          </h3>
+          <div className="text-slate-500 text-sm mt-1 max-w-md space-y-2">
+            {children}
+          </div>
+        </div>
+      </div>
+      {actionText && (
+        <div className="shrink-0 w-full sm:w-auto">
+          <button 
+            onClick={onAction}
+            disabled={actionDisabled || isConnecting}
+            className="w-full sm:w-auto px-4 py-2 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
+          >
+            {isConnecting && <Loader2 className="w-4 h-4 animate-spin" />}
+            {actionText}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
 
 export function Integrations() {
+  const { backendStatus } = useAuth();
   const [xeroConnected, setXeroConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  const webhookUrl = `${window.location.origin}/api/webhooks/email`;
 
   useEffect(() => {
-    // Check initial status
-    fetch('/api/xero/status')
-      .then(res => res.json())
-      .then(data => setXeroConnected(data.connected))
-      .catch(console.error);
-
-    // Listen for OAuth popup success
+    fetch('/api/xero/status').then(res => res.json()).then(data => setXeroConnected(data.connected));
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type === 'OAUTH_AUTH_SUCCESS') {
         setXeroConnected(true);
@@ -24,46 +64,25 @@ export function Integrations() {
   }, []);
 
   const handleConnectXero = async () => {
+    setIsConnecting(true);
     try {
-      setIsConnecting(true);
       const response = await fetch('/api/auth/xero/url');
       const data = await response.json();
-      
       if (data.error) {
-        alert(`Configuration Error: ${data.error}\n\nPlease add XERO_CLIENT_ID and XERO_CLIENT_SECRET to your environment variables.`);
+        alert(`Configuration Error: ${data.error}`);
         setIsConnecting(false);
         return;
       }
-
-      const authWindow = window.open(data.url, 'xero_oauth', 'width=600,height=700');
-      if (!authWindow) {
-        alert('Please allow popups to connect to Xero.');
-        setIsConnecting(false);
-      }
-    } catch (error) {
-      console.error('Failed to start Xero auth:', error);
-      setIsConnecting(false);
+      window.open(data.url, 'xero_oauth', 'width=600,height=700');
+    } catch (error) { 
+      console.error(error); 
+      setIsConnecting(false); 
     }
   };
 
-  const simulateIncomingEmail = async () => {
-    try {
-      await fetch('/api/webhooks/email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          subject: 'Work Order: Broken Power Outlet',
-          text: 'Please fix the broken power outlet in the living room. Tenant is available tomorrow.',
-          from: 'propertymanager@realestate.com',
-          tenantName: 'John Doe',
-          tenantPhone: '555-9999',
-          address: '999 Webhook Lane, Springfield'
-        })
-      });
-      alert('Email simulated! A new job has been instantly added to your Job Board in the INTAKE column.');
-    } catch (error) {
-      console.error('Failed to simulate email:', error);
-    }
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(webhookUrl);
+    alert('Webhook URL copied to clipboard!');
   };
 
   return (
@@ -74,122 +93,53 @@ export function Integrations() {
       </div>
 
       <div className="grid gap-6">
-        {/* Xero Integration */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row gap-6 items-start sm:items-center justify-between">
-          <div className="flex gap-4 items-start">
-            <div className="w-12 h-12 rounded-xl bg-[#13B5EA]/10 text-[#13B5EA] flex items-center justify-center shrink-0">
-              <DollarSign className="w-6 h-6" />
-            </div>
-            <div>
-              <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
-                Xero Accounting
-                {xeroConnected ? (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-medium">
-                    <CheckCircle2 className="w-3 h-3" /> Connected
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs font-medium">
-                    <AlertCircle className="w-3 h-3" /> Not Connected
-                  </span>
-                )}
-              </h3>
-              <p className="text-slate-500 text-sm mt-1 max-w-md">
-                Automatically sync completed jobs, generate invoices, and track payments directly in your Xero account.
-              </p>
-            </div>
-          </div>
-          <div className="shrink-0 w-full sm:w-auto">
-            <button 
-              onClick={handleConnectXero}
-              disabled={xeroConnected || isConnecting}
-              className="w-full sm:w-auto px-4 py-2 bg-[#13B5EA] hover:bg-[#0f9bc9] disabled:bg-slate-100 disabled:text-slate-400 text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
-            >
-              {isConnecting && <Loader2 className="w-4 h-4 animate-spin" />}
-              {xeroConnected ? 'Manage Connection' : 'Connect Xero'}
-            </button>
-          </div>
-        </div>
+        <IntegrationCard
+          icon={DollarSign}
+          title="Xero Accounting"
+          status={{ text: xeroConnected ? 'Connected' : 'Not Connected', color: xeroConnected ? 'green' : 'slate' }}
+          statusColor={{ bg: 'bg-[#13B5EA]/10', text: 'text-[#13B5EA]' }}
+          onAction={handleConnectXero}
+          actionText={xeroConnected ? 'Manage' : 'Connect Xero'}
+          actionDisabled={xeroConnected}
+          isConnecting={isConnecting}
+        >
+          <p>Automatically sync completed jobs, generate invoices, and track payments directly in your Xero account.</p>
+        </IntegrationCard>
 
-        {/* Email Inbox Monitoring */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row gap-6 items-start sm:items-center justify-between">
-          <div className="flex gap-4 items-start">
-            <div className="w-12 h-12 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center shrink-0">
-              <Mail className="w-6 h-6" />
-            </div>
-            <div>
-              <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
-                Email Inbox Monitoring
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-medium">
-                  <CheckCircle2 className="w-3 h-3" /> Active
-                </span>
-              </h3>
-              <p className="text-slate-500 text-sm mt-1 max-w-md">
-                Automatically catches incoming emails from Property Managers and creates a new job in the <strong>INTAKE</strong> column.
-              </p>
-              <div className="mt-3 p-2 bg-slate-50 border border-slate-200 rounded text-xs font-mono text-slate-600 break-all">
-                Webhook URL: {window.location.origin}/api/webhooks/email
-              </div>
-            </div>
+        <IntegrationCard
+          icon={Mail}
+          title="Email Inbox Monitoring"
+          status={{ text: 'Active', color: 'green' }}
+          statusColor={{ bg: 'bg-blue-500/10', text: 'text-blue-500' }}
+        >
+          <p>Automatically create jobs from incoming emails. Use a service like SendGrid Inbound Parse or Zapier to forward emails to your unique webhook URL.</p>
+          <div className="mt-3 p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono text-slate-700 flex items-center justify-between">
+            <span className="truncate pr-4">{webhookUrl}</span>
+            <button onClick={copyToClipboard} className="text-slate-400 hover:text-slate-600"><Copy className="w-4 h-4" /></button>
           </div>
-          <div className="shrink-0 w-full sm:w-auto">
-            <button 
-              onClick={simulateIncomingEmail}
-              className="w-full sm:w-auto px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-sm font-medium transition-colors"
-            >
-              Simulate Incoming Email
-            </button>
-          </div>
-        </div>
+          <details className="text-xs text-slate-600 mt-2">
+            <summary className="cursor-pointer font-medium">How to set up for local development?</summary>
+            <div className="mt-2 p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
+              <p>To receive webhooks on your local machine, you need to expose your dev server to the internet. We recommend using <a href="https://ngrok.com/" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">ngrok</a>.</p>
+              <ol className="list-decimal list-inside space-y-1">
+                <li>Install ngrok, then run this command in a new terminal: <code className="font-mono bg-slate-200 px-1 rounded">ngrok http 3000</code></li>
+                <li>Ngrok will give you a public URL (e.g., <code className="font-mono bg-slate-200 px-1 rounded">https://random.ngrok.io</code>).</li>
+                <li>Use this ngrok URL as the base for your webhook: <code className="font-mono bg-slate-200 px-1 rounded">https://random.ngrok.io/api/webhooks/email</code></li>
+                <li>Update your email forwarding service to point to this new ngrok URL.</li>
+              </ol>
+            </div>
+          </details>
+        </IntegrationCard>
 
-        {/* Twilio SMS Integration */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row gap-6 items-start sm:items-center justify-between">
-          <div className="flex gap-4 items-start">
-            <div className="w-12 h-12 rounded-xl bg-indigo-500/10 text-indigo-500 flex items-center justify-center shrink-0">
-              <MessageSquare className="w-6 h-6" />
-            </div>
-            <div>
-              <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
-                Twilio SMS Dispatch
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs font-medium">
-                  <AlertCircle className="w-3 h-3" /> Not Configured
-                </span>
-              </h3>
-              <p className="text-slate-500 text-sm mt-1 max-w-md">
-                Automatically send SMS notifications to electricians when they are dispatched to a job. Requires Twilio API credentials.
-              </p>
-            </div>
-          </div>
-          <div className="shrink-0 w-full sm:w-auto">
-            <button className="w-full sm:w-auto px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg text-sm font-medium transition-colors">
-              Configure Twilio
-            </button>
-          </div>
-        </div>
-
-        {/* Firebase Integration */}
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row gap-6 items-start sm:items-center justify-between">
-          <div className="flex gap-4 items-start">
-            <div className="w-12 h-12 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center shrink-0">
-              <Database className="w-6 h-6" />
-            </div>
-            <div>
-              <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
-                Firebase Database
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs font-medium">
-                  <AlertCircle className="w-3 h-3" /> Not Configured
-                </span>
-              </h3>
-              <p className="text-slate-500 text-sm mt-1 max-w-md">
-                Connect your Firebase project to sync job data, photos, and electrician field updates in real-time.
-              </p>
-            </div>
-          </div>
-          <div className="shrink-0 w-full sm:w-auto">
-            <button className="w-full sm:w-auto px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-sm font-medium transition-colors">
-              Connect Firebase
-            </button>
-          </div>
-        </div>
+        <IntegrationCard
+          icon={Database}
+          title="Firebase Database"
+          status={{ text: backendStatus.firebase ? 'Connected' : 'Not Configured', color: backendStatus.firebase ? 'green' : 'amber' }}
+          statusColor={{ bg: 'bg-amber-500/10', text: 'text-amber-500' }}
+        >
+          <p>Connect your Firebase project to sync job data, photos, and electrician field updates in real-time.</p>
+          <p className="text-xs">Configuration is managed in the <Link to="/admin" className="text-blue-600 underline">Dev Console</Link>.</p>
+        </IntegrationCard>
       </div>
     </div>
   );

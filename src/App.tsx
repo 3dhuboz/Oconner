@@ -12,8 +12,11 @@ import { Team } from './pages/Team';
 import { FieldPortal } from './pages/FieldPortal';
 import { SuperAdmin } from './pages/SuperAdmin';
 import { Billing } from './pages/Billing';
-import { mockJobs, mockElectricians } from './data/mockData';
+
+
 import { Job, Electrician } from './types';
+import { db } from './services/firebase';
+import { collection, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
@@ -31,29 +34,33 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 function AppContent() {
-  const [jobs, setJobs] = useState<Job[]>(mockJobs);
-  const [electricians, setElectricians] = useState<Electrician[]>(mockElectricians);
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [electricians, setElectricians] = useState<Electrician[]>([]);
+  const { user } = useAuth(); // Get user to prevent fetches on logout
 
-  // Poll for new jobs arriving via Email Webhook
+  // Effect for real-time jobs
   useEffect(() => {
-    const interval = setInterval(() => {
-      fetch('/api/jobs/sync')
-        .then(res => res.json())
-        .then(data => {
-          if (data.jobs && data.jobs.length > 0) {
-            setJobs(current => [...data.jobs, ...current]);
-            console.log("New jobs received from email!", data.jobs);
-          }
-        })
-        .catch(console.error);
-    }, 3000); // Check every 3 seconds for the demo
-    return () => clearInterval(interval);
-  }, []);
+    if (!user) return;
+    const unsubscribe = onSnapshot(collection(db, 'jobs'), (snapshot) => {
+      const jobsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Job));
+      setJobs(jobsData);
+    });
+    return unsubscribe;
+  }, [user]);
 
-  const updateJob = (id: string, updates: Partial<Job>) => {
-    setJobs(current => 
-      current.map(job => job.id === id ? { ...job, ...updates } : job)
-    );
+  // Effect for real-time electricians
+  useEffect(() => {
+    if (!user) return;
+    const unsubscribe = onSnapshot(collection(db, 'electricians'), (snapshot) => {
+      const electriciansData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Electrician));
+      setElectricians(electriciansData);
+    });
+    return unsubscribe;
+  }, [user]);
+
+  const updateJob = async (id: string, updates: Partial<Job>) => {
+    const jobRef = doc(db, 'jobs', id);
+    await updateDoc(jobRef, updates);
   };
 
   return (
@@ -110,7 +117,6 @@ function AppContent() {
     </Routes>
   );
 }
-
 function App() {
   return (
     <Router>
