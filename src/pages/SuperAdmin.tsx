@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Activity, Shield, Server, Database, Lock, Users, Save, Wifi, AlertTriangle, Flame, KeyRound } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { cn } from '../utils';
 
 // Mock Data for Wirez R Us Staff
 const STAFF = [
@@ -10,36 +11,43 @@ const STAFF = [
   { id: 'u4', name: 'Dev User', role: 'SUPER_ADMIN', email: 'dev@agency.com', status: 'Active' },
 ];
 
+const initialFirebaseConfig = {
+  apiKey: '', authDomain: '', projectId: '', storageBucket: '', messagingSenderId: '', appId: ''
+};
+
+const initialApiKeys = {
+  xeroClientId: '', xeroClientSecret: '', twilioAccountSid: '', twilioAuthToken: '', twilioPhoneNumber: ''
+};
+
 export function SuperAdmin() {
   const { backendStatus, license } = useAuth();
   const [showSaveConfirmation, setShowSaveConfirmation] = useState(false);
-  const [featureFlags, setFeatureFlags] = useState({
-    smsDispatch: true,
-    xeroIntegration: true,
-    complianceGenerator: true,
-    betaFeatures: false
-  });
   
-  const [firebaseConfig, setFirebaseConfig] = useState({
-    apiKey: '', authDomain: '', projectId: '', storageBucket: '', messagingSenderId: '', appId: ''
-  });
+  // State for current values
+  const [firebaseConfig, setFirebaseConfig] = useState(initialFirebaseConfig);
+  const [apiKeys, setApiKeys] = useState(initialApiKeys);
 
-  const [apiKeys, setApiKeys] = useState({
-    xeroClientId: '', xeroClientSecret: '', twilioAccountSid: '', twilioAuthToken: '', twilioPhoneNumber: ''
-  });
+  // State for pristine (un-edited) values
+  const [pristineFirebaseConfig, setPristineFirebaseConfig] = useState(initialFirebaseConfig);
+  const [pristineApiKeys, setPristineApiKeys] = useState(initialApiKeys);
+
+  const firebaseConfigChanged = JSON.stringify(firebaseConfig) !== JSON.stringify(pristineFirebaseConfig);
+  const apiKeysChanged = JSON.stringify(apiKeys) !== JSON.stringify(pristineApiKeys);
 
   const handleConfigChange = (setter: React.Dispatch<React.SetStateAction<any>>) => (e: React.ChangeEvent<HTMLInputElement>) => {
     setter(prev => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
-  const handleSave = (configName: string) => {
-    console.log(`Saving ${configName}...`, configName === 'Firebase' ? firebaseConfig : apiKeys);
+  const handleSave = (configName: 'Firebase' | 'API Keys') => {
+    if (configName === 'Firebase') {
+      console.log('Saving Firebase Config...', firebaseConfig);
+      setPristineFirebaseConfig(firebaseConfig);
+    } else {
+      console.log('Saving API Keys...', apiKeys);
+      setPristineApiKeys(apiKeys);
+    }
     setShowSaveConfirmation(true);
     setTimeout(() => setShowSaveConfirmation(false), 2000);
-  };
-
-  const toggleFeature = (key: keyof typeof featureFlags) => {
-    setFeatureFlags(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
   return (
@@ -132,7 +140,10 @@ export function SuperAdmin() {
               </h3>
               <button 
                 onClick={() => handleSave('Firebase')}
-                className="text-xs bg-slate-900 text-white px-3 py-1.5 rounded-lg flex items-center gap-1 hover:bg-slate-800 transition-colors"
+                disabled={!firebaseConfigChanged}
+                className={cn("text-xs text-white px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors",
+                  firebaseConfigChanged ? "bg-slate-900 hover:bg-slate-800" : "bg-slate-400 cursor-not-allowed"
+                )}
               >
                 <Save className="w-3 h-3" /> Save Config
               </button>
@@ -162,7 +173,10 @@ export function SuperAdmin() {
               </h3>
               <button 
                 onClick={() => handleSave('API Keys')}
-                className="text-xs bg-slate-900 text-white px-3 py-1.5 rounded-lg flex items-center gap-1 hover:bg-slate-800 transition-colors"
+                disabled={!apiKeysChanged}
+                className={cn("text-xs text-white px-3 py-1.5 rounded-lg flex items-center gap-1 transition-colors",
+                  apiKeysChanged ? "bg-slate-900 hover:bg-slate-800" : "bg-slate-400 cursor-not-allowed"
+                )}
               >
                 <Save className="w-3 h-3" /> Save Keys
               </button>
