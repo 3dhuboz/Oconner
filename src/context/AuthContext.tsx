@@ -40,10 +40,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setFirebaseUser(user);
         const tokenResult = await user.getIdTokenResult();
         const claims = tokenResult.claims;
+        
+        // Hardcode dev role for the main admin email
+        let role = claims.role || 'user';
+        if (user.email === 'admin@cupcycle.au') {
+          role = 'dev';
+        }
+
         setUser({
           email: user.email!,
           name: user.displayName || 'User',
-          role: claims.role || 'user', // 'dev', 'admin', or 'user'
+          role: role as 'dev' | 'admin' | 'user',
           uid: user.uid,
         });
       } else {
