@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Activity, Shield, Server, Database, Lock, Users, Save, Wifi, AlertTriangle } from 'lucide-react';
+import { Activity, Shield, Server, Database, Lock, Users, Save, Wifi, AlertTriangle, Flame } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 // Mock Data for Wirez R Us Staff
@@ -18,9 +18,28 @@ export function SuperAdmin() {
     complianceGenerator: true,
     betaFeatures: false
   });
+  
+  const [firebaseConfig, setFirebaseConfig] = useState({
+    apiKey: '',
+    authDomain: '',
+    projectId: '',
+    storageBucket: '',
+    messagingSenderId: '',
+    appId: ''
+  });
 
   const toggleFeature = (key: keyof typeof featureFlags) => {
     setFeatureFlags(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const handleFirebaseChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFirebaseConfig({ ...firebaseConfig, [e.target.name]: e.target.value });
+  };
+
+  const saveFirebaseConfig = () => {
+    // In a real app, this would save to the backend/env
+    alert("Firebase Configuration Saved! (Simulated)");
+    console.log("Saved Config:", firebaseConfig);
   };
 
   return (
@@ -100,13 +119,94 @@ export function SuperAdmin() {
         {/* Middle/Right: Configuration & Staff */}
         <div className="lg:col-span-2 space-y-6">
           
+          {/* Firebase Configuration */}
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="font-bold text-slate-900 flex items-center gap-2">
+                <Flame className="w-4 h-4 text-orange-500" /> Firebase Configuration
+              </h3>
+              <button 
+                onClick={saveFirebaseConfig}
+                className="text-xs bg-slate-900 text-white px-3 py-1.5 rounded-lg flex items-center gap-1 hover:bg-slate-800 transition-colors"
+              >
+                <Save className="w-3 h-3" /> Save Config
+              </button>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-500">API Key</label>
+                <input 
+                  type="text" 
+                  name="apiKey"
+                  value={firebaseConfig.apiKey}
+                  onChange={handleFirebaseChange}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-mono"
+                  placeholder="AIzaSy..."
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-500">Auth Domain</label>
+                <input 
+                  type="text" 
+                  name="authDomain"
+                  value={firebaseConfig.authDomain}
+                  onChange={handleFirebaseChange}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-mono"
+                  placeholder="myapp.firebaseapp.com"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-500">Project ID</label>
+                <input 
+                  type="text" 
+                  name="projectId"
+                  value={firebaseConfig.projectId}
+                  onChange={handleFirebaseChange}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-mono"
+                  placeholder="myapp-123"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-500">Storage Bucket</label>
+                <input 
+                  type="text" 
+                  name="storageBucket"
+                  value={firebaseConfig.storageBucket}
+                  onChange={handleFirebaseChange}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-mono"
+                  placeholder="myapp.appspot.com"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-500">Messaging Sender ID</label>
+                <input 
+                  type="text" 
+                  name="messagingSenderId"
+                  value={firebaseConfig.messagingSenderId}
+                  onChange={handleFirebaseChange}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-mono"
+                  placeholder="123456789"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-500">App ID</label>
+                <input 
+                  type="text" 
+                  name="appId"
+                  value={firebaseConfig.appId}
+                  onChange={handleFirebaseChange}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-mono"
+                  placeholder="1:123456789:web:abc..."
+                />
+              </div>
+            </div>
+          </div>
+
           {/* Feature Flags */}
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
             <div className="flex items-center justify-between mb-6">
               <h3 className="font-bold text-slate-900">Feature Configuration</h3>
-              <button className="text-xs bg-slate-900 text-white px-3 py-1.5 rounded-lg flex items-center gap-1">
-                <Save className="w-3 h-3" /> Save Changes
-              </button>
             </div>
             
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
