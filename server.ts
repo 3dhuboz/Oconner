@@ -204,33 +204,26 @@ async function startServer() {
     }
   });
 
-  // --- VITE MIDDLEWARE (Must be after API routes) ---
+  // --- VITE MIDDLEWARE & SPA FALLBACK --- 
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
     app.use(vite.middlewares);
-
-    // SPA Fallback for development to handle direct navigation to routes
-    app.use('*', (req, res, next) => {
-      if (req.originalUrl.startsWith('/api')) {
-        return next(); // Skip API calls
-      }
-      // Let Vite handle the fallback
-      req.url = '/index.html';
-      vite.middlewares(req, res, next);
-    });
   } else {
-    // Production: Serve static files from dist
     const distPath = path.resolve(__dirname, "dist");
     app.use(express.static(distPath));
-    
-    // SPA Fallback
-    app.use("*", (req, res) => {
-      res.sendFile(path.resolve(distPath, "index.html"));
-    });
   }
+
+  // Catch-all to serve index.html for any non-API routes
+  app.get('*', (req, res, next) => {
+    if (req.originalUrl.startsWith('/api')) {
+      return next(); // Skip API calls
+    }
+    const distPath = path.resolve(__dirname, "dist");
+    res.sendFile(path.resolve(process.env.NODE_ENV === 'production' ? distPath : __dirname, "index.html"));
+  });
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
