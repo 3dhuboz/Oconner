@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, User as FirebaseUser } from 'firebase/auth';
+import { app } from '../services/firebase';
 
 interface User {
   email: string;
@@ -27,7 +28,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [backendStatus, setBackendStatus] = useState({ firebase: true, api: true, latency: 45 });
 
   useEffect(() => {
-    const auth = getAuth();
+    if (!app) {
+      console.warn('Firebase app not initialized. Auth disabled.');
+      setIsLoading(false);
+      return;
+    }
+
+    const auth = getAuth(app);
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         setFirebaseUser(user);
@@ -58,12 +65,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = async (email: string, pass: string) => {
-    const auth = getAuth();
+    if (!app) throw new Error('Firebase not initialized');
+    const auth = getAuth(app);
     await signInWithEmailAndPassword(auth, email, pass);
   };
 
   const logout = async () => {
-    const auth = getAuth();
+    if (!app) return;
+    const auth = getAuth(app);
     await signOut(auth);
   };
 

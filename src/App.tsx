@@ -28,7 +28,7 @@ function AppContent() {
 
   // Effect for real-time jobs
   useEffect(() => {
-    if (!user) return;
+    if (!user || !db) return;
     const unsubscribe = onSnapshot(collection(db, 'jobs'), (snapshot) => {
       const jobsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Job));
       setJobs(jobsData);
@@ -38,7 +38,7 @@ function AppContent() {
 
   // Effect for real-time electricians
   useEffect(() => {
-    if (!user) return;
+    if (!user || !db) return;
     const unsubscribe = onSnapshot(collection(db, 'electricians'), (snapshot) => {
       const electriciansData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Electrician));
       setElectricians(electriciansData);
@@ -47,6 +47,7 @@ function AppContent() {
   }, [user]);
 
   const updateJob = async (id: string, updates: Partial<Job>) => {
+    if (!db) return;
     const jobRef = doc(db, 'jobs', id);
     await updateDoc(jobRef, updates);
   };

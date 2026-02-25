@@ -22,7 +22,11 @@ export function Login() {
       toast.success('Logged in successfully!');
       navigate('/');
     } catch (err: any) {
-      setError(err.message || 'Failed to login. Please check your credentials.');
+      if (err.message === 'Firebase not initialized') {
+        setError('System configuration error: Firebase is not connected. Please contact support.');
+      } else {
+        setError(err.message || 'Failed to login. Please check your credentials.');
+      }
     } finally {
       setIsSubmitting(false);
     }
