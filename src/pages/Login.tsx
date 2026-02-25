@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Zap, Key, Mail, Loader2, AlertCircle, ShieldCheck } from 'lucide-react';
+import { Zap, Mail, Lock, Loader2, AlertCircle, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import toast from 'react-hot-toast';
 
 export function Login() {
-  const [licenseKey, setLicenseKey] = useState('');
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { login } = useAuth();
@@ -17,10 +18,11 @@ export function Login() {
     setIsSubmitting(true);
 
     try {
-      await login(licenseKey, email);
+      await login(email, password);
+      toast.success('Logged in successfully!');
       navigate('/');
     } catch (err: any) {
-      setError(err.message || 'Failed to login. Please check your license key and email.');
+      setError(err.message || 'Failed to login. Please check your credentials.');
     } finally {
       setIsSubmitting(false);
     }
@@ -41,23 +43,6 @@ export function Login() {
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">
-                License Key
-              </label>
-              <div className="relative">
-                <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                <input
-                  type="text"
-                  required
-                  value={licenseKey}
-                  onChange={(e) => setLicenseKey(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all font-mono text-sm uppercase"
-                  placeholder="XXXX-XXXX-XXXX"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
                 Email Address
               </label>
               <div className="relative">
@@ -69,6 +54,23 @@ export function Login() {
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all"
                   placeholder="user@company.com"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Password
+              </label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                <input
+                  type="password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all"
+                  placeholder="••••••••"
                 />
               </div>
             </div>
@@ -87,11 +89,11 @@ export function Login() {
             >
               {isSubmitting ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin" /> Verifying License...
+                  <Loader2 className="w-4 h-4 animate-spin" /> Signing In...
                 </>
               ) : (
                 <>
-                  <ShieldCheck className="w-4 h-4" /> Authenticate
+                  <ShieldCheck className="w-4 h-4" /> Secure Sign In
                 </>
               )}
             </button>
@@ -99,8 +101,7 @@ export function Login() {
 
           <div className="mt-6 text-center">
             <p className="text-xs text-slate-400">
-              Protected by Wirez R Us Enterprise Licensing.<br/>
-              Version 2.4.0 (Build 892)
+              &copy; 2024 Wirez R Us Field Management.
             </p>
           </div>
         </div>

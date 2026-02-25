@@ -5,6 +5,7 @@ import twilio from "twilio";
 import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
+import { stripe } from "./src/services/stripe";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -202,6 +203,65 @@ async function startServer() {
       console.error("Twilio Error:", e);
       res.status(500).json({ error: e.message });
     }
+  });
+
+  // --- STRIPE BILLING & LICENSING ---
+
+  // 8. Get active subscription plans
+  app.get("/api/stripe/plans", async (req, res) => {
+    try {
+      const prices = await stripe.prices.list({
+        active: true,
+        expand: ['data.product'],
+      });
+      res.json({ plans: prices.data });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // 9. Create a checkout session
+  app.post("/api/stripe/create-checkout-session", async (req, res) => {
+    const { priceId } = req.body;
+    try {
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ['card'],
+        line_items: [{ price: priceId, quantity: 1 }],
+        mode: 'subscription',
+        success_url: `${process.env.APP_URL}/billing?success=true`,
+        cancel_url: `${process.env.APP_URL}/billing?canceled=true`,
+      });
+      res.json({ sessionId: session.id });
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  // 10. Stripe Webhook Handler
+  app.post("/api/stripe/webhook", express.raw({ type: 'application/json' }), async (req, res) => {
+    const sig = req.headers['stripe-signature'] as string;
+    let event;
+
+    try {
+      event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET || '');
+    } catch (err: any) {
+      console.log(`Webhook signature verification failed.`, err.message);
+      return res.sendStatus(400);
+    }
+
+    // Handle the event
+    switch (event.type) {
+      case 'checkout.session.completed':
+        const session = event.data.object;
+        // TODO: Fulfill the purchase, e.g., activate a license in your database
+        console.log('Payment was successful for session:', session.id);
+        break;
+      // ... handle other event types
+      default:
+        console.log(`Unhandled event type ${event.type}`);
+    }
+
+    res.json({ received: true });
   });
 
   // --- VITE MIDDLEWARE & SPA FALLBACK --- 

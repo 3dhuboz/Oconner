@@ -17,21 +17,9 @@ import { Billing } from './pages/Billing';
 import { Job, Electrician } from './types';
 import { db } from './services/firebase';
 import { collection, onSnapshot, doc, updateDoc } from 'firebase/firestore';
+import { Toaster } from 'react-hot-toast';
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, isLoading } = useAuth();
-  const location = useLocation();
-
-  if (isLoading) {
-    return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-400">Loading...</div>;
-  }
-
-  if (!user) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
-  }
-
-  return <Layout>{children}</Layout>;
-}
+import { ProtectedRoute, AdminRoute, DevRoute } from './components/ProtectedRoute';
 
 function AppContent() {
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -67,22 +55,31 @@ function AppContent() {
     <Routes>
       <Route path="/login" element={<Login />} />
       
-      {/* Protected Routes */}
-      <Route path="/field/:id" element={
-        <ProtectedRoute>
-          <FieldPortal jobs={jobs} updateJob={updateJob} />
-        </ProtectedRoute>
-      } />
+      {/* Dev Only Route */}
       <Route path="/admin" element={
-        <ProtectedRoute>
+        <DevRoute>
           <SuperAdmin />
-        </ProtectedRoute>
+        </DevRoute>
       } />
+
+      {/* Admin & Dev Routes */}
       <Route path="/billing" element={
-        <ProtectedRoute>
+        <AdminRoute>
           <Billing />
-        </ProtectedRoute>
+        </AdminRoute>
       } />
+      <Route path="/team" element={
+        <AdminRoute>
+          <Team electricians={electricians} setElectricians={setElectricians} />
+        </AdminRoute>
+      } />
+      <Route path="/integrations" element={
+        <AdminRoute>
+          <Integrations />
+        </AdminRoute>
+      } />
+
+      {/* General Protected Routes */}
       <Route path="/" element={
         <ProtectedRoute>
           <Dashboard jobs={jobs} />
@@ -103,16 +100,12 @@ function AppContent() {
           <Calendar jobs={jobs} electricians={electricians} />
         </ProtectedRoute>
       } />
-      <Route path="/team" element={
+      <Route path="/field/:id" element={
         <ProtectedRoute>
-          <Team electricians={electricians} setElectricians={setElectricians} />
+          <FieldPortal jobs={jobs} updateJob={updateJob} />
         </ProtectedRoute>
       } />
-      <Route path="/integrations" element={
-        <ProtectedRoute>
-          <Integrations />
-        </ProtectedRoute>
-      } />
+      
       <Route path="*" element={<div className="p-8 text-slate-500">Page not found or under construction.</div>} />
     </Routes>
   );
@@ -122,6 +115,7 @@ function App() {
     <Router>
       <AuthProvider>
         <AppContentWrapper />
+        <Toaster position="bottom-right" />
       </AuthProvider>
     </Router>
   );
