@@ -111,12 +111,31 @@ function AppContent() {
   );
 }
 
-export default function App() {
+function App() {
   return (
-    <AuthProvider>
-      <Router>
-        <AppContent />
-      </Router>
-    </AuthProvider>
+    <Router>
+      <AuthProvider>
+        <AppContentWrapper />
+      </AuthProvider>
+    </Router>
   );
 }
+
+function AppContentWrapper() {
+  const { isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-center">
+          <p className="text-lg font-semibold text-slate-700">Wirez R Us</p>
+          <p className="text-sm text-slate-500">Loading Field Management System...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return <AppContent />;
+}
+
+export default App;

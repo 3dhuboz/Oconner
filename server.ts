@@ -211,6 +211,16 @@ async function startServer() {
       appType: "spa",
     });
     app.use(vite.middlewares);
+
+    // SPA Fallback for development to handle direct navigation to routes
+    app.use('*', (req, res, next) => {
+      if (req.originalUrl.startsWith('/api')) {
+        return next(); // Skip API calls
+      }
+      // Let Vite handle the fallback
+      req.url = '/index.html';
+      vite.middlewares(req, res, next);
+    });
   } else {
     // Production: Serve static files from dist
     const distPath = path.resolve(__dirname, "dist");
