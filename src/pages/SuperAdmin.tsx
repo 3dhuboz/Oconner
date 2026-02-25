@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Activity, Shield, Server, Database, Lock, Users, Save } from 'lucide-react';
+import { Activity, Shield, Server, Database, Lock, Users, Save, Wifi, AlertTriangle } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 // Mock Data for Wirez R Us Staff
 const STAFF = [
@@ -10,7 +11,7 @@ const STAFF = [
 ];
 
 export function SuperAdmin() {
-  const [licenseStatus, setLicenseStatus] = useState({ active: true, expires: '2025-12-31', plan: 'Enterprise Custom' });
+  const { backendStatus, license } = useAuth();
   const [featureFlags, setFeatureFlags] = useState({
     smsDispatch: true,
     xeroIntegration: true,
@@ -52,15 +53,13 @@ export function SuperAdmin() {
             <div className="space-y-4">
               <div className="flex justify-between items-center text-sm">
                 <span className="text-slate-500">Status</span>
-                <span className="bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full text-xs font-bold">ACTIVE</span>
-              </div>
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-slate-500">Expires</span>
-                <span className="font-mono font-medium">{licenseStatus.expires}</span>
+                <span className={`px-2 py-1 rounded-full text-xs font-bold ${license?.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                  {license?.status || 'UNKNOWN'}
+                </span>
               </div>
               <div className="flex justify-between items-center text-sm">
                 <span className="text-slate-500">Plan Type</span>
-                <span className="font-medium">{licenseStatus.plan}</span>
+                <span className="font-medium">{license?.plan || 'N/A'}</span>
               </div>
               
               <div className="pt-4 border-t border-slate-100">
@@ -74,20 +73,25 @@ export function SuperAdmin() {
           {/* System Health */}
           <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
             <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
-              <Activity className="w-4 h-4 text-emerald-500" /> System Health
+              <Activity className="w-4 h-4 text-emerald-500" /> Backend Monitoring
             </h3>
-            <div className="space-y-3">
+            <div className="space-y-4">
               <div className="flex items-center justify-between text-sm">
-                <span className="flex items-center gap-2 text-slate-600"><Server className="w-3 h-3" /> API Server</span>
-                <span className="text-emerald-600 font-medium">Online (99.9%)</span>
+                <span className="flex items-center gap-2 text-slate-600"><Server className="w-3 h-3" /> API Latency</span>
+                <span className={`font-mono font-medium ${backendStatus.latency > 100 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                  {backendStatus.latency}ms
+                </span>
               </div>
               <div className="flex items-center justify-between text-sm">
-                <span className="flex items-center gap-2 text-slate-600"><Database className="w-3 h-3" /> Database</span>
-                <span className="text-emerald-600 font-medium">Connected</span>
+                <span className="flex items-center gap-2 text-slate-600"><Database className="w-3 h-3" /> Firebase</span>
+                <span className={`font-medium flex items-center gap-1 ${backendStatus.firebase ? 'text-emerald-600' : 'text-rose-600'}`}>
+                  {backendStatus.firebase ? 'Connected' : 'Disconnected'}
+                  {!backendStatus.firebase && <AlertTriangle className="w-3 h-3" />}
+                </span>
               </div>
               <div className="flex items-center justify-between text-sm">
-                <span className="flex items-center gap-2 text-slate-600"><Activity className="w-3 h-3" /> Error Rate</span>
-                <span className="text-slate-600 font-medium">0.01%</span>
+                <span className="flex items-center gap-2 text-slate-600"><Wifi className="w-3 h-3" /> Connection</span>
+                <span className="text-emerald-600 font-medium">Stable</span>
               </div>
             </div>
           </div>
