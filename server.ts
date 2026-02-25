@@ -264,26 +264,25 @@ async function startServer() {
     res.json({ received: true });
   });
 
-  // --- VITE MIDDLEWARE & SPA FALLBACK --- 
-  if (process.env.NODE_ENV !== "production") {
+  // --- VITE & SERVING LOGIC ---
+
+  if (process.env.NODE_ENV === 'production') {
+    // In production, serve the built static files
+    const distPath = path.resolve(__dirname, 'dist');
+    app.use(express.static(distPath));
+
+    // SPA fallback: send index.html for any other requests
+    app.get('*', (req, res) => {
+      res.sendFile(path.resolve(distPath, 'index.html'));
+    });
+  } else {
+    // In development, use Vite middleware
     const vite = await createViteServer({
       server: { middlewareMode: true },
-      appType: "spa",
+      appType: 'spa',
     });
     app.use(vite.middlewares);
-  } else {
-    const distPath = path.resolve(__dirname, "dist");
-    app.use(express.static(distPath));
   }
-
-  // Catch-all to serve index.html for any non-API routes
-  app.get('*', (req, res, next) => {
-    if (req.originalUrl.startsWith('/api')) {
-      return next(); // Skip API calls
-    }
-    const distPath = path.resolve(__dirname, "dist");
-    res.sendFile(path.resolve(process.env.NODE_ENV === 'production' ? distPath : __dirname, "index.html"));
-  });
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
