@@ -96,10 +96,20 @@ export function JobDetail({ jobs, updateJob, electricians }: JobDetailProps) {
       
       // Fill the actual Form 9 fields
       try {
-        form.getTextField('Address of rental property 4').setText(job.propertyAddress || '');
         form.getTextField('Name/s of tenant/s').setText(job.tenantName || '');
+        form.getTextField('Address1').setText(job.propertyAddress || '');
+        
+        form.getTextField('Address of rental property 4').setText(job.propertyAddress || '');
+        
+        form.getCheckBox('Other authorised person (secondary agent)').check();
         form.getTextField('Full name or trading name 1').setText('Wirez R Us (Contractor)');
-        form.getTextField('Date (dd/mm/yyyy)1').setText(format(new Date(), 'dd/MM/yyyy'));
+        
+        form.getTextField('Full name or trading name 2').setText('Wirez R Us Technician');
+        
+        const today = new Date();
+        form.getTextField('Day 1').setText(format(today, 'EEEE'));
+        form.getTextField('Date (dd/mm/yyyy)1').setText(format(today, 'dd/MM/yyyy'));
+        form.getTextField('Method of issue 1').setText('Email');
         
         const entryDateObj = new Date(proposedEntryDate);
         form.getTextField('Day 2').setText(format(entryDateObj, 'EEEE'));
@@ -112,8 +122,11 @@ export function JobDetail({ jobs, updateJob, electricians }: JobDetailProps) {
         form.getTextField('Two hour period from').setText(timeFrom);
         form.getTextField('Two hour period to').setText(timeTo);
         
-        // Checkbox4 is typically "To carry out repairs or maintenance"
-        form.getCheckBox('Checkbox4').check();
+        // Checkbox3 is "Carry out routine repairs or maintenance"
+        form.getCheckBox('Checkbox3').check();
+        
+        form.getTextField('Print name').setText('Wirez R Us');
+        form.getTextField('Date of signature (dd/mm/yyyy)').setText(format(today, 'dd/MM/yyyy'));
       } catch (e) {
         console.warn("Could not fill some form fields", e);
       }
@@ -469,10 +482,10 @@ export function JobDetail({ jobs, updateJob, electricians }: JobDetailProps) {
                   <CalendarIcon className="w-4 h-4 text-slate-400" />
                   <input 
                     type="datetime-local" 
-                    className="w-full text-sm outline-none"
+                    className="w-full text-sm outline-none disabled:bg-transparent disabled:text-slate-500"
                     value={job.scheduledDate ? format(new Date(job.scheduledDate), "yyyy-MM-dd'T'HH:mm") : ''}
                     onChange={e => updateJob(job.id, { scheduledDate: new Date(e.target.value).toISOString() })}
-                    disabled={job.status !== 'SCHEDULING'}
+                    disabled={job.status !== 'SCHEDULING' || job.form9Sent}
                   />
                 </div>
               </div>
