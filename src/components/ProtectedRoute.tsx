@@ -12,6 +12,10 @@ const RoleRoute = ({ children, roles }: { children: React.ReactNode, roles: stri
   }
 
   if (!user || !roles.includes(user.role)) {
+    // If it's a dev-only route, redirect to the dev login page
+    if (roles.includes('dev') && roles.length === 1) {
+      return <Navigate to="/dev/login" state={{ from: location }} replace />;
+    }
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 

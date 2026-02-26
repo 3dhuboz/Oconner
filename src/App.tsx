@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Login } from './pages/Login';
+import { DevLogin } from './pages/DevLogin';
 import { Layout } from './components/Layout';
 import { Dashboard } from './pages/Dashboard';
 import { JobBoard } from './pages/JobBoard';
@@ -55,6 +56,7 @@ function AppContent() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/dev/login" element={<DevLogin />} />
       
       {/* Dev Only Route */}
       <Route path="/admin" element={
