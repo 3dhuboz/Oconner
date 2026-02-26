@@ -92,30 +92,31 @@ export function JobDetail({ jobs, updateJob, electricians }: JobDetailProps) {
       
       const existingPdfBytes = await fetch(proxyUrl).then(res => res.arrayBuffer());
       const pdfDoc = await PDFDocument.load(existingPdfBytes);
-      const pages = pdfDoc.getPages();
-      const firstPage = pages[0];
+      const form = pdfDoc.getForm();
       
-      // Draw text on the actual Form 9
-      // 1. Address of the rental property
-      firstPage.drawText(job.propertyAddress || '', { x: 55, y: 645, size: 10 });
-      
-      // 2. Notice issued to (Tenant)
-      firstPage.drawText(job.tenantName || '', { x: 55, y: 575, size: 10 });
-      
-      // 3. Notice issued by
-      firstPage.drawText('Wirez R Us (Contractor)', { x: 55, y: 505, size: 10 });
-      
-      // 4. Notice issued on
-      firstPage.drawText(format(new Date(), 'dd/MM/yyyy'), { x: 55, y: 435, size: 10 });
-      
-      // 5. Entry details
-      const entryDateObj = new Date(proposedEntryDate);
-      firstPage.drawText(format(entryDateObj, 'dd/MM/yyyy'), { x: 55, y: 365, size: 10 });
-      firstPage.drawText(`${format(entryDateObj, 'hh:mm a')} to ${format(new Date(entryDateObj.getTime() + 2 * 3600 * 1000), 'hh:mm a')}`, { x: 250, y: 365, size: 10 });
-      
-      // 6. Reason for entry (Check the box for repairs/maintenance)
-      firstPage.drawText('X', { x: 55, y: 245, size: 12 });
-      firstPage.drawText(`Repairs: ${job.title}`, { x: 80, y: 245, size: 10 });
+      // Fill the actual Form 9 fields
+      try {
+        form.getTextField('Address of rental property 4').setText(job.propertyAddress || '');
+        form.getTextField('Name/s of tenant/s').setText(job.tenantName || '');
+        form.getTextField('Full name or trading name 1').setText('Wirez R Us (Contractor)');
+        form.getTextField('Date (dd/mm/yyyy)1').setText(format(new Date(), 'dd/MM/yyyy'));
+        
+        const entryDateObj = new Date(proposedEntryDate);
+        form.getTextField('Day 2').setText(format(entryDateObj, 'EEEE'));
+        form.getTextField('Date (dd/mm/yyyy) 2').setText(format(entryDateObj, 'dd/MM/yyyy'));
+        
+        const timeFrom = format(entryDateObj, 'hh:mm a');
+        const timeTo = format(new Date(entryDateObj.getTime() + 2 * 3600 * 1000), 'hh:mm a');
+        
+        form.getTextField('Time of entry').setText(timeFrom);
+        form.getTextField('Two hour period from').setText(timeFrom);
+        form.getTextField('Two hour period to').setText(timeTo);
+        
+        // Checkbox4 is typically "To carry out repairs or maintenance"
+        form.getCheckBox('Checkbox4').check();
+      } catch (e) {
+        console.warn("Could not fill some form fields", e);
+      }
       
       const pdfBytes = await pdfDoc.save();
       
@@ -469,7 +470,7 @@ export function JobDetail({ jobs, updateJob, electricians }: JobDetailProps) {
                   <input 
                     type="datetime-local" 
                     className="w-full text-sm outline-none"
-                    value={job.scheduledDate ? new Date(job.scheduledDate).toISOString().slice(0, 16) : ''}
+                    value={job.scheduledDate ? format(new Date(job.scheduledDate), "yyyy-MM-dd'T'HH:mm") : ''}
                     onChange={e => updateJob(job.id, { scheduledDate: new Date(e.target.value).toISOString() })}
                     disabled={job.status !== 'SCHEDULING'}
                   />
