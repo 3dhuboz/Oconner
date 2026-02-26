@@ -1,0 +1,7 @@
+@import "tailwindcss";
+
+@layer components {
+  .btn-primary {
+    @apply px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-medium hover:bg-slate-800 transition-colors shadow-sm;
+  }
+}
