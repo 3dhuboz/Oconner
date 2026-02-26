@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, ClipboardList, Calendar, Settings, Zap, Users, Shield, CreditCard, LogOut } from 'lucide-react';
+import { LayoutDashboard, ClipboardList, Calendar, Settings, Zap, Users, Shield, CreditCard, LogOut, Headphones, ExternalLink } from 'lucide-react';
 import { cn } from '../utils';
 import { useAuth } from '../context/AuthContext';
 
@@ -69,6 +69,15 @@ export function Layout({ children }: LayoutProps) {
             </div>
           </div>
           
+          <a
+            href="https://www.facebook.com/pennywiseitoz"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full flex items-center gap-3 px-4 py-2 text-slate-500 hover:text-amber-400 hover:bg-slate-800 rounded-lg transition-colors text-xs font-medium mb-1"
+          >
+            <Headphones className="w-3.5 h-3.5" /> Support by Penny Wise I.T
+            <ExternalLink className="w-3 h-3 ml-auto" />
+          </a>
           <button 
             onClick={logout}
             className="w-full flex items-center gap-3 px-4 py-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors text-sm font-medium"

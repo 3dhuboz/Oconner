@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Zap, Mail, Lock, Loader2, AlertCircle, ShieldCheck, UserPlus } from 'lucide-react';
+import { Zap, Mail, Lock, Loader2, AlertCircle, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 
@@ -9,8 +9,7 @@ export function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isRegistering, setIsRegistering] = useState(false);
-  const { login, register, user } = useAuth();
+  const { login, user } = useAuth();
   const navigate = useNavigate();
 
   // Redirect automatically when user state is populated
@@ -30,19 +29,13 @@ export function Login() {
     setIsSubmitting(true);
 
     try {
-      if (isRegistering) {
-        await register(email, password);
-        toast.success('Account created successfully!');
-      } else {
-        await login(email, password);
-        toast.success('Logged in successfully!');
-      }
-      // Navigation is now handled by the useEffect above
+      await login(email, password);
+      toast.success('Logged in successfully!');
     } catch (err: any) {
       if (err.message === 'Firebase not initialized') {
         setError('System configuration error: Firebase is not connected. Please contact support.');
       } else {
-        setError(err.message || `Failed to ${isRegistering ? 'create account' : 'login'}. Please check your credentials.`);
+        setError(err.message || 'Failed to login. Please check your credentials.');
       }
     } finally {
       setIsSubmitting(false);
@@ -111,12 +104,11 @@ export function Login() {
             >
               {isSubmitting ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin" /> {isRegistering ? 'Creating Account...' : 'Signing In...'}
+                  <Loader2 className="w-4 h-4 animate-spin" /> Signing In...
                 </>
               ) : (
                 <>
-                  {isRegistering ? <UserPlus className="w-4 h-4" /> : <ShieldCheck className="w-4 h-4" />} 
-                  {isRegistering ? 'Create Account' : 'Secure Sign In'}
+                  <ShieldCheck className="w-4 h-4" /> Secure Sign In
                 </>
               )}
             </button>
@@ -129,26 +121,31 @@ export function Login() {
               </div>
               <div className="relative flex justify-center text-sm">
                 <span className="px-2 bg-white text-slate-500">
-                  {isRegistering ? 'Already have an account?' : 'New to Wirez R Us?'}
+                  New to Wirez R Us?
                 </span>
               </div>
             </div>
 
             <button
               type="button"
-              onClick={() => {
-                setIsRegistering(!isRegistering);
-                setError('');
-              }}
-              className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-3 border-2 border-slate-200 rounded-xl text-slate-700 font-bold hover:bg-slate-50 transition-colors"
+              onClick={() => navigate('/purchase')}
+              className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-3 border-2 border-amber-300 bg-amber-50 rounded-xl text-amber-800 font-bold hover:bg-amber-100 transition-colors"
             >
-              {isRegistering ? 'Sign In Instead' : 'Create an Account to Test'}
+              Purchase a License &amp; Get Started
             </button>
           </div>
 
-          <div className="mt-6 text-center">
+          <div className="mt-6 text-center space-y-2">
+            <a
+              href="https://www.facebook.com/pennywiseitoz"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-slate-400 hover:text-amber-600 transition-colors"
+            >
+              Need help? Contact Penny Wise I.T
+            </a>
             <p className="text-xs text-slate-400">
-              &copy; 2024 Wirez R Us Field Management.
+              &copy; {new Date().getFullYear()} Wirez R Us Field Management.
             </p>
           </div>
         </div>
