@@ -1,6 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { PDFDocument } from 'pdf-lib';
 import { format } from 'date-fns';
+import fs from 'fs';
+import path from 'path';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
@@ -14,15 +16,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Proposed entry date is required' });
     }
 
-    // Fetch the actual RTA Form 9 PDF directly from server (no CORS issue)
-    const formUrl = 'https://www.rta.qld.gov.au/sites/default/files/2021-06/Form-9-Entry-notice.pdf';
-    const pdfResponse = await fetch(formUrl);
-
-    if (!pdfResponse.ok) {
-      throw new Error(`Failed to fetch Form 9 PDF from RTA (status ${pdfResponse.status})`);
-    }
-
-    const existingPdfBytes = await pdfResponse.arrayBuffer();
+    // Read the bundled Form 9 PDF template from local filesystem
+    const templatePath = path.join(process.cwd(), 'api', 'form9', 'Form9-template.pdf');
+    const existingPdfBytes = fs.readFileSync(templatePath);
     const pdfDoc = await PDFDocument.load(existingPdfBytes);
     const form = pdfDoc.getForm();
 
