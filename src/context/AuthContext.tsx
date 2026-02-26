@@ -41,9 +41,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const tokenResult = await user.getIdTokenResult();
         const claims = tokenResult.claims;
         
-        // Hardcode dev role for the main admin email
+        // Hardcode dev role for the main admin emails
         let role = claims.role || 'user';
-        if (user.email === 'admin@cupcycle.au') {
+        if (user.email === 'admin@cupcycle.au' || user.email === 'steve@3dhub.au') {
           role = 'dev';
         }
 
