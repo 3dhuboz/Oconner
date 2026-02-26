@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
-import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut, User as FirebaseUser } from 'firebase/auth';
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, User as FirebaseUser } from 'firebase/auth';
 import { app } from '../services/firebase';
 
 interface User {
@@ -8,7 +8,6 @@ interface User {
   name: string;
   role: 'dev' | 'admin' | 'user';
   uid: string;
-  isDemo?: boolean;
 }
 
 interface AuthContextType {
@@ -16,6 +15,7 @@ interface AuthContextType {
   firebaseUser: FirebaseUser | null;
   backendStatus: { firebase: boolean; api: boolean; latency: number };
   login: (email: string, pass: string) => Promise<void>;
+  register: (email: string, pass: string) => Promise<void>;
   logout: () => void;
   isLoading: boolean;
 }
@@ -29,29 +29,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [backendStatus, setBackendStatus] = useState({ firebase: true, api: true, latency: 45 });
 
   useEffect(() => {
-    const storedDemo = localStorage.getItem('demo_user');
-    if (storedDemo) {
-      setUser(JSON.parse(storedDemo));
-      setIsLoading(false);
-    }
-
     if (!app) {
       console.warn('Firebase app not initialized. Auth disabled.');
-      if (!storedDemo) setIsLoading(false);
+      setIsLoading(false);
       return;
     }
 
     const auth = getAuth(app);
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (localStorage.getItem('demo_user')) return; // Ignore firebase if in demo mode
-
       if (user) {
         setFirebaseUser(user);
         const tokenResult = await user.getIdTokenResult();
         const claims = tokenResult.claims;
         
         // Hardcode dev role for the main admin emails
-        let role = claims.role || 'user';
+        // Default new signups to 'admin' so they can test the CRM features
+        let role = claims.role || 'admin';
         if (user.email === 'admin@cupcycle.au' || user.email === 'steve@3dhub.au') {
           role = 'dev';
         }
@@ -81,31 +74,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = async (email: string, pass: string) => {
-    if (email === 'demo@wirezrus.com' && pass === 'demo123') {
-      const demoUser: User = { email, name: 'Demo Owner', role: 'admin', uid: 'demo-123', isDemo: true };
-      localStorage.setItem('demo_user', JSON.stringify(demoUser));
-      setUser(demoUser);
-      return;
-    }
-
     if (!app) throw new Error('Firebase not initialized');
     const auth = getAuth(app);
     await signInWithEmailAndPassword(auth, email, pass);
   };
 
+  const register = async (email: string, pass: string) => {
+    if (!app) throw new Error('Firebase not initialized');
+    const auth = getAuth(app);
+    await createUserWithEmailAndPassword(auth, email, pass);
+  };
+
   const logout = async () => {
-    if (localStorage.getItem('demo_user')) {
-      localStorage.removeItem('demo_user');
-      setUser(null);
-      return;
-    }
     if (!app) return;
     const auth = getAuth(app);
     await signOut(auth);
   };
 
   return (
-    <AuthContext.Provider value={{ user, firebaseUser, backendStatus, login, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, firebaseUser, backendStatus, login, register, logout, isLoading }}>
       {children}
     </AuthContext.Provider>
   );

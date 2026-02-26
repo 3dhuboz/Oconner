@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Zap, Mail, Lock, Loader2, AlertCircle, ShieldCheck, PlayCircle } from 'lucide-react';
+import { Zap, Mail, Lock, Loader2, AlertCircle, ShieldCheck, UserPlus } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 
@@ -9,7 +9,8 @@ export function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { login, user } = useAuth();
+  const [isRegistering, setIsRegistering] = useState(false);
+  const { login, register, user } = useAuth();
   const navigate = useNavigate();
 
   // Redirect automatically when user state is populated
@@ -29,23 +30,23 @@ export function Login() {
     setIsSubmitting(true);
 
     try {
-      await login(email, password);
-      toast.success('Logged in successfully!');
+      if (isRegistering) {
+        await register(email, password);
+        toast.success('Account created successfully!');
+      } else {
+        await login(email, password);
+        toast.success('Logged in successfully!');
+      }
       // Navigation is now handled by the useEffect above
     } catch (err: any) {
       if (err.message === 'Firebase not initialized') {
         setError('System configuration error: Firebase is not connected. Please contact support.');
       } else {
-        setError(err.message || 'Failed to login. Please check your credentials.');
+        setError(err.message || `Failed to ${isRegistering ? 'create account' : 'login'}. Please check your credentials.`);
       }
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const handleDemoLogin = () => {
-    setEmail('demo@wirezrus.com');
-    setPassword('demo123');
   };
 
   return (
@@ -91,6 +92,7 @@ export function Login() {
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all"
                   placeholder="••••••••"
+                  minLength={6}
                 />
               </div>
             </div>
@@ -109,11 +111,12 @@ export function Login() {
             >
               {isSubmitting ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin" /> Signing In...
+                  <Loader2 className="w-4 h-4 animate-spin" /> {isRegistering ? 'Creating Account...' : 'Signing In...'}
                 </>
               ) : (
                 <>
-                  <ShieldCheck className="w-4 h-4" /> Secure Sign In
+                  {isRegistering ? <UserPlus className="w-4 h-4" /> : <ShieldCheck className="w-4 h-4" />} 
+                  {isRegistering ? 'Create Account' : 'Secure Sign In'}
                 </>
               )}
             </button>
@@ -125,17 +128,21 @@ export function Login() {
                 <div className="w-full border-t border-slate-200"></div>
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-slate-500">Or explore the app</span>
+                <span className="px-2 bg-white text-slate-500">
+                  {isRegistering ? 'Already have an account?' : 'New to Wirez R Us?'}
+                </span>
               </div>
             </div>
 
             <button
               type="button"
-              onClick={handleDemoLogin}
+              onClick={() => {
+                setIsRegistering(!isRegistering);
+                setError('');
+              }}
               className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-3 border-2 border-slate-200 rounded-xl text-slate-700 font-bold hover:bg-slate-50 transition-colors"
             >
-              <PlayCircle className="w-5 h-5 text-amber-500" />
-              Load Demo Credentials
+              {isRegistering ? 'Sign In Instead' : 'Create an Account to Test'}
             </button>
           </div>
 

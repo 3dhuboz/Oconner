@@ -16,25 +16,12 @@ import { Billing } from './pages/Billing';
 import { PromoFlyer } from './pages/PromoFlyer';
 
 
-import { DemoTour } from './components/DemoTour';
-
 import { Job, Electrician } from './types';
 import { db } from './services/firebase';
 import { collection, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { Toaster } from 'react-hot-toast';
 
 import { ProtectedRoute, AdminRoute, DevRoute } from './components/ProtectedRoute';
-
-const MOCK_JOBS: Job[] = [
-  { id: 'j1', title: 'No Power to Kitchen', status: 'UNASSIGNED', location: '123 Smith St', description: 'Client reported all kitchen outlets are dead.', createdAt: new Date().toISOString() },
-  { id: 'j2', title: 'Install EV Charger', status: 'ASSIGNED', assignedTo: 'e1', location: '456 Oak Ave', description: 'Tesla Wall Connector installation.', createdAt: new Date().toISOString() },
-  { id: 'j3', title: 'Flickering Lights', status: 'COMPLETED', assignedTo: 'e2', location: '789 Pine Rd', description: 'Resolved loose neutral in main panel.', createdAt: new Date().toISOString() }
-];
-
-const MOCK_ELECTRICIANS: Electrician[] = [
-  { id: 'e1', name: 'Mike Volt', status: 'AVAILABLE', phone: '555-0101' },
-  { id: 'e2', name: 'Sarah Watt', status: 'ON_JOB', phone: '555-0102' }
-];
 
 function AppContent() {
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -43,12 +30,7 @@ function AppContent() {
 
   // Effect for real-time jobs
   useEffect(() => {
-    if (!user) return;
-    if (user.isDemo) {
-      setJobs(MOCK_JOBS);
-      return;
-    }
-    if (!db) return;
+    if (!user || !db) return;
     const unsubscribe = onSnapshot(collection(db, 'jobs'), (snapshot) => {
       const jobsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Job));
       setJobs(jobsData);
@@ -58,12 +40,7 @@ function AppContent() {
 
   // Effect for real-time electricians
   useEffect(() => {
-    if (!user) return;
-    if (user.isDemo) {
-      setElectricians(MOCK_ELECTRICIANS);
-      return;
-    }
-    if (!db) return;
+    if (!user || !db) return;
     const unsubscribe = onSnapshot(collection(db, 'electricians'), (snapshot) => {
       const electriciansData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Electrician));
       setElectricians(electriciansData);
@@ -72,10 +49,6 @@ function AppContent() {
   }, [user]);
 
   const updateJob = async (id: string, updates: Partial<Job>) => {
-    if (user?.isDemo) {
-      setJobs(prev => prev.map(j => j.id === id ? { ...j, ...updates } : j));
-      return;
-    }
     if (!db) return;
     const jobRef = doc(db, 'jobs', id);
     await updateDoc(jobRef, updates);
@@ -147,7 +120,6 @@ function App() {
     <Router>
       <AuthProvider>
         <AppContentWrapper />
-        <DemoTour />
         <Toaster position="bottom-right" />
       </AuthProvider>
     </Router>
