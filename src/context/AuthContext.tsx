@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, User as FirebaseUser } from 'firebase/auth';
-import { app } from '../services/firebase';
+import { app, auth as firebaseAuth } from '../services/firebase';
 
 interface User {
   email: string;
@@ -29,14 +29,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [backendStatus, setBackendStatus] = useState({ firebase: true, api: true, latency: 45 });
 
   useEffect(() => {
-    if (!app) {
+    if (!app || !firebaseAuth) {
       console.warn('Firebase app not initialized. Auth disabled.');
       setIsLoading(false);
       return;
     }
 
-    const auth = getAuth(app);
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    const unsubscribe = onAuthStateChanged(firebaseAuth, async (user) => {
       if (user) {
         setFirebaseUser(user);
         const tokenResult = await user.getIdTokenResult();
@@ -74,21 +73,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = async (email: string, pass: string) => {
-    if (!app) throw new Error('Firebase not initialized');
-    const auth = getAuth(app);
-    await signInWithEmailAndPassword(auth, email, pass);
+    if (!app || !firebaseAuth) throw new Error('Firebase not initialized');
+    await signInWithEmailAndPassword(firebaseAuth, email, pass);
   };
 
   const register = async (email: string, pass: string) => {
-    if (!app) throw new Error('Firebase not initialized');
-    const auth = getAuth(app);
-    await createUserWithEmailAndPassword(auth, email, pass);
+    if (!app || !firebaseAuth) throw new Error('Firebase not initialized');
+    await createUserWithEmailAndPassword(firebaseAuth, email, pass);
   };
 
   const logout = async () => {
-    if (!app) return;
-    const auth = getAuth(app);
-    await signOut(auth);
+    if (!app || !firebaseAuth) return;
+    await signOut(firebaseAuth);
   };
 
   return (
