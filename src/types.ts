@@ -30,6 +30,8 @@ export interface Job {
   status: JobStatus;
   createdAt: string;
   
+  description?: string; // auto-populated work order details
+
   // Phase 1: Intake & Coordination
   tenantName: string;
   tenantPhone: string;

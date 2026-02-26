@@ -105,20 +105,21 @@ export function Integrations() {
     setIsSimulating(true);
     
     try {
+      const now = new Date();
       const newJob = {
         title: 'Emergency: Sparking Outlet in Kitchen',
         status: 'INTAKE',
         location: '42 Wallaby Way, Sydney',
         propertyAddress: '42 Wallaby Way, Sydney',
-        description: 'Hi Wirez R Us,\n\nI have a sparking outlet in my kitchen that smells like burning plastic. Please send someone ASAP!\n\nThanks,\nP. Sherman',
+        description: `WORK ORDER — Auto-generated from inbound email\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nDate Created: ${now.toLocaleDateString('en-AU', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}\nTime: ${now.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}\n\nTENANT: P. Sherman\nPHONE: 0412 345 678\nEMAIL: psherman@example.com\nPROPERTY: 42 Wallaby Way, Sydney\n\nISSUE REPORTED:\nSparking outlet in kitchen that smells like burning plastic. Tenant requests urgent attendance.\n\nORIGINAL EMAIL:\n"Hi Wirez R Us,\nI have a sparking outlet in my kitchen that smells like burning plastic. Please send someone ASAP!\nThanks, P. Sherman"\n\nPRIORITY: URGENT\nTYPE: General Repair / Emergency`,
         tenantName: 'P. Sherman',
         tenantPhone: '0412 345 678',
         tenantEmail: 'psherman@example.com',
-        type: 'EMERGENCY',
+        type: 'GENERAL_REPAIR',
         contactAttempts: [],
         materials: [],
         photos: [],
-        createdAt: new Date().toISOString()
+        createdAt: now.toISOString()
       };
 
       const docRef = await addDoc(collection(db, 'jobs'), newJob);

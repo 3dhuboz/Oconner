@@ -73,6 +73,11 @@ export function JobBoard({ jobs }: JobBoardProps) {
                       <User className="w-4 h-4 shrink-0" />
                       <span className="line-clamp-1">{job.tenantName}</span>
                     </div>
+                    {job.description && (
+                      <div className="bg-slate-50 border border-slate-100 rounded-lg p-2 mt-1">
+                        <p className="text-[11px] text-slate-500 line-clamp-2 whitespace-pre-wrap">{job.description.split('\n').filter(l => l.includes('ISSUE REPORTED') || l.includes('ORIGINAL EMAIL')).length > 0 ? job.description.split('ISSUE REPORTED:\n')[1]?.split('\n')[0] || job.description.substring(0, 100) : job.description.substring(0, 100)}</p>
+                      </div>
+                    )}
                     <div className="flex items-center gap-2">
                       <Clock className="w-4 h-4 shrink-0" />
                       <span>{format(new Date(job.createdAt), 'MMM d, yyyy')}</span>

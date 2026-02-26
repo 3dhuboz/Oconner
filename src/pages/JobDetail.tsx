@@ -6,7 +6,7 @@ import jsPDF from 'jspdf';
 import { PDFDocument, rgb } from 'pdf-lib';
 import { 
   ArrowLeft, Phone, Mail, FileText, Calendar as CalendarIcon, 
-  CheckCircle2, AlertCircle, Camera, Wrench, DollarSign, Send, Loader2, Upload, Link as LinkIcon, User
+  CheckCircle2, AlertCircle, Camera, Wrench, DollarSign, Send, Loader2, User
 } from 'lucide-react';
 import { cn } from '../utils';
 
@@ -248,16 +248,6 @@ export function JobDetail({ jobs, updateJob, electricians }: JobDetailProps) {
     }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      // Simulate uploading the file and getting a URL back
-      setTimeout(() => {
-        updateJob(job.id, { workOrderUrl: URL.createObjectURL(file) });
-        alert('Work Order attached successfully!');
-      }, 500);
-    }
-  };
 
   return (
     <div className="max-w-5xl mx-auto pb-12">
@@ -469,36 +459,12 @@ export function JobDetail({ jobs, updateJob, electricians }: JobDetailProps) {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-500 mb-2">Original Work Order</label>
-                {job.workOrderUrl ? (
-                  <div className="flex items-center justify-between p-3 bg-emerald-50 border border-emerald-100 rounded-lg">
-                    <div className="flex items-center gap-2 text-emerald-700 text-sm font-medium">
-                      <FileText className="w-4 h-4" />
-                      Work_Order_Attached.pdf
-                    </div>
-                    <a 
-                      href={job.workOrderUrl} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="text-emerald-600 hover:text-emerald-800 text-sm font-medium flex items-center gap-1"
-                    >
-                      <LinkIcon className="w-4 h-4" /> View
-                    </a>
-                  </div>
-                ) : (
-                  <div className="relative border-2 border-dashed border-slate-200 rounded-lg p-6 flex flex-col items-center justify-center text-center hover:bg-slate-50 transition-colors">
-                    <input 
-                      type="file" 
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                      onChange={handleFileUpload}
-                      disabled={job.status !== 'SCHEDULING'}
-                      accept=".pdf,.jpg,.jpeg,.png"
-                    />
-                    <Upload className="w-8 h-8 text-slate-400 mb-2" />
-                    <p className="text-sm font-medium text-slate-700">Click or drag file to attach</p>
-                    <p className="text-xs text-slate-500 mt-1">PDF, JPG, PNG up to 10MB</p>
-                  </div>
-                )}
+                <label className="block text-sm font-medium text-slate-500 mb-2">Work Order Details</label>
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 max-h-60 overflow-y-auto">
+                  <pre className="text-xs text-slate-700 whitespace-pre-wrap font-mono leading-relaxed">
+                    {job.description || `WORK ORDER — ${job.title}\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nDate Created: ${format(new Date(job.createdAt), 'EEEE, d MMMM yyyy')}\nTime: ${format(new Date(job.createdAt), 'hh:mm a')}\n\nTENANT: ${job.tenantName}\nPHONE: ${job.tenantPhone}\nEMAIL: ${job.tenantEmail}\nPROPERTY: ${job.propertyAddress}\n${job.propertyManagerEmail ? `PROPERTY MANAGER: ${job.propertyManagerEmail}\n` : ''}\nTYPE: ${job.type.replace('_', ' ')}\nSTATUS: ${job.status}`}
+                  </pre>
+                </div>
               </div>
 
               <div>
