@@ -13,6 +13,7 @@ import { Team } from './pages/Team';
 import { FieldPortal } from './pages/FieldPortal';
 import { SuperAdmin } from './pages/SuperAdmin';
 import { Billing } from './pages/Billing';
+import { PromoFlyer } from './pages/PromoFlyer';
 
 
 import { Job, Electrician } from './types';
@@ -57,6 +58,7 @@ function AppContent() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/dev/login" element={<DevLogin />} />
+      <Route path="/promo" element={<PromoFlyer />} />
       
       {/* Dev Only Route */}
       <Route path="/admin" element={
