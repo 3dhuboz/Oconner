@@ -101,8 +101,14 @@ export function JobDetail({ jobs, updateJob, electricians }: JobDetailProps) {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to generate Form 9');
+        let errorMsg = 'Failed to generate Form 9';
+        try {
+          const error = await response.json();
+          errorMsg = error.error || errorMsg;
+        } catch {
+          errorMsg = `Server returned status ${response.status}`;
+        }
+        throw new Error(errorMsg);
       }
 
       // Download the PDF
