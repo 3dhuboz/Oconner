@@ -1,8 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Database, DollarSign, CheckCircle2, AlertCircle, Loader2, Mail, MessageSquare, ExternalLink, Copy } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Database, DollarSign, CheckCircle2, AlertCircle, Loader2, Mail, MessageSquare, ExternalLink, Copy, PlayCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { cn } from '../utils';
+import { db } from '../services/firebase';
+import { collection, addDoc } from 'firebase/firestore';
+import toast from 'react-hot-toast';
 
 const IntegrationCard = ({ icon: Icon, title, status, statusColor, children, onAction, actionText, actionDisabled, isConnecting }: any) => {
   const statusStyles: Record<string, string> = {
@@ -48,10 +51,12 @@ const IntegrationCard = ({ icon: Icon, title, status, statusColor, children, onA
 
 export function Integrations() {
   const { backendStatus } = useAuth();
+  const navigate = useNavigate();
   const [xeroConnected, setXeroConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [forwardingEmail, setForwardingEmail] = useState<string | null>(null);
   const [isGeneratingEmail, setIsGeneratingEmail] = useState(false);
+  const [isSimulating, setIsSimulating] = useState(false);
 
   useEffect(() => {
     fetch('/api/xero/status').then(res => res.json()).then(data => setXeroConnected(data.connected));
@@ -91,6 +96,47 @@ export function Integrations() {
     }, 1200);
   };
 
+  const handleSimulateEmail = async () => {
+    if (!db) {
+      toast.error('Firebase is not connected');
+      return;
+    }
+    
+    setIsSimulating(true);
+    
+    try {
+      const newJob = {
+        title: 'Emergency: Sparking Outlet in Kitchen',
+        status: 'INTAKE',
+        location: '42 Wallaby Way, Sydney',
+        propertyAddress: '42 Wallaby Way, Sydney',
+        description: 'Hi Wirez R Us,\n\nI have a sparking outlet in my kitchen that smells like burning plastic. Please send someone ASAP!\n\nThanks,\nP. Sherman',
+        tenantName: 'P. Sherman',
+        tenantPhone: '0412 345 678',
+        tenantEmail: 'psherman@example.com',
+        type: 'EMERGENCY',
+        contactAttempts: [],
+        materials: [],
+        photos: [],
+        createdAt: new Date().toISOString()
+      };
+
+      const docRef = await addDoc(collection(db, 'jobs'), newJob);
+      toast.success('Inbound email processed! Job created.');
+      
+      // Navigate to the job board after a short delay so they can see it
+      setTimeout(() => {
+        navigate('/');
+      }, 1500);
+      
+    } catch (error) {
+      console.error("Error creating job from email simulation:", error);
+      toast.error('Failed to process inbound email');
+    } finally {
+      setIsSimulating(false);
+    }
+  };
+
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     alert('Copied to clipboard!');
@@ -120,30 +166,26 @@ export function Integrations() {
         <IntegrationCard
           icon={Mail}
           title="Email-to-Job Automation"
-          status={{ text: forwardingEmail ? 'Active' : 'Not Configured', color: forwardingEmail ? 'green' : 'slate' }}
+          status={{ text: 'Active', color: 'green' }}
           statusColor={{ bg: 'bg-blue-500/10', text: 'text-blue-500' }}
-          onAction={handleGenerateEmail}
-          actionText={forwardingEmail ? null : 'Generate Address'}
-          isConnecting={isGeneratingEmail}
+          onAction={handleSimulateEmail}
+          actionText="Simulate Inbound Email"
+          isConnecting={isSimulating}
         >
           <p>Automatically create new jobs by simply forwarding emails from your clients to a unique Wirez R Us address.</p>
           
-          {forwardingEmail ? (
-            <div className="mt-4 space-y-3">
-              <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg text-sm text-blue-800">
-                <p className="font-semibold mb-1">Setup Complete!</p>
-                <p>Set up an auto-forwarding rule in your email provider (Gmail, Outlook, etc.) to send emails to the address below.</p>
-              </div>
-              <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono text-slate-700 flex items-center justify-between">
-                <span className="truncate pr-4 font-bold">{forwardingEmail}</span>
-                <button onClick={() => copyToClipboard(forwardingEmail)} className="text-slate-400 hover:text-slate-600 transition-colors">
-                  <Copy className="w-4 h-4" />
-                </button>
-              </div>
+          <div className="mt-4 space-y-3">
+            <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg text-sm text-blue-800">
+              <p className="font-semibold mb-1">Setup Complete!</p>
+              <p>Set up an auto-forwarding rule in your email provider (Gmail, Outlook, etc.) to send emails to the address below.</p>
             </div>
-          ) : (
-            <p className="text-xs text-slate-400 mt-2">Click "Generate Address" to get your unique forwarding email.</p>
-          )}
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono text-slate-700 flex items-center justify-between">
+              <span className="truncate pr-4 font-bold">jobs-8f92a@inbound.wirezrus.com</span>
+              <button onClick={() => copyToClipboard('jobs-8f92a@inbound.wirezrus.com')} className="text-slate-400 hover:text-slate-600 transition-colors">
+                <Copy className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
         </IntegrationCard>
 
         <IntegrationCard
