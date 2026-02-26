@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Job, JobStatus, ContactAttempt, Electrician } from '../types';
 import { format } from 'date-fns';
 import jsPDF from 'jspdf';
+import { PDFDocument, rgb } from 'pdf-lib';
 import { 
   ArrowLeft, Phone, Mail, FileText, Calendar as CalendarIcon, 
   CheckCircle2, AlertCircle, Camera, Wrench, DollarSign, Send, Loader2, Upload, Link as LinkIcon, User
@@ -78,76 +79,70 @@ export function JobDetail({ jobs, updateJob, electricians }: JobDetailProps) {
     setNewNote('');
   };
 
-  const handleGenerateForm9 = () => {
+  const handleGenerateForm9 = async () => {
     if (!proposedEntryDate) {
       alert("Please select a proposed entry date and time.");
       return;
     }
 
-    // Generate QLD Form 9 PDF using jsPDF
-    const doc = new jsPDF();
-    
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(20);
-    doc.text("Entry notice (Form 9)", 20, 20);
-    
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
-    doc.text("Residential Tenancies and Rooming Accommodation Act 2008", 20, 28);
-    
-    doc.line(20, 32, 190, 32);
-    
-    doc.setFontSize(12);
-    doc.setFont("helvetica", "bold");
-    doc.text("1. Address of the rental property", 20, 45);
-    doc.setFont("helvetica", "normal");
-    doc.text(job.propertyAddress, 20, 52);
-    
-    doc.setFont("helvetica", "bold");
-    doc.text("2. Notice issued to", 20, 65);
-    doc.setFont("helvetica", "normal");
-    doc.text(`Tenant Name(s): ${job.tenantName}`, 20, 72);
-    
-    doc.setFont("helvetica", "bold");
-    doc.text("3. Notice issued by", 20, 85);
-    doc.setFont("helvetica", "normal");
-    doc.text(`Name: Wirez R Us (Contractor on behalf of Lessor/Agent)`, 20, 92);
-    
-    doc.setFont("helvetica", "bold");
-    doc.text("4. Notice issued on", 20, 105);
-    doc.setFont("helvetica", "normal");
-    doc.text(`Date: ${format(new Date(), 'dd/MM/yyyy')}`, 20, 112);
-    
-    doc.setFont("helvetica", "bold");
-    doc.text("5. Entry details", 20, 125);
-    doc.setFont("helvetica", "normal");
-    const entryDateObj = new Date(proposedEntryDate);
-    doc.text(`Date of entry: ${format(entryDateObj, 'dd/MM/yyyy')}`, 20, 132);
-    doc.text(`Time of entry: ${format(entryDateObj, 'hh:mm a')} to ${format(new Date(entryDateObj.getTime() + 2 * 3600 * 1000), 'hh:mm a')}`, 20, 139);
-    
-    doc.setFont("helvetica", "bold");
-    doc.text("6. Reason for entry", 20, 152);
-    doc.setFont("helvetica", "normal");
-    doc.text("[X] To carry out repairs or maintenance", 20, 159);
-    doc.text(`Details: ${job.title}`, 25, 166);
-    
-    doc.line(20, 180, 190, 180);
-    doc.setFontSize(10);
-    doc.text("Note: Minimum notice period for repairs and maintenance is 24 hours.", 20, 190);
-    
-    doc.save(`Form9_${job.id}.pdf`);
+    try {
+      // Fetch the actual RTA Form 9 PDF via a CORS proxy
+      const formUrl = 'https://www.rta.qld.gov.au/sites/default/files/2021-06/Form-9-Entry-notice.pdf';
+      const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(formUrl)}`;
+      
+      const existingPdfBytes = await fetch(proxyUrl).then(res => res.arrayBuffer());
+      const pdfDoc = await PDFDocument.load(existingPdfBytes);
+      const pages = pdfDoc.getPages();
+      const firstPage = pages[0];
+      
+      // Draw text on the actual Form 9
+      // 1. Address of the rental property
+      firstPage.drawText(job.propertyAddress || '', { x: 55, y: 645, size: 10 });
+      
+      // 2. Notice issued to (Tenant)
+      firstPage.drawText(job.tenantName || '', { x: 55, y: 575, size: 10 });
+      
+      // 3. Notice issued by
+      firstPage.drawText('Wirez R Us (Contractor)', { x: 55, y: 505, size: 10 });
+      
+      // 4. Notice issued on
+      firstPage.drawText(format(new Date(), 'dd/MM/yyyy'), { x: 55, y: 435, size: 10 });
+      
+      // 5. Entry details
+      const entryDateObj = new Date(proposedEntryDate);
+      firstPage.drawText(format(entryDateObj, 'dd/MM/yyyy'), { x: 55, y: 365, size: 10 });
+      firstPage.drawText(`${format(entryDateObj, 'hh:mm a')} to ${format(new Date(entryDateObj.getTime() + 2 * 3600 * 1000), 'hh:mm a')}`, { x: 250, y: 365, size: 10 });
+      
+      // 6. Reason for entry (Check the box for repairs/maintenance)
+      firstPage.drawText('X', { x: 55, y: 245, size: 12 });
+      firstPage.drawText(`Repairs: ${job.title}`, { x: 80, y: 245, size: 10 });
+      
+      const pdfBytes = await pdfDoc.save();
+      
+      // Trigger download
+      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Form9_${job.id}.pdf`;
+      link.click();
+      URL.revokeObjectURL(url);
 
-    // Simulate sending the email
-    setTimeout(() => {
-      alert(`Email Sent Successfully!\n\nTo: ${job.tenantEmail}\nCC: ${job.propertyManagerEmail || 'pm@example.com'}\nAttachment: Form9_${job.id}.pdf\n\nThe legal entry time is now locked in.`);
-    }, 500);
+      // Simulate sending the email
+      setTimeout(() => {
+        alert(`Email Sent Successfully!\n\nTo: ${job.tenantEmail}\nCC: ${job.propertyManagerEmail || 'pm@example.com'}\nAttachment: Form9_${job.id}.pdf\n\nThe legal entry time is now locked in.`);
+      }, 500);
 
-    updateJob(job.id, { 
-      form9Sent: true, 
-      form9SentAt: new Date().toISOString(),
-      scheduledDate: new Date(proposedEntryDate).toISOString(),
-      status: 'SCHEDULING'
-    });
+      updateJob(job.id, { 
+        form9Sent: true, 
+        form9SentAt: new Date().toISOString(),
+        scheduledDate: new Date(proposedEntryDate).toISOString(),
+        status: 'SCHEDULING'
+      });
+    } catch (error) {
+      console.error("Error generating Form 9:", error);
+      alert("Failed to generate the actual Form 9 PDF. Please try again.");
+    }
   };
 
   const handleGenerateCompliance = () => {
