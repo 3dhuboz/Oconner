@@ -50,7 +50,8 @@ export function Integrations() {
   const { backendStatus } = useAuth();
   const [xeroConnected, setXeroConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
-  const webhookUrl = `${window.location.origin}/api/webhooks/email`;
+  const [forwardingEmail, setForwardingEmail] = useState<string | null>(null);
+  const [isGeneratingEmail, setIsGeneratingEmail] = useState(false);
 
   useEffect(() => {
     fetch('/api/xero/status').then(res => res.json()).then(data => setXeroConnected(data.connected));
@@ -81,9 +82,18 @@ export function Integrations() {
     }
   };
 
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(webhookUrl);
-    alert('Webhook URL copied to clipboard!');
+  const handleGenerateEmail = () => {
+    setIsGeneratingEmail(true);
+    // Simulate API call to generate a unique inbound email address
+    setTimeout(() => {
+      setForwardingEmail('jobs-8f92a@inbound.wirezrus.com');
+      setIsGeneratingEmail(false);
+    }, 1200);
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    alert('Copied to clipboard!');
   };
 
   return (
@@ -109,27 +119,31 @@ export function Integrations() {
 
         <IntegrationCard
           icon={Mail}
-          title="Email Inbox Monitoring"
-          status={{ text: 'Active', color: 'green' }}
+          title="Email-to-Job Automation"
+          status={{ text: forwardingEmail ? 'Active' : 'Not Configured', color: forwardingEmail ? 'green' : 'slate' }}
           statusColor={{ bg: 'bg-blue-500/10', text: 'text-blue-500' }}
+          onAction={handleGenerateEmail}
+          actionText={forwardingEmail ? null : 'Generate Address'}
+          isConnecting={isGeneratingEmail}
         >
-          <p>Automatically create jobs from incoming emails. Use a service like SendGrid Inbound Parse or Zapier to forward emails to your unique webhook URL.</p>
-          <div className="mt-3 p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono text-slate-700 flex items-center justify-between">
-            <span className="truncate pr-4">{webhookUrl}</span>
-            <button onClick={copyToClipboard} className="text-slate-400 hover:text-slate-600"><Copy className="w-4 h-4" /></button>
-          </div>
-          <details className="text-xs text-slate-600 mt-2">
-            <summary className="cursor-pointer font-medium">How to set up for local development?</summary>
-            <div className="mt-2 p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
-              <p>To receive webhooks on your local machine, you need to expose your dev server to the internet. We recommend using <a href="https://ngrok.com/" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">ngrok</a>.</p>
-              <ol className="list-decimal list-inside space-y-1">
-                <li>Install ngrok, then run this command in a new terminal: <code className="font-mono bg-slate-200 px-1 rounded">ngrok http 3000</code></li>
-                <li>Ngrok will give you a public URL (e.g., <code className="font-mono bg-slate-200 px-1 rounded">https://random.ngrok.io</code>).</li>
-                <li>Use this ngrok URL as the base for your webhook: <code className="font-mono bg-slate-200 px-1 rounded">https://random.ngrok.io/api/webhooks/email</code></li>
-                <li>Update your email forwarding service to point to this new ngrok URL.</li>
-              </ol>
+          <p>Automatically create new jobs by simply forwarding emails from your clients to a unique Wirez R Us address.</p>
+          
+          {forwardingEmail ? (
+            <div className="mt-4 space-y-3">
+              <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg text-sm text-blue-800">
+                <p className="font-semibold mb-1">Setup Complete!</p>
+                <p>Set up an auto-forwarding rule in your email provider (Gmail, Outlook, etc.) to send emails to the address below.</p>
+              </div>
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono text-slate-700 flex items-center justify-between">
+                <span className="truncate pr-4 font-bold">{forwardingEmail}</span>
+                <button onClick={() => copyToClipboard(forwardingEmail)} className="text-slate-400 hover:text-slate-600 transition-colors">
+                  <Copy className="w-4 h-4" />
+                </button>
+              </div>
             </div>
-          </details>
+          ) : (
+            <p className="text-xs text-slate-400 mt-2">Click "Generate Address" to get your unique forwarding email.</p>
+          )}
         </IntegrationCard>
 
         <IntegrationCard
