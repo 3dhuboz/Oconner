@@ -8,6 +8,7 @@ interface User {
   name: string;
   role: 'dev' | 'admin' | 'user';
   uid: string;
+  isDemo?: boolean;
 }
 
 interface AuthContextType {
@@ -28,14 +29,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [backendStatus, setBackendStatus] = useState({ firebase: true, api: true, latency: 45 });
 
   useEffect(() => {
+    const storedDemo = localStorage.getItem('demo_user');
+    if (storedDemo) {
+      setUser(JSON.parse(storedDemo));
+      setIsLoading(false);
+    }
+
     if (!app) {
       console.warn('Firebase app not initialized. Auth disabled.');
-      setIsLoading(false);
+      if (!storedDemo) setIsLoading(false);
       return;
     }
 
     const auth = getAuth(app);
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (localStorage.getItem('demo_user')) return; // Ignore firebase if in demo mode
+
       if (user) {
         setFirebaseUser(user);
         const tokenResult = await user.getIdTokenResult();
@@ -72,12 +81,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = async (email: string, pass: string) => {
+    if (email === 'demo@wirezrus.com' && pass === 'demo123') {
+      const demoUser: User = { email, name: 'Demo Owner', role: 'admin', uid: 'demo-123', isDemo: true };
+      localStorage.setItem('demo_user', JSON.stringify(demoUser));
+      setUser(demoUser);
+      return;
+    }
+
     if (!app) throw new Error('Firebase not initialized');
     const auth = getAuth(app);
     await signInWithEmailAndPassword(auth, email, pass);
   };
 
   const logout = async () => {
+    if (localStorage.getItem('demo_user')) {
+      localStorage.removeItem('demo_user');
+      setUser(null);
+      return;
+    }
     if (!app) return;
     const auth = getAuth(app);
     await signOut(auth);

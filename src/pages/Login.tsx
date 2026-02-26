@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Zap, Mail, Lock, Loader2, AlertCircle, ShieldCheck } from 'lucide-react';
+import { Zap, Mail, Lock, Loader2, AlertCircle, ShieldCheck, PlayCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 
@@ -41,6 +41,11 @@ export function Login() {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleDemoLogin = () => {
+    setEmail('demo@wirezrus.com');
+    setPassword('demo123');
   };
 
   return (
@@ -113,6 +118,26 @@ export function Login() {
               )}
             </button>
           </form>
+
+          <div className="mt-6">
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-slate-200"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-2 bg-white text-slate-500">Or explore the app</span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleDemoLogin}
+              className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-3 border-2 border-slate-200 rounded-xl text-slate-700 font-bold hover:bg-slate-50 transition-colors"
+            >
+              <PlayCircle className="w-5 h-5 text-amber-500" />
+              Load Demo Credentials
+            </button>
+          </div>
 
           <div className="mt-6 text-center">
             <p className="text-xs text-slate-400">
