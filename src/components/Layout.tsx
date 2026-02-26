@@ -13,13 +13,13 @@ export function Layout({ children }: LayoutProps) {
   const { user, logout } = useAuth();
 
   const navItems = [
-    { name: 'Dashboard', path: '/', icon: LayoutDashboard, roles: ['SUPER_ADMIN', 'ADMIN'] },
-    { name: 'Job Board', path: '/jobs', icon: ClipboardList, roles: ['SUPER_ADMIN', 'ADMIN', 'TECH'] },
-    { name: 'Calendar', path: '/calendar', icon: Calendar, roles: ['SUPER_ADMIN', 'ADMIN'] },
-    { name: 'Team', path: '/team', icon: Users, roles: ['SUPER_ADMIN', 'ADMIN'] },
-    { name: 'Integrations', path: '/integrations', icon: Settings, roles: ['SUPER_ADMIN', 'ADMIN'] },
-    { name: 'Billing', path: '/billing', icon: CreditCard, roles: ['SUPER_ADMIN', 'ADMIN'] },
-    { name: 'Dev Console', path: '/admin', icon: Shield, roles: ['SUPER_ADMIN'] },
+    { name: 'Dashboard', path: '/', icon: LayoutDashboard, roles: ['dev', 'admin', 'user'] },
+    { name: 'Job Board', path: '/jobs', icon: ClipboardList, roles: ['dev', 'admin', 'user'] },
+    { name: 'Calendar', path: '/calendar', icon: Calendar, roles: ['dev', 'admin', 'user'] },
+    { name: 'Team', path: '/team', icon: Users, roles: ['dev', 'admin'] },
+    { name: 'Integrations', path: '/integrations', icon: Settings, roles: ['dev', 'admin'] },
+    { name: 'Billing', path: '/billing', icon: CreditCard, roles: ['dev', 'admin'] },
+    { name: 'Dev Console', path: '/admin', icon: Shield, roles: ['dev'] },
   ];
 
   if (!user) return null;
@@ -85,7 +85,7 @@ export function Layout({ children }: LayoutProps) {
             {navItems.find(i => i.path === location.pathname)?.name || 'Wirez R Us CRM'}
           </h1>
           <div className="flex items-center gap-4">
-            {user.role !== 'TECH' && (
+            {user.role !== 'user' && (
               <button className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-medium hover:bg-slate-800 transition-colors">
                 + New Work Order
               </button>
