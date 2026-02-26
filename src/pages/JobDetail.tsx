@@ -86,55 +86,27 @@ export function JobDetail({ jobs, updateJob, electricians }: JobDetailProps) {
     }
 
     try {
-      // Fetch the actual RTA Form 9 PDF via a CORS proxy
-      const formUrl = 'https://www.rta.qld.gov.au/sites/default/files/2021-06/Form-9-Entry-notice.pdf';
-      const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(formUrl)}`;
-      
-      const existingPdfBytes = await fetch(proxyUrl).then(res => res.arrayBuffer());
-      const pdfDoc = await PDFDocument.load(existingPdfBytes);
-      const form = pdfDoc.getForm();
-      
-      // Fill the actual Form 9 fields
-      try {
-        form.getTextField('Name/s of tenant/s').setText(job.tenantName || '');
-        form.getTextField('Address1').setText(job.propertyAddress || '');
-        
-        form.getTextField('Address of rental property 4').setText(job.propertyAddress || '');
-        
-        form.getCheckBox('Other authorised person (secondary agent)').check();
-        form.getTextField('Full name or trading name 1').setText('Wirez R Us (Contractor)');
-        
-        form.getTextField('Full name or trading name 2').setText('Wirez R Us Technician');
-        
-        const today = new Date();
-        form.getTextField('Day 1').setText(format(today, 'EEEE'));
-        form.getTextField('Date (dd/mm/yyyy)1').setText(format(today, 'dd/MM/yyyy'));
-        form.getTextField('Method of issue 1').setText('Email');
-        
-        const entryDateObj = new Date(proposedEntryDate);
-        form.getTextField('Day 2').setText(format(entryDateObj, 'EEEE'));
-        form.getTextField('Date (dd/mm/yyyy) 2').setText(format(entryDateObj, 'dd/MM/yyyy'));
-        
-        const timeFrom = format(entryDateObj, 'hh:mm a');
-        const timeTo = format(new Date(entryDateObj.getTime() + 2 * 3600 * 1000), 'hh:mm a');
-        
-        form.getTextField('Time of entry').setText(timeFrom);
-        form.getTextField('Two hour period from').setText(timeFrom);
-        form.getTextField('Two hour period to').setText(timeTo);
-        
-        // Checkbox3 is "Carry out routine repairs or maintenance"
-        form.getCheckBox('Checkbox3').check();
-        
-        form.getTextField('Print name').setText('Wirez R Us');
-        form.getTextField('Date of signature (dd/mm/yyyy)').setText(format(today, 'dd/MM/yyyy'));
-      } catch (e) {
-        console.warn("Could not fill some form fields", e);
+      // Call server-side endpoint to generate Form 9 PDF
+      const response = await fetch('/api/form9/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenantName: job.tenantName,
+          propertyAddress: job.propertyAddress,
+          tenantEmail: job.tenantEmail,
+          propertyManagerEmail: job.propertyManagerEmail,
+          proposedEntryDate,
+          jobId: job.id
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to generate Form 9');
       }
-      
-      const pdfBytes = await pdfDoc.save();
-      
-      // Trigger download
-      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+
+      // Download the PDF
+      const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -153,9 +125,9 @@ export function JobDetail({ jobs, updateJob, electricians }: JobDetailProps) {
         scheduledDate: new Date(proposedEntryDate).toISOString(),
         status: 'SCHEDULING'
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error generating Form 9:", error);
-      alert("Failed to generate the actual Form 9 PDF. Please try again.");
+      alert(`Failed to generate Form 9 PDF: ${error.message}\n\nPlease try again or contact support.`);
     }
   };
 
