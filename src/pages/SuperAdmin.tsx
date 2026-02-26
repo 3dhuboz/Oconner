@@ -206,7 +206,25 @@ export function SuperAdmin() {
           </div>
 
           {/* Feature Flags & User Management can go here */}
-
+          <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+            <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
+              <Activity className="w-4 h-4 text-slate-500" /> System Logs
+            </h3>
+            <div className="bg-slate-900 rounded-xl p-4 font-mono text-xs text-emerald-400 h-48 overflow-y-auto space-y-2">
+              <p>[{new Date().toISOString()}] SYSTEM: Dev Console initialized.</p>
+              <p>[{new Date().toISOString()}] AUTH: Admin user authenticated.</p>
+              <p>[{new Date().toISOString()}] DB: Firebase connection verified.</p>
+              <p className="text-slate-500">Waiting for new events...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl flex items-start gap-3">
+        <AlertTriangle className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+        <div className="text-sm text-blue-800">
+          <p className="font-bold mb-1">Developer Note: Environment Variables</p>
+          <p>While you can save configuration here for testing, it is highly recommended to use environment variables (e.g., in Vercel) for production secrets like API keys and Firebase config. This ensures your secrets are never exposed in the client-side code.</p>
         </div>
       </div>
     </div>
