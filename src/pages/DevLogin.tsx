@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Shield, Mail, Lock, Loader2, AlertCircle, Terminal } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -9,8 +9,19 @@ export function DevLogin() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { login } = useAuth();
+  const { login, user } = useAuth();
   const navigate = useNavigate();
+
+  // Redirect automatically when user state is populated
+  useEffect(() => {
+    if (user) {
+      if (user.role === 'dev') {
+        navigate('/admin');
+      } else {
+        navigate('/');
+      }
+    }
+  }, [user, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,7 +31,7 @@ export function DevLogin() {
     try {
       await login(email, password);
       toast.success('Dev access granted!');
-      navigate('/admin'); // Redirect to admin dashboard after dev login
+      // Navigation is now handled by the useEffect above
     } catch (err: any) {
       if (err.message === 'Firebase not initialized') {
         setError('System configuration error: Firebase is not connected. Please contact support.');
@@ -103,9 +114,12 @@ export function DevLogin() {
             </button>
           </form>
 
-          <div className="mt-6 text-center">
+          <div className="mt-6 text-center space-y-2">
             <p className="text-xs text-slate-500">
               Restricted Access. All attempts are logged.
+            </p>
+            <p className="text-[10px] text-slate-600 font-mono">
+              Project: {import.meta.env.VITE_FIREBASE_PROJECT_ID || 'Not Set'}
             </p>
           </div>
         </div>
