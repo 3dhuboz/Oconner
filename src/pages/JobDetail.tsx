@@ -5,7 +5,7 @@ import { format } from 'date-fns';
 import jsPDF from 'jspdf';
 import { 
   ArrowLeft, Phone, Mail, FileText, Calendar as CalendarIcon, 
-  CheckCircle2, AlertCircle, Camera, Wrench, DollarSign, Send, Loader2, Upload, Link as LinkIcon
+  CheckCircle2, AlertCircle, Camera, Wrench, DollarSign, Send, Loader2, Upload, Link as LinkIcon, User
 } from 'lucide-react';
 import { cn } from '../utils';
 
