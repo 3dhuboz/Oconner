@@ -68,9 +68,9 @@ export function Dashboard({ jobs, electricians }: DashboardProps) {
   return (
     <div className="max-w-7xl mx-auto space-y-5">
       {/* ─── Header Row ──────────────────────────────────────── */}
-      <div className="flex items-end justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900">Dashboard</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">Dashboard</h1>
           <p className="text-sm text-slate-500 mt-1">
             {format(new Date(), 'EEEE, d MMMM yyyy')}
             {!syncStatus.isOnline && <span className="ml-2 text-rose-500 font-medium">• Offline Mode</span>}
@@ -184,7 +184,7 @@ export function Dashboard({ jobs, electricians }: DashboardProps) {
       {/* ─── Row 2: Pipeline + Quick Actions ─────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Pipeline Widget */}
-        <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+        <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm p-4 sm:p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-bold text-slate-700 flex items-center gap-2">
               <BarChart3 className="w-4 h-4 text-slate-400" /> Job Pipeline
@@ -193,7 +193,7 @@ export function Dashboard({ jobs, electricians }: DashboardProps) {
               View Board <ArrowRight className="w-3 h-3" />
             </Link>
           </div>
-          <div className="flex items-end gap-2">
+          <div className="flex items-end gap-1 sm:gap-2 overflow-x-auto">
             {PIPELINE.map(stage => {
               const count = jobs.filter(j => j.status === stage.key).length;
               const pct = jobs.length > 0 ? Math.max((count / jobs.length) * 100, 4) : 4;
@@ -226,7 +226,7 @@ export function Dashboard({ jobs, electricians }: DashboardProps) {
           <h2 className="text-sm font-bold text-slate-700 flex items-center gap-2 mb-4">
             <Zap className="w-4 h-4 text-amber-500" /> Quick Actions
           </h2>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 sm:grid-cols-2 gap-2">
             <Link to="/jobs/new" className="flex flex-col items-center gap-1.5 p-3 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 transition-colors group">
               <Plus className="w-5 h-5 text-slate-600 group-hover:text-slate-900" />
               <span className="text-[11px] font-semibold text-slate-600 group-hover:text-slate-900">New Job</span>
@@ -396,7 +396,7 @@ export function Dashboard({ jobs, electricians }: DashboardProps) {
           <h2 className="text-sm font-bold text-slate-700 flex items-center gap-2 mb-4">
             <TrendingUp className="w-4 h-4 text-emerald-500" /> Revenue Snapshot
           </h2>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
             <div className="text-center p-3 bg-emerald-50 rounded-lg">
               <p className="text-xl font-bold text-emerald-700">{closedThisMonth}</p>
               <p className="text-[11px] text-emerald-600 font-medium">Completed</p>

@@ -20,13 +20,13 @@ const COLUMNS: { id: JobStatus; label: string; color: string }[] = [
 
 export function JobBoard({ jobs }: JobBoardProps) {
   return (
-    <div className="h-full flex gap-6 overflow-x-auto pb-4">
+    <div className="h-full flex gap-3 sm:gap-6 overflow-x-auto pb-4 -mx-4 px-4 sm:mx-0 sm:px-0">
       {COLUMNS.map((col) => {
         const columnJobs = jobs.filter(j => j.status === col.id);
         
         return (
-          <div key={col.id} className="flex-shrink-0 w-80 flex flex-col bg-slate-100/50 rounded-2xl border border-slate-200">
-            <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-100 rounded-t-2xl">
+          <div key={col.id} className="flex-shrink-0 w-[72vw] sm:w-72 lg:w-80 flex flex-col bg-slate-100/50 rounded-2xl border border-slate-200">
+            <div className="p-3 sm:p-4 border-b border-slate-200 flex items-center justify-between bg-slate-100 rounded-t-2xl">
               <div className="flex items-center gap-2">
                 <div className={cn("w-3 h-3 rounded-full", col.color)} />
                 <h3 className="font-semibold text-slate-700">{col.label}</h3>

@@ -283,9 +283,9 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
               </span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">{job.title}</h1>
-            <div className="flex items-center gap-3 mt-2">
-              <p className="text-slate-500 flex items-center gap-2">
-                <MapPin className="w-4 h-4" /> {job.propertyAddress}
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-2">
+              <p className="text-slate-500 flex items-center gap-2 text-sm sm:text-base">
+                <MapPin className="w-4 h-4 shrink-0" /> <span className="break-all">{job.propertyAddress}</span>
               </p>
               {job.propertyAddress && job.propertyAddress !== 'See email body' && (
                 <a
@@ -300,34 +300,34 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
             </div>
           </div>
           
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-2 sm:gap-3">
             {job.status === 'INTAKE' && (
-              <button onClick={() => handleStatusChange('SCHEDULING')} className="btn-primary">
+              <button onClick={() => handleStatusChange('SCHEDULING')} className="btn-primary text-xs sm:text-sm">
                 Move to Scheduling
               </button>
             )}
             {job.status === 'SCHEDULING' && (
-              <button onClick={() => handleStatusChange('DISPATCHED')} className="btn-primary">
+              <button onClick={() => handleStatusChange('DISPATCHED')} className="btn-primary text-xs sm:text-sm">
                 Dispatch Electrician
               </button>
             )}
             {job.status === 'DISPATCHED' && (
-              <div className="flex gap-2">
-                <button onClick={() => handleStatusChange('EXECUTION')} className="btn-primary">
+              <div className="flex flex-wrap gap-2">
+                <button onClick={() => handleStatusChange('EXECUTION')} className="btn-primary text-xs sm:text-sm">
                   Start Execution
                 </button>
-                <button onClick={() => window.open(`/field/${job.id}`, '_blank')} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
-                  <Camera className="w-4 h-4" /> Open Field App
+                <button onClick={() => window.open(`/field/${job.id}`, '_blank')} className="px-3 sm:px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs sm:text-sm font-medium transition-colors flex items-center gap-2">
+                  <Camera className="w-4 h-4" /> Field App
                 </button>
               </div>
             )}
             {job.status === 'EXECUTION' && (
-              <div className="flex gap-2">
-                <button onClick={() => handleStatusChange('REVIEW')} className="btn-primary">
+              <div className="flex flex-wrap gap-2">
+                <button onClick={() => handleStatusChange('REVIEW')} className="btn-primary text-xs sm:text-sm">
                   Submit for Review
                 </button>
-                <button onClick={() => window.open(`/field/${job.id}`, '_blank')} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
-                  <Camera className="w-4 h-4" /> Open Field App
+                <button onClick={() => window.open(`/field/${job.id}`, '_blank')} className="px-3 sm:px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs sm:text-sm font-medium transition-colors flex items-center gap-2">
+                  <Camera className="w-4 h-4" /> Field App
                 </button>
               </div>
             )}
