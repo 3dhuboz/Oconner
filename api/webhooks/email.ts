@@ -54,7 +54,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log(`[CloudMailin] Email from: ${from} | Subject: ${subject}`);
     console.log(`[CloudMailin] Body keys: ${Object.keys(body).join(', ')}`);
 
-    // Use Firestore REST API - no Admin SDK needed
+    // Use Firestore REST API with Firebase Auth
     const projectId = process.env.VITE_FIREBASE_PROJECT_ID;
     const apiKey = process.env.VITE_FIREBASE_API_KEY || process.env.VITE_FB_API_KEY;
 
@@ -63,18 +63,67 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ success: false, warning: 'Firebase not configured on server' });
     }
 
-    // Build Firestore document fields
+    // Step 1: Sign in with email/password or anonymously to get an auth token
+    // Try service account email first, fall back to anonymous auth
+    let idToken = '';
+    
+    const webhookEmail = process.env.WEBHOOK_AUTH_EMAIL;
+    const webhookPassword = process.env.WEBHOOK_AUTH_PASSWORD;
+
+    if (webhookEmail && webhookPassword) {
+      // Sign in with dedicated webhook service account
+      const authRes = await fetch(
+        `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: webhookEmail, password: webhookPassword, returnSecureToken: true }),
+        }
+      );
+      const authData = await authRes.json();
+      if (authData.idToken) {
+        idToken = authData.idToken;
+        console.log('[CloudMailin] Authenticated as webhook service account');
+      } else {
+        console.error('[CloudMailin] Auth failed:', authData.error?.message);
+      }
+    }
+    
+    if (!idToken) {
+      // Fall back to anonymous sign-in
+      const anonRes = await fetch(
+        `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ returnSecureToken: true }),
+        }
+      );
+      const anonData = await anonRes.json();
+      if (anonData.idToken) {
+        idToken = anonData.idToken;
+        console.log('[CloudMailin] Authenticated anonymously');
+      } else {
+        console.error('[CloudMailin] Anonymous auth failed:', anonData.error?.message);
+        return res.status(200).json({ success: false, warning: 'Authentication failed - enable Anonymous auth in Firebase Console', error: anonData.error?.message });
+      }
+    }
+
+    // Step 2: Build Firestore document fields
     const fields: any = {};
     for (const [key, value] of Object.entries(newJob)) {
       fields[key] = toFirestoreValue(value);
     }
 
-    // POST to Firestore REST API to create document in 'jobs' collection
+    // Step 3: POST to Firestore REST API with auth token
     const firestoreUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/jobs?key=${apiKey}`;
     
     const firestoreRes = await fetch(firestoreUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${idToken}`,
+      },
       body: JSON.stringify({ fields }),
     });
 
