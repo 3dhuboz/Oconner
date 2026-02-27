@@ -149,9 +149,16 @@ export function Layout({ children }: LayoutProps) {
   .btn-amber{background:#f59e0b;color:#0f172a}
   .btn:hover{opacity:0.88}
   .important{background:#fef9c3;border:1px solid #fbbf24;border-radius:6px;padding:7px 11px;font-size:11px;color:#92400e;margin-bottom:14px}
+  .instructions{display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+  .instr-box{flex:1;min-width:200px;border-radius:7px;padding:10px 13px;font-size:11.5px;line-height:1.6}
+  .instr-box strong{display:block;font-size:12px;margin-bottom:4px}
+  .instr-digital{background:#dbeafe;border:1px solid #93c5fd;color:#1e3a5f}
+  .instr-print{background:#dcfce7;border:1px solid #86efac;color:#14532d}
+  .print-only{display:none}
   @media print{
     body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
     .no-print{display:none!important}
+    .print-only{display:block!important}
     .field input,.field textarea,.field select{border-color:#cbd5e1!important}
   }
 </style>
@@ -170,8 +177,34 @@ export function Layout({ children }: LayoutProps) {
     </div>
   </div>
 
-  <div class="important no-print">
-    &#9888; Fill in all fields below, then click <strong>Submit by Email</strong> to send directly to Wirez R Us for scheduling.
+  <div class="instructions no-print">
+    <div class="instr-box instr-digital">
+      <strong>&#128187; Option A — Fill &amp; Submit Online (Recommended)</strong>
+      1. Open this file in any web browser (double-click it).<br/>
+      2. Fill in all fields on screen.<br/>
+      3. Click the <strong>&#9993; Submit by Email</strong> button at the bottom.<br/>
+      4. Your email app will open pre-filled &mdash; just hit <strong>Send</strong>.<br/>
+      <span style="font-size:10.5px;opacity:0.8">Your job will be created automatically when received.</span>
+    </div>
+    <div class="instr-box instr-print">
+      <strong>&#128438; Option B — Print &amp; Email Back</strong>
+      1. Click <strong>&#128438; Print / Save as PDF</strong> below.<br/>
+      2. Fill out the printed form by hand.<br/>
+      3. Scan or photograph the completed form.<br/>
+      4. Email the image/PDF to:<br/>
+      <strong style="font-size:12px;display:block;margin-top:3px">jobs@wireznrus.com.au</strong>
+      <span style="font-size:10.5px;opacity:0.8">Include property address in the email subject.</span>
+    </div>
+  </div>
+
+  <div class="print-only" style="border:2px solid #0f172a;border-radius:7px;padding:10px 14px;margin-bottom:14px;background:#f8fafc">
+    <strong style="font-size:12px">&#128338; HOW TO SUBMIT THIS COMPLETED FORM</strong>
+    <p style="font-size:11px;margin-top:5px;line-height:1.7">
+      Once filled in, please <strong>scan or photograph</strong> this form and email it to:<br/>
+      <strong style="font-size:13px">jobs@wireznrus.com.au</strong><br/>
+      Include the <strong>property address</strong> in the email subject line.<br/>
+      We will contact you within 1 business day to confirm scheduling.
+    </p>
   </div>
 
   <div class="section">
@@ -258,6 +291,7 @@ export function Layout({ children }: LayoutProps) {
   <div class="action-bar no-print">
     <button class="btn btn-amber" onclick="submitByEmail()">&#9993; Submit by Email</button>
     <button class="btn btn-dark" onclick="window.print()">&#128438; Print / Save as PDF</button>
+    <button class="btn" style="background:#6366f1;color:#fff" onclick="forwardForm()">&#128279; Send Form to Someone</button>
   </div>
 
 </div>
@@ -318,6 +352,32 @@ function submitByEmail() {
   );
 
   window.location.href = 'mailto:e35a378a68a971a219eb@cloudmailin.net?subject=' + subject + '&body=' + body;
+}
+function forwardForm() {
+  var subject = encodeURIComponent('Wirez R Us — Work Order Request Form');
+  var body = encodeURIComponent(
+    'Hi,\n\n' +
+    'Please find attached the Wirez R Us Work Order Request Form.\n\n' +
+    'HOW TO COMPLETE THIS FORM:\n' +
+    '\n' +
+    'OPTION A — Online (easiest):\n' +
+    '  1. Save the attached .html file to your computer.\n' +
+    '  2. Double-click it to open in your web browser.\n' +
+    '  3. Fill in all the fields on screen.\n' +
+    '  4. Click the "Submit by Email" button — your email app will open pre-filled.\n' +
+    '  5. Hit Send. We will take care of the rest!\n' +
+    '\n' +
+    'OPTION B — Print & Email Back:\n' +
+    '  1. Open the attached file and click "Print / Save as PDF".\n' +
+    '  2. Fill out the printed form by hand.\n' +
+    '  3. Scan or photograph the completed form.\n' +
+    '  4. Email it to: jobs@wireznrus.com.au\n' +
+    '     (Include the property address in the subject line.)\n' +
+    '\n' +
+    'We will be in touch within 1 business day to confirm scheduling.\n\n' +
+    'Regards,\nWirez R Us\njobs@wireznrus.com.au'
+  );
+  window.location.href = 'mailto:?subject=' + subject + '&body=' + body;
 }
 </script>
 </body>
