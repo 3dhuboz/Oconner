@@ -207,7 +207,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const subject = body.headers?.subject || body.headers?.Subject || body.subject || 'New Work Order from Email';
     const text = body.plain || body.text || '';
     const html = body.html || '';
-    const emailContent = text || (html ? html.replace(/<[^>]+>/g, '') : '') || '';
+    let emailContent = text || (html ? html.replace(/<[^>]+>/g, '') : '') || '';
+
+    // Normalise: replace literal \n (two chars: backslash + n) → real newline
+    // and \r\n → \n so multiline regex anchors work correctly
+    emailContent = emailContent
+      .replace(/\\r\\n/g, '\n')
+      .replace(/\\n/g, '\n')
+      .replace(/\r\n/g, '\n')
+      .replace(/\r/g, '\n');
+
     const now = new Date();
     const combined = `${subject}\n${emailContent}`;
 

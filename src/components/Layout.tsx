@@ -331,23 +331,32 @@ function submitByEmail() {
 
   var subject = encodeURIComponent('Work Order Request — ' + address);
   var body = encodeURIComponent(
-    'WIREZ R US — WORK ORDER REQUEST\\n' +
-    '=====================================\\n\\n' +
-    'PROPERTY ADDRESS: ' + address + '\\n\\n' +
-    'TENANT NAME: ' + tenantName + '\\n' +
-    'TENANT PHONE: ' + (tenantPhone || 'N/A') + '\\n' +
-    'TENANT EMAIL: ' + (tenantEmail || 'N/A') + '\\n\\n' +
-    'PROPERTY MANAGER: ' + (pmName || 'N/A') + '\\n' +
-    'PROPERTY MANAGER EMAIL: ' + (pmEmail || 'N/A') + '\\n' +
-    'AGENCY: ' + (agency || 'N/A') + '\\n\\n' +
-    'JOB TYPE: ' + jobTypes + '\\n' +
-    'URGENCY: ' + urgency + '\\n\\n' +
-    'DESCRIPTION OF ISSUE:\\n' + description + '\\n\\n' +
-    'ACCESS INSTRUCTIONS: ' + (access || 'N/A') + '\\n' +
-    'ACCESS TYPE: ' + accessTypes + '\\n\\n' +
-    'PREFERRED DATE/TIME: ' + (prefDate || 'Flexible') + '\\n' +
-    'NOT AVAILABLE: ' + (notAvail || 'N/A') + '\\n\\n' +
-    '=====================================\\n' +
+    'WIREZ R US — WORK ORDER REQUEST\n' +
+    '=====================================\n' +
+    '\n' +
+    'PROPERTY ADDRESS: ' + address + '\n' +
+    '\n' +
+    'TENANT NAME: ' + tenantName + '\n' +
+    'TENANT PHONE: ' + (tenantPhone || 'N/A') + '\n' +
+    'TENANT EMAIL: ' + (tenantEmail || 'N/A') + '\n' +
+    '\n' +
+    'PROPERTY MANAGER: ' + (pmName || 'N/A') + '\n' +
+    'PROPERTY MANAGER EMAIL: ' + (pmEmail || 'N/A') + '\n' +
+    'AGENCY: ' + (agency || 'N/A') + '\n' +
+    '\n' +
+    'JOB TYPE: ' + jobTypes + '\n' +
+    'URGENCY: ' + urgency + '\n' +
+    '\n' +
+    'DESCRIPTION OF ISSUE:\n' +
+    description + '\n' +
+    '\n' +
+    'ACCESS INSTRUCTIONS: ' + (access || 'N/A') + '\n' +
+    'ACCESS TYPE: ' + accessTypes + '\n' +
+    '\n' +
+    'PREFERRED DATE/TIME: ' + (prefDate || 'Flexible') + '\n' +
+    'NOT AVAILABLE: ' + (notAvail || 'N/A') + '\n' +
+    '\n' +
+    '=====================================\n' +
     'Submitted via Wirez R Us Work Order Form — ' + new Date().toLocaleDateString('en-AU')
   );
 
