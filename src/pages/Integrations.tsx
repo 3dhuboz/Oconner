@@ -247,7 +247,8 @@ export function Integrations() {
         body: JSON.stringify({ to: smsTestNumber, provider: smsProvider, ...smsConfig }),
       });
       const data = await res.json();
-      if (data.success) toast.success('Test SMS sent!');
+      if (data.success && data.simulated) toast.success('SMS API reachable (simulated — credentials not reaching server)');
+      else if (data.success) toast.success('Test SMS sent via Twilio!');
       else toast.error(data.error || 'SMS test failed');
     } catch {
       toast.error('Could not reach SMS API — check server configuration');

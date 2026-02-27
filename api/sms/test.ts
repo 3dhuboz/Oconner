@@ -6,16 +6,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { to, provider, accountSid, authToken, phoneNumber } = req.body;
+  const { to, provider, accountSid, authToken, phoneNumber, fromNumber } = req.body;
 
   if (!to) {
     return res.status(400).json({ error: 'Missing "to" phone number' });
   }
 
   // Use request body credentials first, fall back to env vars
+  // Frontend sends 'fromNumber', accept both field names for safety
   const sid = accountSid || process.env.TWILIO_ACCOUNT_SID;
   const token = authToken || process.env.TWILIO_AUTH_TOKEN;
-  const from = phoneNumber || process.env.TWILIO_PHONE_NUMBER;
+  const from = fromNumber || phoneNumber || process.env.TWILIO_PHONE_NUMBER;
 
   if (!sid || !token || !from) {
     // Simulate if no credentials configured
