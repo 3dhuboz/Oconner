@@ -116,158 +116,217 @@ export function Layout({ children }: LayoutProps) {
 <meta charset="UTF-8"/>
 <title>Work Order — Wirez R Us</title>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: Arial, Helvetica, sans-serif; font-size: 13px; color: #1e293b; background: #fff; }
-  .page { max-width: 210mm; margin: 0 auto; padding: 12mm 14mm; }
-  .header { display: flex; align-items: center; justify-content: space-between; border-bottom: 3px solid #0f172a; padding-bottom: 10px; margin-bottom: 16px; }
-  .brand { font-size: 22px; font-weight: 900; letter-spacing: -0.5px; color: #0f172a; }
-  .brand span { color: #f59e0b; }
-  .header-meta { text-align: right; font-size: 11px; color: #64748b; line-height: 1.8; }
-  h2 { font-size: 14px; font-weight: 800; color: #0f172a; margin-bottom: 10px; border-left: 4px solid #f59e0b; padding-left: 8px; }
-  .section { margin-bottom: 18px; }
-  .field-row { display: flex; gap: 12px; margin-bottom: 8px; }
-  .field { flex: 1; }
-  .field label { display: block; font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px; }
-  .line { border-bottom: 1.5px solid #cbd5e1; min-height: 22px; }
-  .check-group { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 6px; }
-  .check-item { display: flex; align-items: center; gap: 6px; font-size: 13px; }
-  .box { width: 16px; height: 16px; border: 2px solid #334155; border-radius: 3px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
-  .textarea-box { border: 1.5px solid #cbd5e1; border-radius: 6px; min-height: 60px; width: 100%; background: #f8fafc; }
-  .sig-row { display: flex; gap: 16px; margin-top: 8px; }
-  .sig-block { flex: 1; }
-  .sig-line { border-bottom: 1.5px solid #334155; height: 36px; margin-bottom: 4px; }
-  .footer { margin-top: 20px; border-top: 1px solid #e2e8f0; padding-top: 8px; display: flex; justify-content: space-between; }
-  .footer-text { font-size: 9px; color: #94a3b8; }
-  .materials-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  .materials-table th { background: #f1f5f9; text-align: left; padding: 6px 8px; font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; border: 1px solid #e2e8f0; }
-  .materials-table td { padding: 6px 8px; border: 1px solid #e2e8f0; height: 28px; }
-  @media print {
-    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .no-print { display: none; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#1e293b;background:#fff}
+  .page{max-width:210mm;margin:0 auto;padding:12mm 14mm}
+  .header{display:flex;align-items:center;justify-content:space-between;border-bottom:3px solid #0f172a;padding-bottom:10px;margin-bottom:14px}
+  .brand{font-size:22px;font-weight:900;letter-spacing:-0.5px;color:#0f172a}
+  .brand span{color:#f59e0b}
+  .header-meta{text-align:right;font-size:11px;color:#64748b;line-height:1.8}
+  h2{font-size:13px;font-weight:800;color:#0f172a;margin-bottom:8px;border-left:4px solid #f59e0b;padding-left:8px}
+  .section{margin-bottom:16px}
+  .field-row{display:flex;gap:10px;margin-bottom:7px;flex-wrap:wrap}
+  .field{flex:1;min-width:120px}
+  .field label{display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:3px}
+  .field input,.field textarea,.field select{width:100%;border:1.5px solid #cbd5e1;border-radius:5px;padding:5px 8px;font-size:12px;font-family:Arial,sans-serif;background:#fff;color:#0f172a;outline:none}
+  .field input:focus,.field textarea:focus{border-color:#f59e0b}
+  .field textarea{resize:vertical;min-height:58px}
+  .check-group{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:5px}
+  .check-item{display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;user-select:none}
+  .check-item input[type=checkbox]{width:15px;height:15px;cursor:pointer;accent-color:#0f172a}
+  .materials-table{width:100%;border-collapse:collapse;font-size:12px}
+  .materials-table th{background:#f1f5f9;text-align:left;padding:5px 7px;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;border:1px solid #e2e8f0}
+  .materials-table td{border:1px solid #e2e8f0;padding:2px 4px}
+  .materials-table td input{width:100%;border:none;outline:none;font-size:12px;padding:3px 4px;background:transparent}
+  .sig-row{display:flex;gap:14px;margin-top:8px}
+  .sig-block{flex:1}
+  .sig-line{border-bottom:1.5px solid #334155;height:34px;margin-bottom:3px}
+  .footer{margin-top:16px;border-top:1px solid #e2e8f0;padding-top:7px;display:flex;justify-content:space-between}
+  .footer-text{font-size:9px;color:#94a3b8}
+  .action-bar{display:flex;gap:10px;justify-content:center;margin-top:18px;flex-wrap:wrap}
+  .btn{padding:10px 24px;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer}
+  .btn-dark{background:#0f172a;color:#fff}
+  .btn-amber{background:#f59e0b;color:#0f172a}
+  .btn:hover{opacity:0.88}
+  .important{background:#fef9c3;border:1px solid #fbbf24;border-radius:6px;padding:7px 11px;font-size:11px;color:#92400e;margin-bottom:14px}
+  @media print{
+    body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .no-print{display:none!important}
+    .field input,.field textarea,.field select{border-color:#cbd5e1!important}
   }
 </style>
 </head>
 <body>
 <div class="page">
+
   <div class="header">
     <div>
       <div class="brand">WIREZ<span> R US</span></div>
-      <div style="font-size:11px;color:#64748b;margin-top:2px;">Licensed Electrical Contractors</div>
+      <div style="font-size:11px;color:#64748b;margin-top:2px">Licensed Electrical Contractors</div>
     </div>
     <div class="header-meta">
-      <strong>WORK ORDER</strong><br/>
-      WO#: ____________________<br/>
-      Date: ${today}<br/>
-      Tech: ____________________
+      <strong>WORK ORDER REQUEST</strong><br/>
+      Date: ${today}
+    </div>
+  </div>
+
+  <div class="important no-print">
+    &#9888; Fill in all fields below, then click <strong>Submit by Email</strong> to send directly to Wirez R Us for scheduling.
+  </div>
+
+  <div class="section">
+    <h2>1. Property &amp; Tenant Details</h2>
+    <div class="field-row">
+      <div class="field" style="flex:2"><label>Property Address *</label><input id="f_address" type="text" placeholder="123 Main St, Brisbane QLD 4000"/></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Tenant Full Name *</label><input id="f_tenant_name" type="text" placeholder="Jane Smith"/></div>
+      <div class="field"><label>Tenant Phone</label><input id="f_tenant_phone" type="tel" placeholder="0412 345 678"/></div>
+      <div class="field"><label>Tenant Email</label><input id="f_tenant_email" type="email" placeholder="tenant@email.com"/></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Property Manager Name</label><input id="f_pm_name" type="text" placeholder="John Manager"/></div>
+      <div class="field"><label>Property Manager Email *</label><input id="f_pm_email" type="email" placeholder="manager@agency.com.au"/></div>
+      <div class="field"><label>Agency Name</label><input id="f_agency" type="text" placeholder="LJ Hooker Brisbane"/></div>
     </div>
   </div>
 
   <div class="section">
-    <h2>1. Property &amp; Tenant</h2>
-    <div class="field-row">
-      <div class="field" style="flex:2"><label>Property Address</label><div class="line"></div></div>
-    </div>
-    <div class="field-row">
-      <div class="field"><label>Tenant Name</label><div class="line"></div></div>
-      <div class="field"><label>Tenant Phone</label><div class="line"></div></div>
-      <div class="field"><label>Tenant Email</label><div class="line"></div></div>
-    </div>
-    <div class="field-row">
-      <div class="field"><label>Property Manager</label><div class="line"></div></div>
-      <div class="field"><label>PM Phone / Email</label><div class="line"></div></div>
+    <h2>2. Job Type <span style="font-size:11px;font-weight:400;color:#64748b">(tick all that apply)</span></h2>
+    <div class="check-group">
+      <label class="check-item"><input type="checkbox" id="jt_elec"/> Electrical Fault / Repair</label>
+      <label class="check-item"><input type="checkbox" id="jt_smoke"/> Smoke Alarm Service</label>
+      <label class="check-item"><input type="checkbox" id="jt_emerg"/> Emergency Call-out</label>
+      <label class="check-item"><input type="checkbox" id="jt_install"/> Installation</label>
+      <label class="check-item"><input type="checkbox" id="jt_inspect"/> Inspection</label>
+      <label class="check-item"><input type="checkbox" id="jt_other"/> Other</label>
     </div>
   </div>
 
   <div class="section">
-    <h2>2. Job Details</h2>
-    <div style="margin-bottom:8px">
-      <label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Job Type</label>
-      <div class="check-group">
-        <div class="check-item"><div class="box"></div> Electrical Fault / Repair</div>
-        <div class="check-item"><div class="box"></div> Smoke Alarm Service</div>
-        <div class="check-item"><div class="box"></div> Emergency Call-out</div>
-        <div class="check-item"><div class="box"></div> Installation</div>
-        <div class="check-item"><div class="box"></div> Inspection</div>
-        <div class="check-item"><div class="box"></div> Other: _______________</div>
-      </div>
-    </div>
-    <div style="margin-bottom:8px">
-      <label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Urgency</label>
-      <div class="check-group">
-        <div class="check-item"><div class="box"></div> <span><strong>Routine</strong> — 5–7 days</span></div>
-        <div class="check-item"><div class="box"></div> <span><strong>Urgent</strong> — 24–48 hrs</span></div>
-        <div class="check-item"><div class="box"></div> <span><strong>Emergency</strong> — Immediate</span></div>
-      </div>
-    </div>
-    <div>
-      <label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Description of Work</label>
-      <div class="textarea-box"></div>
+    <h2>3. Urgency</h2>
+    <div class="check-group">
+      <label class="check-item"><input type="radio" name="urgency" id="urg_routine" value="Routine" checked/> <strong>Routine</strong> &mdash; 5&ndash;7 business days</label>
+      <label class="check-item"><input type="radio" name="urgency" id="urg_urgent" value="Urgent"/> <strong>Urgent</strong> &mdash; 24&ndash;48 hours</label>
+      <label class="check-item"><input type="radio" name="urgency" id="urg_emerg" value="Emergency"/> <strong>Emergency</strong> &mdash; Immediate</label>
     </div>
   </div>
 
   <div class="section">
-    <h2>3. Access</h2>
+    <h2>4. Description of Issue *</h2>
+    <div class="field"><textarea id="f_description" rows="4" placeholder="Describe the issue in detail. Include when it started, any hazards, and any history..."></textarea></div>
+  </div>
+
+  <div class="section">
+    <h2>5. Access Instructions</h2>
     <div class="field-row">
-      <div class="field" style="flex:2"><label>Key / Lockbox / Code</label><div class="line"></div></div>
+      <div class="field" style="flex:2"><label>Key / Lockbox / Code Details</label><input id="f_access" type="text" placeholder="e.g. Lockbox code 1234, left side of front door"/></div>
     </div>
     <div class="check-group" style="margin-top:6px">
-      <div class="check-item"><div class="box"></div> Lockbox on site</div>
-      <div class="check-item"><div class="box"></div> Key at agency</div>
-      <div class="check-item"><div class="box"></div> Tenant to provide</div>
-      <div class="check-item"><div class="box"></div> Agent attending</div>
+      <label class="check-item"><input type="checkbox" id="ac_lockbox"/> Lockbox on site</label>
+      <label class="check-item"><input type="checkbox" id="ac_agency"/> Key at agency</label>
+      <label class="check-item"><input type="checkbox" id="ac_tenant"/> Tenant to provide access</label>
+      <label class="check-item"><input type="checkbox" id="ac_agent"/> Agent to attend</label>
     </div>
   </div>
 
   <div class="section">
-    <h2>4. Materials Used</h2>
-    <table class="materials-table">
-      <thead><tr><th style="width:40%">Item / Part</th><th>Qty</th><th>Unit Cost</th><th>Total</th></tr></thead>
-      <tbody>
-        <tr><td></td><td></td><td></td><td></td></tr>
-        <tr><td></td><td></td><td></td><td></td></tr>
-        <tr><td></td><td></td><td></td><td></td></tr>
-        <tr><td></td><td></td><td></td><td></td></tr>
-        <tr><td></td><td><strong>Labour Hrs:</strong></td><td></td><td></td></tr>
-      </tbody>
-    </table>
-  </div>
-
-  <div class="section">
-    <h2>5. Site Notes / Findings</h2>
-    <div class="textarea-box"></div>
-  </div>
-
-  <div class="section">
-    <h2>6. Completion &amp; Sign-off</h2>
-    <div class="check-group" style="margin-bottom:10px">
-      <div class="check-item"><div class="box"></div> Work completed satisfactorily</div>
-      <div class="check-item"><div class="box"></div> Follow-up required</div>
-      <div class="check-item"><div class="box"></div> Parts on order</div>
-      <div class="check-item"><div class="box"></div> Hazard identified — report lodged</div>
+    <h2>6. Preferred Attendance Time</h2>
+    <div class="field-row">
+      <div class="field"><label>Preferred Date / Window</label><input id="f_preferred_date" type="text" placeholder="e.g. Any weekday morning, or Mon 3 March after 10am"/></div>
+      <div class="field"><label>Dates / Times NOT Available</label><input id="f_not_available" type="text" placeholder="e.g. No Fridays, not before 9am"/></div>
     </div>
+  </div>
+
+  <div class="section">
+    <h2>7. Declaration</h2>
+    <p style="font-size:11px;color:#475569;margin-bottom:8px;line-height:1.5">
+      I confirm the information provided is accurate and I am authorised to request these works on behalf of the property owner / occupant.
+    </p>
     <div class="sig-row">
-      <div class="sig-block"><div class="sig-line"></div><div style="font-size:10px;color:#64748b;">Technician Signature</div></div>
-      <div class="sig-block"><div class="sig-line"></div><div style="font-size:10px;color:#64748b;">Tenant / Occupant Signature</div></div>
-      <div class="sig-block" style="flex:0.6"><div class="sig-line"></div><div style="font-size:10px;color:#64748b;">Date Completed</div></div>
+      <div class="sig-block"><div class="sig-line"></div><div style="font-size:10px;color:#64748b">Signature</div></div>
+      <div class="sig-block"><div class="sig-line"></div><div style="font-size:10px;color:#64748b">Printed Name</div></div>
+      <div class="sig-block" style="flex:0.5"><div class="sig-line"></div><div style="font-size:10px;color:#64748b">Date</div></div>
     </div>
   </div>
 
   <div class="footer">
     <div class="footer-text">Wirez R Us Electrical Services &bull; Licensed Electrical Contractors &bull; jobs@wireznrus.com.au</div>
-    <div class="footer-text">Generated ${today}</div>
+    <div class="footer-text">Form generated ${today}</div>
   </div>
 
-  <div class="no-print" style="text-align:center;margin-top:20px">
-    <button onclick="window.print()" style="padding:10px 28px;background:#0f172a;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;">&#128438; Print / Save as PDF</button>
+  <div class="action-bar no-print">
+    <button class="btn btn-amber" onclick="submitByEmail()">&#9993; Submit by Email</button>
+    <button class="btn btn-dark" onclick="window.print()">&#128438; Print / Save as PDF</button>
   </div>
+
 </div>
+
+<script>
+function getChecked(ids) {
+  return ids.filter(id => document.getElementById(id) && document.getElementById(id).checked)
+            .map(id => document.getElementById(id).parentElement.textContent.trim())
+            .join(', ') || 'None selected';
+}
+function val(id) {
+  var el = document.getElementById(id);
+  return el ? el.value.trim() : '';
+}
+function submitByEmail() {
+  var address   = val('f_address');
+  var tenantName  = val('f_tenant_name');
+  var tenantPhone = val('f_tenant_phone');
+  var tenantEmail = val('f_tenant_email');
+  var pmName    = val('f_pm_name');
+  var pmEmail   = val('f_pm_email');
+  var agency    = val('f_agency');
+  var description = val('f_description');
+  var access    = val('f_access');
+  var prefDate  = val('f_preferred_date');
+  var notAvail  = val('f_not_available');
+
+  if (!address || !tenantName || !description) {
+    alert('Please fill in Property Address, Tenant Name, and Description before submitting.');
+    return;
+  }
+
+  var jobTypes = getChecked(['jt_elec','jt_smoke','jt_emerg','jt_install','jt_inspect','jt_other']);
+  var urgencyEl = document.querySelector('input[name=urgency]:checked');
+  var urgency = urgencyEl ? urgencyEl.value : 'Routine';
+  var accessTypes = getChecked(['ac_lockbox','ac_agency','ac_tenant','ac_agent']);
+
+  var subject = encodeURIComponent('Work Order Request — ' + address);
+  var body = encodeURIComponent(
+    'WIREZ R US — WORK ORDER REQUEST\\n' +
+    '=====================================\\n\\n' +
+    'PROPERTY ADDRESS: ' + address + '\\n\\n' +
+    'TENANT NAME: ' + tenantName + '\\n' +
+    'TENANT PHONE: ' + (tenantPhone || 'N/A') + '\\n' +
+    'TENANT EMAIL: ' + (tenantEmail || 'N/A') + '\\n\\n' +
+    'PROPERTY MANAGER: ' + (pmName || 'N/A') + '\\n' +
+    'PROPERTY MANAGER EMAIL: ' + (pmEmail || 'N/A') + '\\n' +
+    'AGENCY: ' + (agency || 'N/A') + '\\n\\n' +
+    'JOB TYPE: ' + jobTypes + '\\n' +
+    'URGENCY: ' + urgency + '\\n\\n' +
+    'DESCRIPTION OF ISSUE:\\n' + description + '\\n\\n' +
+    'ACCESS INSTRUCTIONS: ' + (access || 'N/A') + '\\n' +
+    'ACCESS TYPE: ' + accessTypes + '\\n\\n' +
+    'PREFERRED DATE/TIME: ' + (prefDate || 'Flexible') + '\\n' +
+    'NOT AVAILABLE: ' + (notAvail || 'N/A') + '\\n\\n' +
+    '=====================================\\n' +
+    'Submitted via Wirez R Us Work Order Form — ' + new Date().toLocaleDateString('en-AU')
+  );
+
+  window.location.href = 'mailto:e35a378a68a971a219eb@cloudmailin.net?subject=' + subject + '&body=' + body;
+}
+</script>
 </body>
 </html>`;
               const blob = new Blob([html], { type: 'text/html' });
               const url = URL.createObjectURL(blob);
               const a = document.createElement('a');
               a.href = url;
-              a.download = `work_order_template_${today.replace(/\//g, '-')}.html`;
+              a.download = `work_order_form_${today.replace(/\//g, '-')}.html`;
               a.click();
               URL.revokeObjectURL(url);
             }}
