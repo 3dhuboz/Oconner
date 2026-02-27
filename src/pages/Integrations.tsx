@@ -83,6 +83,9 @@ export function Integrations() {
   const [forwardingEmail, setForwardingEmail] = useState<string | null>(null);
   const [isGeneratingEmail, setIsGeneratingEmail] = useState(false);
   const [isSimulating, setIsSimulating] = useState(false);
+  
+  // CloudMailin email address from environment
+  const cloudmailinEmail = import.meta.env.VITE_CLOUDMAILIN_EMAIL || 'jobs-8f92a@inbound.wirezrus.com';
 
   // ─── SMS Provider State ─────────────────────────────────────
   const [smsProvider, setSmsProvider] = useState<'twilio' | 'vonage'>('twilio');
@@ -250,11 +253,11 @@ export function Integrations() {
     }
   };
 
-  const handleGenerateEmail = () => {
+  const generateForwardingEmail = () => {
     setIsGeneratingEmail(true);
-    // Simulate API call to generate a unique inbound email address
+    // Use CloudMailin email address from environment
     setTimeout(() => {
-      setForwardingEmail('jobs-8f92a@inbound.wirezrus.com');
+      setForwardingEmail(cloudmailinEmail);
       setIsGeneratingEmail(false);
     }, 1200);
   };
@@ -344,8 +347,8 @@ export function Integrations() {
               <p>Set up an auto-forwarding rule in your email provider (Gmail, Outlook, etc.) to send emails to the address below.</p>
             </div>
             <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono text-slate-700 flex items-center justify-between">
-              <span className="truncate pr-4 font-bold">jobs-8f92a@inbound.wirezrus.com</span>
-              <button onClick={() => copyToClipboard('jobs-8f92a@inbound.wirezrus.com')} className="text-slate-400 hover:text-slate-600 transition-colors">
+              <span className="truncate pr-4 font-bold">{cloudmailinEmail}</span>
+              <button onClick={() => copyToClipboard(cloudmailinEmail)} className="text-slate-400 hover:text-slate-600 transition-colors">
                 <Copy className="w-4 h-4" />
               </button>
             </div>
