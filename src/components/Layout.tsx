@@ -386,11 +386,14 @@ function submitByEmail() {
   var mailtoUrl = 'mailto:' + TO + '?subject=' + encodeURIComponent(d.subject) + '&body=' + encodeURIComponent(d.body);
 
   // Try window.open first (more reliable than location.href for mailto)
-  var opened = window.open(mailtoUrl, '_self');
-  // Show fallback after 800ms if nothing happened (mailto silently failed)
+  window.location.href = mailtoUrl;
+  
+  // Only show fallback if user confirms email didn't open after 2 seconds
   setTimeout(function() {
-    showFallback(d.subject, d.body);
-  }, 800);
+    if (confirm('Did your email app open? Click OK if it did NOT open (to see alternative options).')) {
+      showFallback(d.subject, d.body);
+    }
+  }, 2000);
 }
 function forwardForm() {
   var subject = encodeURIComponent('Wirez R Us — Work Order Request Form');
