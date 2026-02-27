@@ -142,9 +142,9 @@ export function Layout({ children }: LayoutProps) {
           </div>
           <div className="flex items-center gap-2 sm:gap-4">
             {user.role !== 'user' && (
-              <button className="hidden sm:block px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-medium hover:bg-slate-800 transition-colors">
+              <Link to="/jobs/new" className="hidden sm:block px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-medium hover:bg-slate-800 transition-colors">
                 + New Work Order
-              </button>
+              </Link>
             )}
           </div>
         </header>
