@@ -38,6 +38,7 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
   const [isDeleting, setIsDeleting] = useState(false);
   const [resendingSms, setResendingSms] = useState(false);
   const [editingTenant, setEditingTenant] = useState(false);
+  const [showAvailability, setShowAvailability] = useState(false);
   const isAdmin = user?.role === 'admin' || user?.role === 'dev';
 
   if (!job) {
@@ -48,7 +49,7 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
     if (newStatus === 'DISPATCHED') {
       const electrician = electricians.find(e => e.id === job.assignedElectricianId);
       if (!electrician) {
-        alert("Please assign an electrician before dispatching.");
+        toast.error('Please assign an electrician before dispatching.');
         return;
       }
       
@@ -65,13 +66,13 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
         });
         const data = await res.json();
         if (data.simulated) {
-          alert(`Job Dispatched! (SMS Simulated to ${electrician.name} at ${electrician.phone})`);
+          toast.success(`Job dispatched — SMS simulated to ${electrician.name} (${electrician.phone})`);
         } else {
-          alert(`Job Dispatched! SMS sent to ${electrician.name}.`);
+          toast.success(`Job dispatched — SMS sent to ${electrician.name}`);
         }
       } catch (e) {
         console.error(e);
-        alert("Job dispatched, but failed to send SMS notification.");
+        toast(`Job dispatched, but SMS notification failed`, { icon: '⚠️' });
       }
     } else {
       updateJob(job.id, { status: newStatus });
@@ -96,7 +97,7 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
 
   const handleGenerateForm9 = async () => {
     if (!proposedEntryDate) {
-      alert("Please select a proposed entry date and time.");
+      toast.error('Please select a proposed entry date and time.');
       return;
     }
 
@@ -135,9 +136,8 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
       link.click();
       URL.revokeObjectURL(url);
 
-      // Simulate sending the email
       setTimeout(() => {
-        alert(`Email Sent Successfully!\n\nTo: ${job.tenantEmail}\nCC: ${job.propertyManagerEmail || 'pm@example.com'}\nAttachment: Form9_${job.id}.pdf\n\nThe legal entry time is now locked in.`);
+        toast.success(`Form 9 sent to ${job.tenantEmail} — legal entry time locked in`);
       }, 500);
 
       updateJob(job.id, { 
@@ -148,7 +148,7 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
       });
     } catch (error: any) {
       console.error("Error generating Form 9:", error);
-      alert(`Failed to generate Form 9 PDF: ${error.message}\n\nPlease try again or contact support.`);
+      toast.error(`Failed to generate Form 9: ${error.message}`);
     }
   };
 
@@ -236,7 +236,7 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
     doc.save(`Compliance_${job.id}.pdf`);
 
     updateJob(job.id, { complianceReportGenerated: true });
-    alert(`Compliance Certificate generated and saved as Compliance_${job.id}.pdf`);
+    toast.success(`Compliance certificate generated — Compliance_${job.id}.pdf`);
   };
 
   const handleSyncXero = async () => {
@@ -255,9 +255,9 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
       }
 
       updateJob(job.id, { xeroInvoiceId: data.invoiceNumber || data.invoiceId });
-      alert(`Successfully synced to Xero! Invoice ${data.invoiceNumber || data.invoiceId} created.`);
+      toast.success(`Xero invoice ${data.invoiceNumber || data.invoiceId} created`);
     } catch (error: any) {
-      alert(`Xero Sync Error: ${error.message}\n\nMake sure you have connected Xero in the Integrations tab.`);
+      toast.error(`Xero sync failed: ${error.message}`);
     } finally {
       setIsSyncingXero(false);
     }
@@ -313,7 +313,7 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
                 Dispatch Electrician
               </button>
             )}
-            {job.status === 'DISPATCHED' && (
+            {job.status === 'DISPATCHED' && !isAdmin && (
               <div className="flex flex-wrap gap-2">
                 <button onClick={() => handleStatusChange('EXECUTION')} className="btn-primary text-xs sm:text-sm">
                   Start Execution
@@ -323,7 +323,7 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
                 </button>
               </div>
             )}
-            {job.status === 'EXECUTION' && (
+            {job.status === 'EXECUTION' && !isAdmin && (
               <div className="flex flex-wrap gap-2">
                 <button onClick={() => handleStatusChange('REVIEW')} className="btn-primary text-xs sm:text-sm">
                   Submit for Review
@@ -677,26 +677,24 @@ Thank you,
             <div className="space-y-6">
               <div>
                 <label className="block text-sm font-medium text-slate-500 mb-2">Assigned Electrician</label>
-                <div className="flex items-center gap-3">
-                  <select 
-                    className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white"
-                    value={job.assignedElectricianId || ''}
-                    onChange={e => updateJob(job.id, { assignedElectricianId: e.target.value })}
-                    disabled={job.status !== 'SCHEDULING'}
-                  >
-                    <option value="">Select Electrician...</option>
-                    {electricians.map(e => (
-                      <option key={e.id} value={e.id}>{e.name}</option>
-                    ))}
-                  </select>
-                  <button 
-                    onClick={() => navigate('/calendar')}
-                    className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 shrink-0"
-                  >
-                    <CalendarIcon className="w-4 h-4" />
-                    Check Availability
-                  </button>
-                </div>
+                <select 
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white mb-2"
+                  value={job.assignedElectricianId || ''}
+                  onChange={e => updateJob(job.id, { assignedElectricianId: e.target.value })}
+                  disabled={job.status !== 'SCHEDULING'}
+                >
+                  <option value="">Select Electrician...</option>
+                  {electricians.map(e => (
+                    <option key={e.id} value={e.id}>{e.name}</option>
+                  ))}
+                </select>
+                <button 
+                  onClick={() => setShowAvailability(true)}
+                  className="w-full px-3 py-2 bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                >
+                  <CalendarIcon className="w-4 h-4" />
+                  Check Availability
+                </button>
               </div>
 
               <div>
@@ -921,6 +919,92 @@ Thank you,
           </div>
         </div>
       </div>
+
+      {/* ─── Availability Popout Modal ─── */}
+      {showAvailability && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowAvailability(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center justify-between p-5 border-b border-slate-200">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                  <CalendarIcon className="w-5 h-5 text-purple-500" />
+                  Technician Availability
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {job.scheduledDate
+                    ? <>Job scheduled: <span className="font-semibold text-slate-700">{format(new Date(job.scheduledDate), 'EEE d MMM, h:mm a')}</span></>
+                    : 'No scheduled time set for this job yet'}
+                </p>
+              </div>
+              <button onClick={() => setShowAvailability(false)} className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Tech list */}
+            <div className="p-5 space-y-3">
+              {electricians.length === 0 ? (
+                <p className="text-sm text-slate-400 text-center py-4">No technicians found. Add team members in the Team page.</p>
+              ) : (
+                electricians.map(elec => {
+                  const isAssigned = elec.id === job.assignedElectricianId;
+                  return (
+                    <div
+                      key={elec.id}
+                      className={cn(
+                        "flex items-center justify-between p-4 rounded-xl border transition-all",
+                        isAssigned
+                          ? "bg-purple-50 border-purple-200"
+                          : "bg-slate-50 border-slate-200"
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={cn(
+                          "w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm shrink-0",
+                          isAssigned ? "bg-purple-200 text-purple-700" : "bg-slate-200 text-slate-600"
+                        )}>
+                          {elec.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="font-semibold text-slate-900 text-sm">{elec.name}</p>
+                          <p className="text-xs text-slate-500">{elec.phone}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {isAssigned ? (
+                          <span className="px-2.5 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-bold">Assigned</span>
+                        ) : (
+                          <span className="px-2.5 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-bold">Available</span>
+                        )}
+                        {!isAssigned && job.status === 'SCHEDULING' && (
+                          <button
+                            onClick={() => {
+                              updateJob(job.id, { assignedElectricianId: elec.id });
+                              toast.success(`${elec.name} assigned to this job`);
+                              setShowAvailability(false);
+                            }}
+                            className="px-3 py-1.5 bg-slate-900 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold transition-colors"
+                          >
+                            Assign
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Footer hint */}
+            <div className="px-5 pb-5">
+              <p className="text-[11px] text-slate-400 text-center">
+                Full calendar view available in the <button onClick={() => { setShowAvailability(false); navigate('/calendar'); }} className="text-purple-600 hover:underline font-medium">Calendar</button> page.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ─── Raw Email Viewer Modal ─── */}
       {showRawEmail && job.source === 'email' && (
