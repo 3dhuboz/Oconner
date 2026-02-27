@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { Electrician } from '../types';
-import { Users, Plus, Edit2, Save, X, Phone, Mail } from 'lucide-react';
+import { Users, Plus, Edit2, Save, X, Phone, Mail, Trash2 } from 'lucide-react';
+import { db } from '../services/firebase';
+import { doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import toast from 'react-hot-toast';
 
 interface TeamProps {
   electricians: Electrician[];
@@ -11,6 +14,7 @@ export function Team({ electricians, setElectricians }: TeamProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Electrician>>({});
   const [isAdding, setIsAdding] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const handleEdit = (electrician: Electrician) => {
     setEditingId(electrician.id);
@@ -18,28 +22,48 @@ export function Team({ electricians, setElectricians }: TeamProps) {
     setIsAdding(false);
   };
 
-  const handleSave = () => {
-    if (!editForm.name || !editForm.phone) {
-      alert("Name and Phone are required.");
+  const handleSave = async () => {
+    if (!editForm.name?.trim() || !editForm.phone?.trim()) {
+      toast.error('Name and phone are required.');
       return;
     }
+    if (!db) { toast.error('Database not connected'); return; }
 
-    if (isAdding) {
-      const newElectrician: Electrician = {
-        id: `e${Date.now()}`,
-        name: editForm.name,
-        phone: editForm.phone,
-        email: editForm.email || '',
-      };
-      setElectricians([...electricians, newElectrician]);
-      setIsAdding(false);
-    } else {
-      setElectricians(current => 
-        current.map(e => e.id === editingId ? { ...e, ...editForm } as Electrician : e)
-      );
-      setEditingId(null);
+    setSaving(true);
+    try {
+      if (isAdding) {
+        const newElectrician: Electrician = {
+          id: `e${Date.now()}`,
+          name: editForm.name.trim(),
+          phone: editForm.phone.trim(),
+          email: editForm.email?.trim() || '',
+        };
+        await setDoc(doc(db, 'electricians', newElectrician.id), newElectrician);
+        toast.success(`${newElectrician.name} added to team`);
+        setIsAdding(false);
+      } else if (editingId) {
+        const updated = { name: editForm.name.trim(), phone: editForm.phone.trim(), email: editForm.email?.trim() || '' };
+        await updateDoc(doc(db, 'electricians', editingId), updated);
+        toast.success('Technician updated');
+        setEditingId(null);
+      }
+      setEditForm({});
+    } catch (err: any) {
+      toast.error(`Failed to save: ${err.message}`);
+    } finally {
+      setSaving(false);
     }
-    setEditForm({});
+  };
+
+  const handleDelete = async (electrician: Electrician) => {
+    if (!db) { toast.error('Database not connected'); return; }
+    if (!window.confirm(`Remove ${electrician.name} from the team? This cannot be undone.`)) return;
+    try {
+      await deleteDoc(doc(db, 'electricians', electrician.id));
+      toast.success(`${electrician.name} removed`);
+    } catch (err: any) {
+      toast.error(`Failed to delete: ${err.message}`);
+    }
   };
 
   const handleCancel = () => {
@@ -92,7 +116,7 @@ export function Team({ electricians, setElectricians }: TeamProps) {
                 />
               </div>
               <div className="flex gap-2 shrink-0">
-                <button onClick={handleSave} className="p-2 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 rounded-lg transition-colors"><Save className="w-5 h-5" /></button>
+                <button onClick={handleSave} disabled={saving} className="p-2 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 rounded-lg transition-colors disabled:opacity-50"><Save className="w-5 h-5" /></button>
                 <button onClick={handleCancel} className="p-2 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-lg transition-colors"><X className="w-5 h-5" /></button>
               </div>
             </div>
@@ -136,13 +160,18 @@ export function Team({ electricians, setElectricians }: TeamProps) {
               <div className="flex gap-2 shrink-0">
                 {editingId === electrician.id ? (
                   <>
-                    <button onClick={handleSave} className="p-2 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 rounded-lg transition-colors"><Save className="w-5 h-5" /></button>
+                    <button onClick={handleSave} disabled={saving} className="p-2 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 rounded-lg transition-colors disabled:opacity-50"><Save className="w-5 h-5" /></button>
                     <button onClick={handleCancel} className="p-2 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-lg transition-colors"><X className="w-5 h-5" /></button>
                   </>
                 ) : (
-                  <button onClick={() => handleEdit(electrician)} className="p-2 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-lg transition-colors">
-                    <Edit2 className="w-5 h-5" />
-                  </button>
+                  <>
+                    <button onClick={() => handleEdit(electrician)} className="p-2 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-lg transition-colors">
+                      <Edit2 className="w-5 h-5" />
+                    </button>
+                    <button onClick={() => handleDelete(electrician)} className="p-2 bg-red-50 text-red-500 hover:bg-red-100 rounded-lg transition-colors">
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  </>
                 )}
               </div>
             </div>
