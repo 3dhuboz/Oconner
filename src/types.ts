@@ -23,6 +23,12 @@ export interface Material {
   cost: number;
 }
 
+export interface TimeEntry {
+  type: 'clock_on' | 'break_start' | 'break_end' | 'clock_off';
+  timestamp: string; // ISO string
+}
+
+
 export interface Job {
   id: string;
   title: string;
@@ -50,6 +56,7 @@ export interface Job {
 
   // Phase 3: Field Execution
   laborHours?: number;
+  timeLog?: TimeEntry[];
   materials: Material[];
   photos: string[]; // URLs
   siteNotes?: string;
