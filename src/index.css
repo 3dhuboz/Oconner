@@ -5,3 +5,11 @@
     @apply px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-medium hover:bg-slate-800 transition-colors shadow-sm;
   }
 }
+
+/* Safe area insets for mobile devices with notches / home indicators */
+.safe-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 8px);
+}

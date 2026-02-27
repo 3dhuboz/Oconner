@@ -17,6 +17,9 @@ import { PromoFlyer } from './pages/PromoFlyer';
 import { Purchase } from './pages/Purchase';
 import { DashboardWidget } from './pages/DashboardWidget';
 import { LiveMap } from './pages/LiveMap';
+import { TechDashboard } from './pages/TechDashboard';
+import { TechToday } from './pages/TechToday';
+import { TechProfile } from './pages/TechProfile';
 
 
 import { Job, Electrician } from './types';
@@ -25,7 +28,7 @@ import { collection, onSnapshot, doc, updateDoc, deleteDoc } from 'firebase/fire
 import { Toaster } from 'react-hot-toast';
 import toast from 'react-hot-toast';
 
-import { ProtectedRoute, AdminRoute, DevRoute } from './components/ProtectedRoute';
+import { ProtectedRoute, AdminRoute, DevRoute, TechRoute } from './components/ProtectedRoute';
 
 import { offlineJobs, offlineElectricians, syncQueue } from './services/offlineDb';
 import { startSyncCron, stopSyncCron } from './services/syncService';
@@ -172,10 +175,24 @@ function AppContent() {
         </AdminRoute>
       } />
 
-      {/* General Protected Routes */}
+      {/* Technician-specific routes (user role gets TechLayout) */}
+      <Route path="/today" element={
+        <TechRoute>
+          <TechToday jobs={jobs} electricians={electricians} />
+        </TechRoute>
+      } />
+      <Route path="/profile" element={
+        <TechRoute>
+          <TechProfile />
+        </TechRoute>
+      } />
+
+      {/* General Protected Routes — user role auto-gets TechLayout */}
       <Route path="/" element={
         <ProtectedRoute>
-          <Dashboard jobs={jobs} electricians={electricians} />
+          {user?.role === 'user'
+            ? <TechDashboard jobs={jobs} electricians={electricians} />
+            : <Dashboard jobs={jobs} electricians={electricians} />}
         </ProtectedRoute>
       } />
       <Route path="/jobs" element={
@@ -194,9 +211,9 @@ function AppContent() {
         </ProtectedRoute>
       } />
       <Route path="/field/:id" element={
-        <ProtectedRoute>
+        <TechRoute>
           <FieldPortal jobs={jobs} updateJob={updateJob} />
-        </ProtectedRoute>
+        </TechRoute>
       } />
       
       <Route path="/widget" element={

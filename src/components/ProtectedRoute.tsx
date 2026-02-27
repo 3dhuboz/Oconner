@@ -2,8 +2,9 @@ import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Layout } from './Layout';
+import { TechLayout } from './TechLayout';
 
-const RoleRoute = ({ children, roles }: { children: React.ReactNode, roles: string[] }) => {
+const RoleRoute = ({ children, roles, forceLayout }: { children: React.ReactNode, roles: string[], forceLayout?: 'admin' | 'tech' }) => {
   const { user, isLoading } = useAuth();
   const location = useLocation();
 
@@ -19,6 +20,11 @@ const RoleRoute = ({ children, roles }: { children: React.ReactNode, roles: stri
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
+  // Use TechLayout for user role (technicians), Layout for admin/dev
+  if (forceLayout === 'tech' || (user.role === 'user' && forceLayout !== 'admin')) {
+    return <TechLayout>{children}</TechLayout>;
+  }
+
   return <Layout>{children}</Layout>;
 };
 
@@ -32,4 +38,8 @@ export const AdminRoute = ({ children }: { children: React.ReactNode }) => (
 
 export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => (
   <RoleRoute roles={['dev', 'admin', 'user']}>{children}</RoleRoute>
+);
+
+export const TechRoute = ({ children }: { children: React.ReactNode }) => (
+  <RoleRoute roles={['dev', 'admin', 'user']} forceLayout="tech">{children}</RoleRoute>
 );
