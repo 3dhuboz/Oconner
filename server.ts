@@ -207,6 +207,39 @@ async function startServer() {
     }
   });
 
+  // 7b. Test SMS from Integrations page
+  app.post("/api/sms/test", async (req, res) => {
+    const { to, provider, accountSid, authToken, phoneNumber } = req.body;
+
+    if (!to) {
+      return res.status(400).json({ error: 'Missing "to" phone number' });
+    }
+
+    // Use request body credentials first, fall back to env vars
+    const sid = accountSid || process.env.TWILIO_ACCOUNT_SID;
+    const token = authToken || process.env.TWILIO_AUTH_TOKEN;
+    const from = phoneNumber || process.env.TWILIO_PHONE_NUMBER;
+
+    if (!sid || !token || !from) {
+      console.log(`[SMS Test Simulation] To: ${to} | Provider: ${provider || 'twilio'}`);
+      return res.json({ success: true, simulated: true, message: `Test SMS simulated to ${to} (no Twilio credentials configured)` });
+    }
+
+    try {
+      const client = twilio(sid, token);
+      const msg = await client.messages.create({
+        body: `Wirez R Us — SMS gateway test. If you received this, your SMS integration is working correctly.`,
+        from,
+        to,
+      });
+      console.log(`[SMS Test] Sent to: ${to} | SID: ${msg.sid}`);
+      res.json({ success: true, simulated: false, sid: msg.sid });
+    } catch (e: any) {
+      console.error("[SMS Test] Twilio error:", e.message);
+      res.status(500).json({ error: e.message || 'Failed to send test SMS' });
+    }
+  });
+
   // --- STRIPE BILLING & LICENSING ---
 
   // 8. Get active subscription plans
