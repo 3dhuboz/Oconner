@@ -36,6 +36,7 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
   const [deleteReason, setDeleteReason] = useState('');
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
+  const [resendingSms, setResendingSms] = useState(false);
   const isAdmin = user?.role === 'admin' || user?.role === 'dev';
 
   if (!job) {
@@ -558,6 +559,44 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
                   disabled={job.status !== 'SCHEDULING'}
                 />
               </div>
+
+              {/* Resend Job Text */}
+              {isAdmin && job.assignedElectricianId && ['DISPATCHED', 'EXECUTION'].includes(job.status) && (() => {
+                const elec = electricians.find(e => e.id === job.assignedElectricianId);
+                return elec ? (
+                  <button
+                    disabled={resendingSms}
+                    onClick={async () => {
+                      setResendingSms(true);
+                      try {
+                        const res = await fetch('/api/sms/send', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            to: elec.phone,
+                            message: `Wirez R Us Reminder: Job ${job.id} at ${job.propertyAddress}. Scheduled: ${job.scheduledDate ? format(new Date(job.scheduledDate), 'MMM d, h:mm a') : 'TBD'}. Open app: ${window.location.origin}/field/${job.id}`
+                          })
+                        });
+                        const data = await res.json();
+                        if (data.simulated) {
+                          toast.success(`SMS resent (simulated) to ${elec.name} at ${elec.phone}`);
+                        } else {
+                          toast.success(`SMS resent to ${elec.name}`);
+                        }
+                      } catch (err) {
+                        console.error(err);
+                        toast.error('Failed to resend SMS');
+                      } finally {
+                        setResendingSms(false);
+                      }
+                    }}
+                    className="w-full px-4 py-2.5 bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {resendingSms ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                    Resend Job Text to {elec.name}
+                  </button>
+                ) : null;
+              })()}
             </div>
           </div>
 
