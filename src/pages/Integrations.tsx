@@ -80,6 +80,18 @@ export function Integrations() {
   const navigate = useNavigate();
   const [xeroConnected, setXeroConnected] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [xeroConfig, setXeroConfig] = useState({
+    clientId: '',
+    clientSecret: '',
+    tenantId: '',
+    defaultAccountCode: '200',
+    defaultTaxType: 'OUTPUT',
+    invoicePrefix: 'WRU-',
+    laborDescription: 'Electrical Labour',
+    hourlyRate: '120',
+  });
+  const [xeroSaving, setXeroSaving] = useState(false);
+  const [xeroExpanded, setXeroExpanded] = useState(false);
   const [forwardingEmail, setForwardingEmail] = useState<string | null>(null);
   const [isGeneratingEmail, setIsGeneratingEmail] = useState(false);
   const [isSimulating, setIsSimulating] = useState(false);
@@ -294,8 +306,55 @@ export function Integrations() {
     }
   };
 
+  // ─── Load Xero Settings ─────────────────────────────────────
   useEffect(() => {
-    fetch('/api/xero/status').then(res => res.json()).then(data => setXeroConnected(data.connected));
+    if (!db) return;
+    getDoc(doc(db, 'settings', 'xero')).then(snap => {
+      if (snap.exists()) {
+        const data = snap.data();
+        setXeroConfig({
+          clientId: data.clientId || '',
+          clientSecret: data.clientSecret || '',
+          tenantId: data.tenantId || '',
+          defaultAccountCode: data.defaultAccountCode || '200',
+          defaultTaxType: data.defaultTaxType || 'OUTPUT',
+          invoicePrefix: data.invoicePrefix || 'WRU-',
+          laborDescription: data.laborDescription || 'Electrical Labour',
+          hourlyRate: data.hourlyRate || '120',
+        });
+      }
+    }).catch(() => {});
+  }, []);
+
+  const handleSaveXero = async () => {
+    if (!db) { toast.error('Database not connected'); return; }
+    setXeroSaving(true);
+    try {
+      await setDoc(doc(db, 'settings', 'xero'), {
+        ...xeroConfig,
+        updatedAt: new Date().toISOString(),
+      });
+      toast.success('Xero settings saved');
+    } catch (err) {
+      toast.error('Failed to save Xero settings');
+    } finally {
+      setXeroSaving(false);
+    }
+  };
+
+  const handleDisconnectXero = async () => {
+    if (!confirm('Disconnect Xero? This will revoke the OAuth token.')) return;
+    try {
+      await fetch('/api/xero/disconnect', { method: 'POST' });
+      setXeroConnected(false);
+      toast.success('Xero disconnected');
+    } catch {
+      toast.error('Failed to disconnect Xero');
+    }
+  };
+
+  useEffect(() => {
+    fetch('/api/xero/status').then(res => res.json()).then(data => setXeroConnected(data.connected)).catch(() => {});
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type === 'OAUTH_AUTH_SUCCESS') {
         setXeroConnected(true);
@@ -378,18 +437,171 @@ export function Integrations() {
       </div>
 
       <div className="grid gap-6">
-        <IntegrationCard
-          icon={DollarSign}
-          title="Xero Accounting"
-          status={{ text: xeroConnected ? 'Connected' : 'Not Connected', color: xeroConnected ? 'green' : 'slate' }}
-          statusColor={{ bg: 'bg-[#13B5EA]/10', text: 'text-[#13B5EA]' }}
-          onAction={handleConnectXero}
-          actionText={xeroConnected ? 'Manage' : 'Connect Xero'}
-          actionDisabled={xeroConnected}
-          isConnecting={isConnecting}
-        >
-          <p>Automatically sync completed jobs, generate invoices, and track payments directly in your Xero account.</p>
-        </IntegrationCard>
+        {/* ─── Xero Accounting ─────────────────────────────────── */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="p-6 flex items-start gap-4 border-b border-slate-100">
+            <div className="w-12 h-12 rounded-xl bg-[#13B5EA]/10 flex items-center justify-center shrink-0">
+              <DollarSign className="w-6 h-6 text-[#13B5EA]" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                Xero Accounting
+                <span className={cn(
+                  'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium',
+                  xeroConnected ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'
+                )}>
+                  {xeroConnected ? <CheckCircle2 className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
+                  {xeroConnected ? 'Connected' : 'Not Connected'}
+                </span>
+              </h3>
+              <p className="text-sm text-slate-500 mt-1">Sync completed jobs to Xero invoices. Configure your OAuth credentials and invoice defaults below.</p>
+            </div>
+            <button
+              onClick={() => setXeroExpanded(x => !x)}
+              className="text-sm text-slate-500 hover:text-slate-800 font-medium shrink-0"
+            >
+              {xeroExpanded ? 'Hide' : 'Configure'}
+            </button>
+          </div>
+
+          {xeroExpanded && (
+            <div className="p-6 space-y-5">
+
+              {/* OAuth Credentials */}
+              <div>
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">OAuth App Credentials</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <SettingsInput
+                    label="Client ID"
+                    value={xeroConfig.clientId}
+                    onChange={v => setXeroConfig(c => ({ ...c, clientId: v }))}
+                    placeholder="Your Xero OAuth Client ID"
+                  />
+                  <SettingsInput
+                    label="Client Secret"
+                    value={xeroConfig.clientSecret}
+                    onChange={v => setXeroConfig(c => ({ ...c, clientSecret: v }))}
+                    placeholder="Your Xero OAuth Client Secret"
+                    secret
+                  />
+                </div>
+                <div className="mt-4">
+                  <SettingsInput
+                    label="Tenant / Organisation ID"
+                    value={xeroConfig.tenantId}
+                    onChange={v => setXeroConfig(c => ({ ...c, tenantId: v }))}
+                    placeholder="Xero Tenant ID (from Connections API)"
+                  />
+                  <p className="text-xs text-slate-400 mt-1">Found in your Xero dashboard under <strong>Settings → Connected Apps</strong>, or retrieved automatically after connecting.</p>
+                </div>
+              </div>
+
+              {/* Invoice Defaults */}
+              <div>
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-3">Invoice Defaults</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <SettingsInput
+                    label="Invoice Number Prefix"
+                    value={xeroConfig.invoicePrefix}
+                    onChange={v => setXeroConfig(c => ({ ...c, invoicePrefix: v }))}
+                    placeholder="WRU-"
+                  />
+                  <SettingsInput
+                    label="Default Account Code"
+                    value={xeroConfig.defaultAccountCode}
+                    onChange={v => setXeroConfig(c => ({ ...c, defaultAccountCode: v }))}
+                    placeholder="200"
+                  />
+                  <SettingsInput
+                    label="Default Tax Type"
+                    value={xeroConfig.defaultTaxType}
+                    onChange={v => setXeroConfig(c => ({ ...c, defaultTaxType: v }))}
+                    placeholder="OUTPUT"
+                  />
+                  <SettingsInput
+                    label="Default Labour Rate ($/hr)"
+                    value={xeroConfig.hourlyRate}
+                    onChange={v => setXeroConfig(c => ({ ...c, hourlyRate: v }))}
+                    placeholder="120"
+                    type="number"
+                  />
+                </div>
+                <div className="mt-4">
+                  <SettingsInput
+                    label="Labour Line Item Description"
+                    value={xeroConfig.laborDescription}
+                    onChange={v => setXeroConfig(c => ({ ...c, laborDescription: v }))}
+                    placeholder="Electrical Labour"
+                  />
+                </div>
+              </div>
+
+              {/* How to get credentials */}
+              <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg">
+                <p className="text-xs font-semibold text-blue-800 mb-2">How to get your Xero credentials</p>
+                <ol className="text-xs text-blue-700 space-y-1 list-decimal list-inside">
+                  <li>Go to <a href="https://developer.xero.com/app/manage" target="_blank" rel="noopener noreferrer" className="underline font-medium">developer.xero.com/app/manage</a></li>
+                  <li>Create a new app → set redirect URI to <code className="bg-blue-100 px-1 rounded">{window.location.origin}/api/auth/xero/callback</code></li>
+                  <li>Copy the <strong>Client ID</strong> and <strong>Client Secret</strong> above</li>
+                  <li>Click <strong>Save Settings</strong> then <strong>Connect Xero</strong> to authorise</li>
+                  <li>After authorisation, the Tenant ID will be stored automatically</li>
+                </ol>
+              </div>
+
+              {/* Actions */}
+              <div className="flex flex-wrap gap-3 pt-2 border-t border-slate-100">
+                <button
+                  onClick={handleSaveXero}
+                  disabled={xeroSaving}
+                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                >
+                  {xeroSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  Save Settings
+                </button>
+                {!xeroConnected ? (
+                  <button
+                    onClick={handleConnectXero}
+                    disabled={isConnecting || !xeroConfig.clientId || !xeroConfig.clientSecret}
+                    className="px-4 py-2 bg-[#13B5EA] hover:bg-[#0f9bc9] disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                  >
+                    {isConnecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <ExternalLink className="w-4 h-4" />}
+                    {isConnecting ? 'Connecting...' : 'Connect Xero'}
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleDisconnectXero}
+                    className="px-4 py-2 bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                  >
+                    Disconnect Xero
+                  </button>
+                )}
+                <a
+                  href="https://developer.xero.com/app/manage"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  Xero Developer Portal
+                </a>
+              </div>
+            </div>
+          )}
+
+          {/* Collapsed summary when connected */}
+          {!xeroExpanded && xeroConnected && (
+            <div className="px-6 py-3 bg-emerald-50 border-t border-emerald-100 text-xs text-emerald-700 flex items-center gap-2">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              Connected — invoices will sync automatically when jobs are closed
+            </div>
+          )}
+          {!xeroExpanded && !xeroConnected && (
+            <div className="px-6 py-3 bg-amber-50 border-t border-amber-100 text-xs text-amber-700 flex items-center justify-between">
+              <span className="flex items-center gap-2"><AlertCircle className="w-3.5 h-3.5" /> Add your Client ID and Client Secret to connect Xero</span>
+              <button onClick={() => setXeroExpanded(true)} className="text-amber-800 font-semibold hover:underline">Set up →</button>
+            </div>
+          )}
+        </div>
 
         {/* ─── CloudMailin Email-to-Job ─────────────────────────── */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
