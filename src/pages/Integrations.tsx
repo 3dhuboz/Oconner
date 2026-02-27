@@ -84,9 +84,17 @@ export function Integrations() {
   const [isGeneratingEmail, setIsGeneratingEmail] = useState(false);
   const [isSimulating, setIsSimulating] = useState(false);
   
-  // CloudMailin configuration
-  const cloudmailinEmail = import.meta.env.VITE_CLOUDMAILIN_EMAIL || '';
-  const isCloudMailinConfigured = !!cloudmailinEmail;
+  // ─── CloudMailin Configuration State ────────────────────────
+  const envCloudmailinEmail = import.meta.env.VITE_CLOUDMAILIN_EMAIL || '';
+  const [cloudmailinConfig, setCloudmailinConfig] = useState({
+    emailAddress: envCloudmailinEmail,
+    webhookUrl: '',
+    enabled: false,
+  });
+  const [cloudmailinSaving, setCloudmailinSaving] = useState(false);
+  const [handshakeStatus, setHandshakeStatus] = useState<'idle' | 'testing' | 'success' | 'fail'>('idle');
+  const [handshakeMessage, setHandshakeMessage] = useState('');
+  const isCloudMailinConfigured = !!cloudmailinConfig.emailAddress;
   const webhookUrl = `${window.location.origin}/api/webhooks/email`;
 
   // ─── SMS Provider State ─────────────────────────────────────
@@ -133,6 +141,17 @@ export function Integrations() {
         });
       }
     }).catch(() => {});
+    // Load CloudMailin config
+    getDoc(doc(db, 'settings', 'cloudmailin')).then(snap => {
+      if (snap.exists()) {
+        const data = snap.data();
+        setCloudmailinConfig({
+          emailAddress: data.emailAddress || envCloudmailinEmail || '',
+          webhookUrl: data.webhookUrl || '',
+          enabled: data.enabled || false,
+        });
+      }
+    }).catch(() => {});
     // Load Email config
     getDoc(doc(db, 'settings', 'email')).then(snap => {
       if (snap.exists()) {
@@ -151,6 +170,54 @@ export function Integrations() {
       }
     }).catch(() => {});
   }, []);
+
+  // ─── Save CloudMailin Settings ─────────────────────────────
+  const handleSaveCloudmailin = async () => {
+    if (!db) { toast.error('Database not connected'); return; }
+    setCloudmailinSaving(true);
+    try {
+      await setDoc(doc(db, 'settings', 'cloudmailin'), {
+        ...cloudmailinConfig,
+        webhookUrl: webhookUrl,
+        updatedAt: new Date().toISOString(),
+      });
+      toast.success('CloudMailin settings saved');
+    } catch (err) {
+      toast.error('Failed to save CloudMailin settings');
+    } finally {
+      setCloudmailinSaving(false);
+    }
+  };
+
+  const handleHandshakeTest = async () => {
+    setHandshakeStatus('testing');
+    setHandshakeMessage('');
+    try {
+      const res = await fetch('/api/webhooks/email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          envelope: { from: 'handshake-test@wirezrus.com' },
+          headers: { Subject: '[HANDSHAKE TEST] Connection Verified' },
+          plain: 'This is an automated handshake test from the Wirez R Us integrations page. If you see this job, the webhook is working correctly.',
+        }),
+      });
+      const data = await res.json();
+      if (data.success || data.jobId) {
+        setHandshakeStatus('success');
+        setHandshakeMessage(data.jobId ? `Connected — test job created (${data.jobId})` : 'Connected — webhook responded OK');
+        toast.success('Handshake successful! Webhook is working.');
+      } else {
+        setHandshakeStatus('fail');
+        setHandshakeMessage(data.warning || data.error || 'Webhook responded but did not confirm success');
+        toast.error(data.warning || 'Handshake returned a warning');
+      }
+    } catch (err: any) {
+      setHandshakeStatus('fail');
+      setHandshakeMessage(err.message || 'Could not reach webhook endpoint');
+      toast.error('Handshake failed — could not reach webhook');
+    }
+  };
 
   // ─── Save SMS Settings ──────────────────────────────────────
   const handleSaveSms = async () => {
@@ -334,138 +401,175 @@ export function Integrations() {
                 Email-to-Job Automation
                 <span className={cn(
                   "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium",
-                  isCloudMailinConfigured ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+                  isCloudMailinConfigured
+                    ? handshakeStatus === 'success' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'
+                    : 'bg-amber-100 text-amber-700'
                 )}>
-                  {isCloudMailinConfigured ? <CheckCircle2 className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
-                  {isCloudMailinConfigured ? 'CloudMailin Connected' : 'Setup Required'}
+                  {isCloudMailinConfigured
+                    ? handshakeStatus === 'success' ? <CheckCircle2 className="w-3 h-3" /> : <Mail className="w-3 h-3" />
+                    : <AlertCircle className="w-3 h-3" />}
+                  {isCloudMailinConfigured
+                    ? handshakeStatus === 'success' ? 'Verified' : 'Configured'
+                    : 'Setup Required'}
                 </span>
               </h3>
               <p className="text-slate-500 text-sm mt-1">Powered by <a href="https://www.cloudmailin.com" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">CloudMailin</a> — emails sent to your unique address automatically create new jobs.</p>
             </div>
           </div>
 
-          <div className="p-6 space-y-4">
-            {isCloudMailinConfigured ? (
-              <>
-                {/* Configured state */}
-                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-sm text-emerald-800">
-                  <p className="font-semibold mb-1 flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4" /> Live & Receiving Emails</p>
-                  <p className="text-emerald-700">Forward client emails or set up auto-forwarding rules to the address below. Jobs are created automatically in your dashboard.</p>
-                </div>
-
-                {/* Inbound email address */}
-                <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-1.5">Inbound Email Address</label>
-                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-mono text-slate-800 flex items-center justify-between">
-                    <span className="truncate pr-4 font-bold">{cloudmailinEmail}</span>
-                    <button onClick={() => copyToClipboard(cloudmailinEmail)} className="text-slate-400 hover:text-slate-600 transition-colors shrink-0" title="Copy email">
+          <div className="p-6 space-y-5">
+            {/* ── Editable Configuration Fields ── */}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">CloudMailin Email Address</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={cloudmailinConfig.emailAddress}
+                    onChange={e => setCloudmailinConfig(c => ({ ...c, emailAddress: e.target.value }))}
+                    placeholder="abc123@cloudmailin.net"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-200 focus:border-blue-400 outline-none transition-all pr-9"
+                  />
+                  {cloudmailinConfig.emailAddress && (
+                    <button onClick={() => copyToClipboard(cloudmailinConfig.emailAddress)} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" title="Copy">
                       <Copy className="w-4 h-4" />
                     </button>
-                  </div>
+                  )}
                 </div>
-
-                {/* Webhook endpoint */}
-                <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-1.5">Webhook Endpoint</label>
-                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono text-slate-600 flex items-center justify-between">
-                    <span className="truncate pr-4">{webhookUrl}</span>
-                    <button onClick={() => copyToClipboard(webhookUrl)} className="text-slate-400 hover:text-slate-600 transition-colors shrink-0" title="Copy webhook URL">
-                      <Copy className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* How it works */}
-                <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg">
-                  <p className="text-xs font-semibold text-blue-800 mb-2">How it works</p>
-                  <div className="flex items-center gap-2 text-xs text-blue-700">
-                    <span className="bg-blue-200/60 rounded px-1.5 py-0.5 font-medium">Email received</span>
-                    <span>→</span>
-                    <span className="bg-blue-200/60 rounded px-1.5 py-0.5 font-medium">CloudMailin webhook</span>
-                    <span>→</span>
-                    <span className="bg-blue-200/60 rounded px-1.5 py-0.5 font-medium">Job created in Firestore</span>
-                    <span>→</span>
-                    <span className="bg-blue-200/60 rounded px-1.5 py-0.5 font-medium">Appears on Job Board</span>
-                  </div>
-                </div>
-
-                {/* Test button */}
-                <div className="flex gap-3 pt-1">
-                  <button
-                    onClick={handleSimulateEmail}
-                    disabled={isSimulating}
-                    className="px-4 py-2 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
-                  >
-                    {isSimulating ? <Loader2 className="w-4 h-4 animate-spin" /> : <TestTube2 className="w-4 h-4" />}
-                    Simulate Inbound Email
-                  </button>
-                  <a
-                    href="https://www.cloudmailin.com/address"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
-                  >
-                    <ExternalLink className="w-4 h-4" />
-                    CloudMailin Dashboard
-                  </a>
-                </div>
-              </>
-            ) : (
-              <>
-                {/* Not configured state */}
-                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
-                  <p className="font-semibold mb-1 flex items-center gap-1.5"><AlertCircle className="w-4 h-4" /> CloudMailin Not Configured</p>
-                  <p className="text-amber-700">Set up CloudMailin to automatically create jobs from incoming emails. Free tier includes 200 emails/month.</p>
-                </div>
-
-                {/* Setup steps */}
-                <div className="space-y-3">
-                  <p className="text-xs font-semibold text-slate-700">Quick Setup (5 minutes)</p>
-                  <div className="space-y-2">
-                    <div className="flex gap-3 items-start">
-                      <span className="shrink-0 w-5 h-5 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-bold">1</span>
-                      <div className="text-sm text-slate-600">
-                        <a href="https://www.cloudmailin.com/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-medium">Sign up at CloudMailin</a> — free tier available
-                      </div>
-                    </div>
-                    <div className="flex gap-3 items-start">
-                      <span className="shrink-0 w-5 h-5 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-bold">2</span>
-                      <div className="text-sm text-slate-600">
-                        Set <strong>Target URL</strong> to your webhook:
-                        <div className="mt-1 p-2 bg-slate-50 border border-slate-200 rounded text-xs font-mono flex items-center justify-between">
-                          <span className="truncate pr-2">{webhookUrl}</span>
-                          <button onClick={() => copyToClipboard(webhookUrl)} className="text-slate-400 hover:text-slate-600 transition-colors shrink-0">
-                            <Copy className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex gap-3 items-start">
-                      <span className="shrink-0 w-5 h-5 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-bold">3</span>
-                      <div className="text-sm text-slate-600">
-                        Copy your CloudMailin email address and add it to your environment:
-                        <code className="block mt-1 p-2 bg-slate-50 border border-slate-200 rounded text-xs">VITE_CLOUDMAILIN_EMAIL=your-address@cloudmailin.net</code>
-                      </div>
-                    </div>
-                    <div className="flex gap-3 items-start">
-                      <span className="shrink-0 w-5 h-5 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-bold">4</span>
-                      <div className="text-sm text-slate-600">Redeploy &amp; send a test email — job appears on your dashboard automatically</div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Test simulation still available */}
-                <div className="flex gap-3 pt-1">
-                  <button
-                    onClick={handleSimulateEmail}
-                    disabled={isSimulating}
-                    className="px-4 py-2 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
-                  >
-                    {isSimulating ? <Loader2 className="w-4 h-4 animate-spin" /> : <TestTube2 className="w-4 h-4" />}
-                    Simulate Inbound Email
+                <p className="text-xs text-slate-400 mt-1">From your CloudMailin dashboard</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Webhook Endpoint</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={webhookUrl}
+                    readOnly
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-100 text-slate-500 cursor-default pr-9"
+                  />
+                  <button onClick={() => copyToClipboard(webhookUrl)} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" title="Copy">
+                    <Copy className="w-4 h-4" />
                   </button>
                 </div>
-              </>
+                <p className="text-xs text-slate-400 mt-1">Paste this into CloudMailin's Target URL</p>
+              </div>
+            </div>
+
+            {/* ── Enable toggle ── */}
+            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200">
+              <div>
+                <p className="text-sm font-medium text-slate-700">Enable Email-to-Job</p>
+                <p className="text-xs text-slate-400">Incoming emails will automatically create jobs</p>
+              </div>
+              <button
+                onClick={() => setCloudmailinConfig(c => ({ ...c, enabled: !c.enabled }))}
+                className={cn(
+                  "relative w-11 h-6 rounded-full transition-colors",
+                  cloudmailinConfig.enabled ? 'bg-emerald-500' : 'bg-slate-300'
+                )}
+              >
+                <span className={cn(
+                  "absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform",
+                  cloudmailinConfig.enabled && 'translate-x-5'
+                )} />
+              </button>
+            </div>
+
+            {/* ── Handshake Test ── */}
+            <div className={cn(
+              "p-4 rounded-lg border",
+              handshakeStatus === 'success' ? 'bg-emerald-50 border-emerald-200' :
+              handshakeStatus === 'fail' ? 'bg-red-50 border-red-200' :
+              'bg-slate-50 border-slate-200'
+            )}>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                  {handshakeStatus === 'testing' && <Loader2 className="w-4 h-4 animate-spin text-blue-500" />}
+                  {handshakeStatus === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
+                  {handshakeStatus === 'fail' && <AlertCircle className="w-4 h-4 text-red-500" />}
+                  {handshakeStatus === 'idle' && <Send className="w-4 h-4 text-slate-400" />}
+                  Webhook Handshake
+                </p>
+                <button
+                  onClick={handleHandshakeTest}
+                  disabled={handshakeStatus === 'testing'}
+                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5"
+                >
+                  {handshakeStatus === 'testing' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                  {handshakeStatus === 'testing' ? 'Testing...' : 'Test Connection'}
+                </button>
+              </div>
+              {handshakeStatus === 'idle' && (
+                <p className="text-xs text-slate-500">Send a test POST to your webhook to verify the pipeline is working end-to-end.</p>
+              )}
+              {handshakeStatus === 'success' && (
+                <div className="text-xs text-emerald-700 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                  {handshakeMessage}
+                </div>
+              )}
+              {handshakeStatus === 'fail' && (
+                <div className="text-xs text-red-600 flex items-center gap-1.5">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  {handshakeMessage}
+                </div>
+              )}
+            </div>
+
+            {/* ── How it works ── */}
+            <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg">
+              <p className="text-xs font-semibold text-blue-800 mb-2">How it works</p>
+              <div className="flex items-center gap-2 text-xs text-blue-700 flex-wrap">
+                <span className="bg-blue-200/60 rounded px-1.5 py-0.5 font-medium">Email received</span>
+                <span>→</span>
+                <span className="bg-blue-200/60 rounded px-1.5 py-0.5 font-medium">CloudMailin webhook</span>
+                <span>→</span>
+                <span className="bg-blue-200/60 rounded px-1.5 py-0.5 font-medium">Job created in Firestore</span>
+                <span>→</span>
+                <span className="bg-blue-200/60 rounded px-1.5 py-0.5 font-medium">Appears on Job Board</span>
+              </div>
+            </div>
+
+            {/* ── Action Buttons ── */}
+            <div className="flex flex-wrap gap-3 pt-1 border-t border-slate-100">
+              <button
+                onClick={handleSaveCloudmailin}
+                disabled={cloudmailinSaving}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+              >
+                {cloudmailinSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                Save Settings
+              </button>
+              <button
+                onClick={handleSimulateEmail}
+                disabled={isSimulating}
+                className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+              >
+                {isSimulating ? <Loader2 className="w-4 h-4 animate-spin" /> : <TestTube2 className="w-4 h-4" />}
+                Simulate Inbound Email
+              </button>
+              <a
+                href="https://www.cloudmailin.com/address"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+              >
+                <ExternalLink className="w-4 h-4" />
+                CloudMailin Dashboard
+              </a>
+            </div>
+
+            {/* ── Setup help if not configured ── */}
+            {!isCloudMailinConfigured && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 space-y-2">
+                <p className="font-semibold flex items-center gap-1.5"><AlertCircle className="w-4 h-4" /> Quick Setup</p>
+                <ol className="list-decimal list-inside text-xs text-amber-700 space-y-1">
+                  <li><a href="https://www.cloudmailin.com/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-medium">Sign up at CloudMailin</a> (free tier: 200 emails/month)</li>
+                  <li>Copy the webhook URL above into CloudMailin's <strong>Target URL</strong></li>
+                  <li>Paste your CloudMailin email address into the field above</li>
+                  <li>Click <strong>Save Settings</strong>, then <strong>Test Connection</strong></li>
+                </ol>
+              </div>
             )}
           </div>
         </div>
