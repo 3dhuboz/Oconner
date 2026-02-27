@@ -28,6 +28,13 @@ export interface TimeEntry {
   timestamp: string; // ISO string
 }
 
+export interface CatalogPart {
+  id: string;
+  name: string;
+  defaultCost: number;
+  category?: string;
+}
+
 
 export interface Job {
   id: string;

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Job, Material, TimeEntry } from '../types';
-import { MapPin, Clock, Camera, Plus, Trash2, CheckCircle2, FileText, ArrowLeft, Navigation, Play, Pause, Square, Coffee } from 'lucide-react';
+import { Job, Material, TimeEntry, CatalogPart } from '../types';
+import { MapPin, Clock, Camera, Plus, Trash2, CheckCircle2, FileText, ArrowLeft, Navigation, Play, Square, Coffee, Package, Search } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useGpsTracking } from '../hooks/useGpsTracking';
 import { cn } from '../utils';
@@ -9,6 +9,7 @@ import { cn } from '../utils';
 interface FieldPortalProps {
   jobs: Job[];
   updateJob: (id: string, updates: Partial<Job>) => void;
+  partsCatalog?: CatalogPart[];
 }
 
 // ─── Timer helpers ───────────────────────────────────────────
@@ -87,7 +88,7 @@ function calcBreakMs(entries: TimeEntry[]): number {
 }
 
 // ─── Component ───────────────────────────────────────────────
-export function FieldPortal({ jobs, updateJob }: FieldPortalProps) {
+export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalProps) {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -133,6 +134,8 @@ export function FieldPortal({ jobs, updateJob }: FieldPortalProps) {
   const [materials, setMaterials] = useState<Material[]>(job?.materials || []);
   const [photos, setPhotos] = useState<string[]>(job?.photos || []);
   const [siteNotes, setSiteNotes] = useState(job?.siteNotes || '');
+  const [partSearch, setPartSearch] = useState('');
+  const [showPartPicker, setShowPartPicker] = useState(false);
 
   if (!job) {
     return <div className="p-8 text-center text-slate-500">Job not found.</div>;
@@ -141,6 +144,22 @@ export function FieldPortal({ jobs, updateJob }: FieldPortalProps) {
   const handleAddMaterial = () => {
     setMaterials([...materials, { id: Math.random().toString(36).substr(2, 9), name: '', quantity: 1, cost: 0 }]);
   };
+
+  const addFromCatalog = (part: CatalogPart) => {
+    setMaterials(prev => [...prev, {
+      id: Math.random().toString(36).substr(2, 9),
+      name: part.name,
+      quantity: 1,
+      cost: part.defaultCost,
+    }]);
+    setPartSearch('');
+    setShowPartPicker(false);
+  };
+
+  const filteredCatalog = partsCatalog.filter(p =>
+    p.name.toLowerCase().includes(partSearch.toLowerCase()) ||
+    (p.category || '').toLowerCase().includes(partSearch.toLowerCase())
+  );
 
   const handleUpdateMaterial = (mid: string, field: keyof Material, value: any) => {
     setMaterials(materials.map(m => m.id === mid ? { ...m, [field]: value } : m));
@@ -374,62 +393,151 @@ export function FieldPortal({ jobs, updateJob }: FieldPortalProps) {
               )}
             </div>
 
-            {/* ════════ MATERIALS ════════ */}
-            <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
-              <div className="flex items-center justify-between mb-4">
-                <label className="text-sm font-bold text-slate-700">Materials / Consumables</label>
-                {job.status === 'EXECUTION' && (
-                  <button onClick={handleAddMaterial} className="text-blue-600 text-sm font-medium flex items-center gap-1">
-                    <Plus className="w-4 h-4" /> Add Item
-                  </button>
-                )}
+            {/* ════════ MATERIALS / CONSUMABLES ════════ */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="p-5 pb-3">
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-sm font-bold text-slate-700 flex items-center gap-1.5">
+                    <Package className="w-4 h-4 text-slate-400" /> Materials / Consumables
+                  </label>
+                  {materials.length > 0 && (
+                    <span className="text-xs font-bold text-slate-400">{materials.length} item{materials.length !== 1 ? 's' : ''}</span>
+                  )}
+                </div>
               </div>
-              
-              <div className="space-y-3">
-                {materials.map((material) => (
-                  <div key={material.id} className="flex gap-2 items-start bg-slate-50 p-3 rounded-xl border border-slate-100">
-                    <div className="flex-1 space-y-2">
-                      <input 
-                        type="text" placeholder="Part name/description" 
-                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
-                        value={material.name}
-                        onChange={e => handleUpdateMaterial(material.id, 'name', e.target.value)}
-                        disabled={job.status !== 'EXECUTION'}
-                      />
-                      <div className="flex gap-2">
-                        <div className="flex-1 flex items-center gap-2">
-                          <span className="text-xs text-slate-500 font-medium">Qty:</span>
-                          <input 
-                            type="number" min="1"
-                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
-                            value={material.quantity}
-                            onChange={e => handleUpdateMaterial(material.id, 'quantity', Number(e.target.value))}
-                            disabled={job.status !== 'EXECUTION'}
-                          />
-                        </div>
-                        <div className="flex-1 flex items-center gap-2">
-                          <span className="text-xs text-slate-500 font-medium">$:</span>
-                          <input 
-                            type="number" min="0" step="0.01"
-                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
-                            value={material.cost}
-                            onChange={e => handleUpdateMaterial(material.id, 'cost', Number(e.target.value))}
-                            disabled={job.status !== 'EXECUTION'}
-                          />
+
+              {/* Added materials list */}
+              {materials.length > 0 && (
+                <div className="px-5 pb-3 space-y-2">
+                  {materials.map((material) => (
+                    <div key={material.id} className="flex gap-2 items-start bg-slate-50 p-3 rounded-xl border border-slate-100">
+                      <div className="flex-1 space-y-2">
+                        <input 
+                          type="text" placeholder="Part name/description" 
+                          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                          value={material.name}
+                          onChange={e => handleUpdateMaterial(material.id, 'name', e.target.value)}
+                          disabled={job.status !== 'EXECUTION'}
+                        />
+                        <div className="flex gap-2">
+                          <div className="flex-1 flex items-center gap-2">
+                            <span className="text-xs text-slate-500 font-medium">Qty:</span>
+                            <input 
+                              type="number" min="1"
+                              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                              value={material.quantity}
+                              onChange={e => handleUpdateMaterial(material.id, 'quantity', Number(e.target.value))}
+                              disabled={job.status !== 'EXECUTION'}
+                            />
+                          </div>
+                          <div className="flex-1 flex items-center gap-2">
+                            <span className="text-xs text-slate-500 font-medium">$:</span>
+                            <input 
+                              type="number" min="0" step="0.01"
+                              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
+                              value={material.cost}
+                              onChange={e => handleUpdateMaterial(material.id, 'cost', Number(e.target.value))}
+                              disabled={job.status !== 'EXECUTION'}
+                            />
+                          </div>
                         </div>
                       </div>
+                      {job.status === 'EXECUTION' && (
+                        <button onClick={() => handleRemoveMaterial(material.id)} className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg mt-1">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
-                    {job.status === 'EXECUTION' && (
-                      <button onClick={() => handleRemoveMaterial(material.id)} className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg mt-1">
-                        <Trash2 className="w-4 h-4" />
+                  ))}
+                </div>
+              )}
+
+              {/* Add parts section — only during EXECUTION */}
+              {job.status === 'EXECUTION' && (
+                <div className="border-t border-slate-100 p-4 space-y-3">
+                  {!showPartPicker ? (
+                    <div className="flex gap-2">
+                      {partsCatalog.length > 0 && (
+                        <button
+                          onClick={() => setShowPartPicker(true)}
+                          className="flex-1 py-2.5 bg-amber-50 border border-amber-200 text-amber-700 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 active:scale-[0.98] transition-all"
+                        >
+                          <Package className="w-4 h-4" /> From Catalog
+                        </button>
+                      )}
+                      <button
+                        onClick={handleAddMaterial}
+                        className="flex-1 py-2.5 bg-slate-50 border border-slate-200 text-slate-600 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 active:scale-[0.98] transition-all"
+                      >
+                        <Plus className="w-4 h-4" /> Custom Item
                       </button>
-                    )}
-                  </div>
-                ))}
-                {materials.length === 0 && (
-                  <p className="text-sm text-slate-400 italic text-center py-2">No materials added yet</p>
-                )}
-              </div>
+                    </div>
+                  ) : (
+                    /* Catalog picker */
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Select from Catalog</span>
+                        <button onClick={() => { setShowPartPicker(false); setPartSearch(''); }} className="text-xs text-slate-400 hover:text-slate-600">
+                          Close
+                        </button>
+                      </div>
+
+                      {/* Search */}
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                        <input
+                          type="text"
+                          value={partSearch}
+                          onChange={e => setPartSearch(e.target.value)}
+                          placeholder="Search parts..."
+                          className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                          autoFocus
+                        />
+                      </div>
+
+                      {/* Catalog items */}
+                      <div className="max-h-48 overflow-y-auto space-y-1 -mx-1 px-1">
+                        {filteredCatalog.length === 0 ? (
+                          <p className="text-xs text-slate-400 text-center py-3">
+                            {partSearch ? 'No matching parts' : 'No parts in catalog yet'}
+                          </p>
+                        ) : (
+                          filteredCatalog.map(part => (
+                            <button
+                              key={part.id}
+                              onClick={() => addFromCatalog(part)}
+                              className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-amber-50 active:bg-amber-100 transition-colors text-left"
+                            >
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium text-slate-800 truncate">{part.name}</p>
+                                {part.category && (
+                                  <p className="text-[10px] text-slate-400">{part.category}</p>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span className="text-xs font-bold text-slate-500">${part.defaultCost.toFixed(2)}</span>
+                                <Plus className="w-4 h-4 text-amber-500" />
+                              </div>
+                            </button>
+                          ))
+                        )}
+                      </div>
+
+                      {/* Still allow custom */}
+                      <button
+                        onClick={() => { handleAddMaterial(); setShowPartPicker(false); setPartSearch(''); }}
+                        className="w-full py-2 text-xs text-slate-500 hover:text-slate-700 font-medium flex items-center justify-center gap-1 border-t border-slate-100 pt-3"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Add custom item instead
+                      </button>
+                    </div>
+                  )}
+
+                  {materials.length === 0 && !showPartPicker && (
+                    <p className="text-xs text-slate-400 text-center">No materials added yet</p>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* ════════ PHOTOS ════════ */}

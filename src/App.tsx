@@ -20,11 +20,12 @@ import { LiveMap } from './pages/LiveMap';
 import { TechDashboard } from './pages/TechDashboard';
 import { TechToday } from './pages/TechToday';
 import { TechProfile } from './pages/TechProfile';
+import { PartsCatalog } from './pages/PartsCatalog';
 
 
-import { Job, Electrician } from './types';
+import { Job, Electrician, CatalogPart } from './types';
 import { db } from './services/firebase';
-import { collection, onSnapshot, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, updateDoc, deleteDoc, setDoc } from 'firebase/firestore';
 import { Toaster } from 'react-hot-toast';
 import toast from 'react-hot-toast';
 
@@ -38,6 +39,7 @@ import { NetworkStatusBar } from './components/NetworkStatusBar';
 function AppContent() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [electricians, setElectricians] = useState<Electrician[]>([]);
+  const [partsCatalog, setPartsCatalog] = useState<CatalogPart[]>([]);
   const { user } = useAuth();
   const syncStatus = useSyncStatus();
 
@@ -74,6 +76,46 @@ function AppContent() {
     );
     return unsubscribe;
   }, [user]);
+
+  // Firestore sync — parts catalog
+  useEffect(() => {
+    if (!user || !db) return;
+    const unsubscribe = onSnapshot(
+      collection(db, 'partsCatalog'),
+      (snapshot) => {
+        const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as CatalogPart));
+        setPartsCatalog(data);
+      },
+      (error) => {
+        console.warn('[Offline] Firestore partsCatalog listener error:', error.message);
+      }
+    );
+    return unsubscribe;
+  }, [user]);
+
+  // Persist parts catalog changes to Firestore
+  const setPartsCatalogWithSync = ((updater: React.SetStateAction<CatalogPart[]>) => {
+    setPartsCatalog(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      // Sync to Firestore
+      if (db) {
+        // Find added/updated
+        for (const part of next) {
+          const old = prev.find(p => p.id === part.id);
+          if (!old || JSON.stringify(old) !== JSON.stringify(part)) {
+            setDoc(doc(db, 'partsCatalog', part.id), part).catch(() => {});
+          }
+        }
+        // Find deleted
+        for (const old of prev) {
+          if (!next.find(p => p.id === old.id)) {
+            deleteDoc(doc(db, 'partsCatalog', old.id)).catch(() => {});
+          }
+        }
+      }
+      return next;
+    });
+  }) as React.Dispatch<React.SetStateAction<CatalogPart[]>>;
 
   useEffect(() => {
     if (!user || !db) return;
@@ -174,6 +216,11 @@ function AppContent() {
           <LiveMap jobs={jobs} electricians={electricians} />
         </AdminRoute>
       } />
+      <Route path="/parts" element={
+        <AdminRoute>
+          <PartsCatalog parts={partsCatalog} setParts={setPartsCatalogWithSync} />
+        </AdminRoute>
+      } />
 
       {/* Technician-specific routes (user role gets TechLayout) */}
       <Route path="/today" element={
@@ -212,7 +259,7 @@ function AppContent() {
       } />
       <Route path="/field/:id" element={
         <TechRoute>
-          <FieldPortal jobs={jobs} updateJob={updateJob} />
+          <FieldPortal jobs={jobs} updateJob={updateJob} partsCatalog={partsCatalog} />
         </TechRoute>
       } />
       
