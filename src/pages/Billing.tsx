@@ -5,10 +5,16 @@ import { useAuth } from '../context/AuthContext';
 export function Billing() {
   const { license, user } = useAuth();
 
-  const planPrices: Record<string, number> = { Starter: 49, Professional: 99, Enterprise: 249 };
-  const baseCost = planPrices[license?.plan || ''] || 0;
+  // New Pricing Structure:
+  // - $1500 one-time setup fee (not shown in monthly)
+  // - $79/month base subscription (includes 1 admin + 1 tech)
+  // - $10/month per additional tech license
+  const BASE_MONTHLY = 79;
+  const ADDITIONAL_TECH_COST = 10;
+  const SETUP_FEE = 1500;
+  
   const extraTechs = Math.max(0, (license?.techLicenses || 1) - 1);
-  const totalMonthly = baseCost + (extraTechs * 29);
+  const totalMonthly = BASE_MONTHLY + (extraTechs * ADDITIONAL_TECH_COST);
 
   return (
     <div className="max-w-4xl mx-auto space-y-8">
@@ -55,9 +61,16 @@ export function Billing() {
 
             {extraTechs > 0 && (
               <div className="text-xs text-slate-500 bg-slate-50 p-3 rounded-lg">
-                <p>1 tech license included &middot; {extraTechs} extra @ $29/mo each = <strong>${extraTechs * 29}/mo</strong></p>
+                <p>1 tech license included &middot; {extraTechs} extra @ ${ADDITIONAL_TECH_COST}/mo each = <strong>${extraTechs * ADDITIONAL_TECH_COST}/mo</strong></p>
               </div>
             )}
+            
+            <div className="text-xs text-slate-400 bg-slate-50 p-3 rounded-lg border border-slate-200">
+              <p className="font-semibold text-slate-600 mb-1">Pricing Breakdown:</p>
+              <p>• Base: ${BASE_MONTHLY}/month (1 admin + 1 tech)</p>
+              {extraTechs > 0 && <p>• Additional techs: {extraTechs} × ${ADDITIONAL_TECH_COST}/month</p>}
+              <p className="text-slate-400 mt-1">One-time setup fee: ${SETUP_FEE} (paid at signup)</p>
+            </div>
           </div>
         </div>
 
