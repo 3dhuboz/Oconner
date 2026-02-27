@@ -79,15 +79,36 @@ export function Dashboard({ jobs, electricians }: DashboardProps) {
         <div className="flex gap-2">
           <button
             onClick={() => {
-              const w = 380;
-              const h = 720;
-              const left = window.screen.width - w - 20;
-              const top = 40;
-              window.open(
+              const w = 400;
+              const h = window.screen.availHeight - 100;
+              const left = window.screen.availWidth - w - 10;
+              const top = 50;
+              const features = [
+                `width=${w}`,
+                `height=${h}`,
+                `left=${left}`,
+                `top=${top}`,
+                'resizable=yes',
+                'scrollbars=no',
+                'toolbar=no',
+                'menubar=no',
+                'location=no',
+                'status=no',
+                'directories=no',
+                'titlebar=no',
+                'chrome=yes',
+              ].join(',');
+              
+              const widgetWindow = window.open(
                 window.location.origin + '/widget',
                 'wirezrus_widget',
-                `width=${w},height=${h},left=${left},top=${top},resizable=yes,scrollbars=yes,toolbar=no,menubar=no,location=no,status=no`
+                features
               );
+              
+              // Focus the widget window
+              if (widgetWindow) {
+                widgetWindow.focus();
+              }
             }}
             className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors shadow-sm"
           >

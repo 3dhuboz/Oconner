@@ -1,10 +1,9 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Job, Electrician } from '../types';
-import { Link } from 'react-router-dom';
 import { format, isToday } from 'date-fns';
 import {
   ClipboardList, CheckCircle2, Clock, AlertCircle, Calendar,
-  Users, Plus, MapPin, ArrowRight, Zap, ExternalLink, Maximize2
+  Users, Plus, MapPin, Zap, ExternalLink, Maximize2, Minimize2, X, GripVertical, TrendingUp
 } from 'lucide-react';
 import { cn } from '../utils';
 
@@ -14,15 +13,17 @@ interface DashboardWidgetProps {
 }
 
 const PIPELINE = [
-  { key: 'INTAKE', label: 'In', color: 'bg-blue-500' },
-  { key: 'SCHEDULING', label: 'Sch', color: 'bg-purple-500' },
-  { key: 'DISPATCHED', label: 'Dis', color: 'bg-amber-500' },
-  { key: 'EXECUTION', label: 'Fld', color: 'bg-orange-500' },
-  { key: 'REVIEW', label: 'Rev', color: 'bg-rose-500' },
-  { key: 'CLOSED', label: 'Done', color: 'bg-emerald-500' },
+  { key: 'INTAKE', label: 'Intake', color: 'bg-blue-500', textColor: 'text-blue-600' },
+  { key: 'SCHEDULING', label: 'Sched', color: 'bg-purple-500', textColor: 'text-purple-600' },
+  { key: 'DISPATCHED', label: 'Dispatch', color: 'bg-amber-500', textColor: 'text-amber-600' },
+  { key: 'EXECUTION', label: 'Field', color: 'bg-orange-500', textColor: 'text-orange-600' },
+  { key: 'REVIEW', label: 'Review', color: 'bg-rose-500', textColor: 'text-rose-600' },
+  { key: 'CLOSED', label: 'Closed', color: 'bg-emerald-500', textColor: 'text-emerald-600' },
 ] as const;
 
 export function DashboardWidget({ jobs, electricians }: DashboardWidgetProps) {
+  const [minimized, setMinimized] = useState(false);
+  
   const totalActive = jobs.filter(j => j.status !== 'CLOSED').length;
   const actionRequired = jobs.filter(j => ['INTAKE', 'REVIEW'].includes(j.status));
   const todayJobs = useMemo(() => {
@@ -42,27 +43,67 @@ export function DashboardWidget({ jobs, electricians }: DashboardWidgetProps) {
     window.open(window.location.origin + '/', '_blank');
   };
 
-  return (
-    <div className="min-h-screen bg-slate-100 p-3">
-      {/* Compact Header */}
-      <div className="flex items-center justify-between mb-3">
+  const closeWidget = () => {
+    window.close();
+  };
+
+  if (minimized) {
+    return (
+      <div className="fixed top-0 left-0 right-0 bg-gradient-to-r from-slate-800 to-slate-900 text-white px-4 py-2 flex items-center justify-between shadow-lg border-b border-slate-700 cursor-pointer hover:from-slate-700 hover:to-slate-800 transition-all" onClick={() => setMinimized(false)}>
         <div className="flex items-center gap-2">
-          <div className="bg-amber-500 p-1.5 rounded-lg">
-            <Zap className="w-4 h-4 text-slate-900" />
+          <div className="bg-amber-500 p-1 rounded">
+            <Zap className="w-3 h-3 text-slate-900" />
           </div>
-          <span className="text-sm font-bold text-slate-800">Wirez R Us</span>
+          <span className="text-xs font-semibold">Wirez R Us</span>
+          <span className="text-[10px] text-slate-400">•</span>
+          <span className="text-[10px] text-slate-300">{totalActive} active • {actionRequired.length} action</span>
         </div>
-        <div className="flex items-center gap-1.5">
-          <span className="text-[10px] text-slate-400">{format(new Date(), 'EEE d MMM')}</span>
-          <button
-            onClick={openFullDashboard}
-            className="p-1 hover:bg-white rounded transition-colors text-slate-400 hover:text-slate-700"
-            title="Open full dashboard"
-          >
-            <Maximize2 className="w-3.5 h-3.5" />
-          </button>
+        <Maximize2 className="w-3 h-3 text-slate-400" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200 flex flex-col">
+      {/* Professional Widget Header with Window Controls */}
+      <div className="bg-gradient-to-r from-slate-800 to-slate-900 text-white shadow-lg">
+        <div className="px-3 py-2 flex items-center justify-between">
+          <div className="flex items-center gap-2 flex-1">
+            <GripVertical className="w-3.5 h-3.5 text-slate-500 cursor-move" title="Drag to move" />
+            <div className="bg-amber-500 p-1 rounded">
+              <Zap className="w-3 h-3 text-slate-900" />
+            </div>
+            <span className="text-xs font-bold">Wirez R Us</span>
+            <span className="text-[9px] text-slate-400 ml-auto">{format(new Date(), 'EEE, d MMM yyyy')}</span>
+          </div>
+          <div className="flex items-center gap-1 ml-3">
+            <button
+              onClick={() => setMinimized(true)}
+              className="p-1 hover:bg-slate-700 rounded transition-colors text-slate-400 hover:text-white"
+              title="Minimize"
+            >
+              <Minimize2 className="w-3 h-3" />
+            </button>
+            <button
+              onClick={openFullDashboard}
+              className="p-1 hover:bg-slate-700 rounded transition-colors text-slate-400 hover:text-white"
+              title="Open full dashboard"
+            >
+              <ExternalLink className="w-3 h-3" />
+            </button>
+            <button
+              onClick={closeWidget}
+              className="p-1 hover:bg-rose-600 rounded transition-colors text-slate-400 hover:text-white"
+              title="Close widget"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Widget Body */}
+      <div className="flex-1 overflow-y-auto p-3 space-y-3">
 
       {/* Mini KPI Row */}
       <div className="grid grid-cols-4 gap-2 mb-3">
@@ -207,6 +248,7 @@ export function DashboardWidget({ jobs, electricians }: DashboardWidgetProps) {
           <ClipboardList className="w-4 h-4 text-slate-600" />
           <span className="text-[9px] font-semibold text-slate-600">Board</span>
         </a>
+      </div>
       </div>
     </div>
   );
