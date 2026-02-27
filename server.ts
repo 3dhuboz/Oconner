@@ -5,7 +5,7 @@ import twilio from "twilio";
 import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
-import { stripe } from "./src/services/stripe.ts";
+import { requireStripe } from "./src/services/stripe.ts";
 import { PDFDocument } from "pdf-lib";
 import { format } from "date-fns";
 
@@ -246,7 +246,7 @@ async function startServer() {
   // 8. Get active subscription plans
   app.get("/api/stripe/plans", async (req, res) => {
     try {
-      const prices = await stripe.prices.list({
+      const prices = await requireStripe().prices.list({
         active: true,
         expand: ['data.product'],
       });
@@ -260,7 +260,7 @@ async function startServer() {
   app.post("/api/stripe/create-checkout-session", async (req, res) => {
     const { priceId } = req.body;
     try {
-      const session = await stripe.checkout.sessions.create({
+      const session = await requireStripe().checkout.sessions.create({
         payment_method_types: ['card'],
         line_items: [{ price: priceId, quantity: 1 }],
         mode: 'subscription',
@@ -279,7 +279,7 @@ async function startServer() {
     let event;
 
     try {
-      event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET || '');
+      event = requireStripe().webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET || '');
     } catch (err: any) {
       console.log(`Webhook signature verification failed.`, err.message);
       return res.sendStatus(400);
