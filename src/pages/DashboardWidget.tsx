@@ -107,22 +107,22 @@ export function DashboardWidget({ jobs, electricians }: DashboardWidgetProps) {
 
       {/* Mini KPI Row */}
       <div className="grid grid-cols-4 gap-2 mb-3">
-        <Link to="/jobs" className="bg-white rounded-lg p-2.5 border border-slate-200 hover:border-slate-300 transition-all text-center group" target="_blank">
+        <a href={`${window.location.origin}/jobs`} target="_blank" rel="noopener noreferrer" className="bg-white rounded-lg p-2.5 border border-slate-200 hover:border-slate-300 transition-all text-center group">
           <p className="text-lg font-bold text-slate-900">{totalActive}</p>
           <p className="text-[10px] text-slate-500 group-hover:text-blue-600">Active</p>
-        </Link>
-        <Link to="/jobs" className="bg-white rounded-lg p-2.5 border border-slate-200 hover:border-slate-300 transition-all text-center group" target="_blank">
+        </a>
+        <a href={`${window.location.origin}/jobs`} target="_blank" rel="noopener noreferrer" className="bg-white rounded-lg p-2.5 border border-slate-200 hover:border-slate-300 transition-all text-center group">
           <p className="text-lg font-bold text-rose-600">{actionRequired.length}</p>
           <p className="text-[10px] text-slate-500 group-hover:text-rose-600">Action</p>
-        </Link>
-        <Link to="/calendar" className="bg-white rounded-lg p-2.5 border border-slate-200 hover:border-slate-300 transition-all text-center group" target="_blank">
+        </a>
+        <a href={`${window.location.origin}/calendar`} target="_blank" rel="noopener noreferrer" className="bg-white rounded-lg p-2.5 border border-slate-200 hover:border-slate-300 transition-all text-center group">
           <p className="text-lg font-bold text-slate-900">{todayJobs.length}</p>
           <p className="text-[10px] text-slate-500 group-hover:text-amber-600">Today</p>
-        </Link>
-        <Link to="/team" className="bg-white rounded-lg p-2.5 border border-slate-200 hover:border-slate-300 transition-all text-center group" target="_blank">
+        </a>
+        <a href={`${window.location.origin}/team`} target="_blank" rel="noopener noreferrer" className="bg-white rounded-lg p-2.5 border border-slate-200 hover:border-slate-300 transition-all text-center group">
           <p className="text-lg font-bold text-slate-900">{electricians.length}</p>
           <p className="text-[10px] text-slate-500 group-hover:text-emerald-600">Techs</p>
-        </Link>
+        </a>
       </div>
 
       {/* Mini Pipeline */}
@@ -131,11 +131,11 @@ export function DashboardWidget({ jobs, electricians }: DashboardWidgetProps) {
           {PIPELINE.map(stage => {
             const count = jobs.filter(j => j.status === stage.key).length;
             return (
-              <Link key={stage.key} to="/jobs" target="_blank" className="flex-1 text-center group">
+              <a key={stage.key} href={`${window.location.origin}/jobs`} target="_blank" rel="noopener noreferrer" className="flex-1 text-center group">
                 <div className={cn("h-1.5 rounded-full mb-1 transition-all group-hover:h-2", stage.color)} />
                 <span className="text-xs font-bold text-slate-800">{count}</span>
                 <p className="text-[8px] text-slate-400 uppercase">{stage.label}</p>
-              </Link>
+              </a>
             );
           })}
         </div>
@@ -148,7 +148,7 @@ export function DashboardWidget({ jobs, electricians }: DashboardWidgetProps) {
             <span className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
               <AlertCircle className="w-3 h-3 text-rose-500" /> Action Required
             </span>
-            <Link to="/jobs" target="_blank" className="text-[10px] text-indigo-600 hover:text-indigo-700">all</Link>
+            <a href={`${window.location.origin}/jobs`} target="_blank" rel="noopener noreferrer" className="text-[10px] text-indigo-600 hover:text-indigo-700">all</a>
           </div>
           {actionRequired.slice(0, 4).map(job => (
             <a
@@ -178,7 +178,7 @@ export function DashboardWidget({ jobs, electricians }: DashboardWidgetProps) {
           <span className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
             <Calendar className="w-3 h-3 text-amber-500" /> Today
           </span>
-          <Link to="/calendar" target="_blank" className="text-[10px] text-indigo-600 hover:text-indigo-700">calendar</Link>
+          <a href={`${window.location.origin}/calendar`} target="_blank" rel="noopener noreferrer" className="text-[10px] text-indigo-600 hover:text-indigo-700">calendar</a>
         </div>
         {todayJobs.length > 0 ? (
           todayJobs.slice(0, 4).map(job => {
