@@ -3,12 +3,14 @@ import { Link, useLocation } from 'react-router-dom';
 import { LayoutDashboard, ClipboardList, Calendar, Settings, Zap, Users, Shield, CreditCard, LogOut, Headphones, ExternalLink, MapPin, Menu, X, Package, Download } from 'lucide-react';
 import { cn } from '../utils';
 import { useAuth } from '../context/AuthContext';
+import type { Job } from '../types';
 
 interface LayoutProps {
   children: React.ReactNode;
+  jobs?: Job[];
 }
 
-export function Layout({ children }: LayoutProps) {
+export function Layout({ children, jobs = [] }: LayoutProps) {
   const location = useLocation();
   const { user, logout } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -77,7 +79,10 @@ export function Layout({ children }: LayoutProps) {
           {navItems.filter(item => item.roles.includes(user.role)).map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path));
-            
+            const needsReviewCount = item.path === '/jobs'
+              ? jobs.filter(j => j.source === 'email' && j.aiNeedsReview && j.status !== 'CLOSED').length
+              : 0;
+
             return (
               <Link
                 key={item.name}
@@ -89,8 +94,13 @@ export function Layout({ children }: LayoutProps) {
                     : "text-slate-400 hover:bg-slate-800 hover:text-white"
                 )}
               >
-                <Icon className="w-5 h-5" />
-                <span className="font-medium text-sm sm:text-base">{item.name}</span>
+                <Icon className="w-5 h-5 shrink-0" />
+                <span className="font-medium text-sm sm:text-base flex-1">{item.name}</span>
+                {needsReviewCount > 0 && (
+                  <span className="ml-auto bg-amber-500 text-slate-900 text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center leading-tight">
+                    {needsReviewCount}
+                  </span>
+                )}
               </Link>
             );
           })}

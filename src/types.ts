@@ -6,7 +6,7 @@ export type JobStatus =
   | 'REVIEW' 
   | 'CLOSED';
 
-export type JobType = 'GENERAL_REPAIR' | 'SMOKE_ALARM' | 'INSTALLATION';
+export type JobType = 'GENERAL_REPAIR' | 'SMOKE_ALARM' | 'INSTALLATION' | 'ELECTRICAL' | 'EMERGENCY' | 'MAINTENANCE' | 'INSPECTION' | 'SAFETY_SWITCH' | 'LIGHTING' | 'POWER_POINT' | 'HOT_WATER' | 'FAN' | 'APPLIANCE' | 'SWITCHBOARD';
 
 export interface ContactAttempt {
   id: string;
@@ -88,11 +88,27 @@ export interface Job {
   // Email source data (when job created from inbound email)
   source?: string;
   extractionMethod?: string;
+  detectedSoftware?: string;
   urgency?: string;
   rawEmailFrom?: string;
   rawEmailSubject?: string;
   rawEmailBody?: string;
   rawEmailHtml?: string;
+
+  // AI parse review
+  aiNeedsReview?: boolean;
+  aiConfidence?: {
+    tenantName: number;
+    tenantPhone: number;
+    tenantEmail: number;
+    propertyAddress: number;
+    issueDescription: number;
+    overall: number;
+  };
+
+  // Extended contact info from AI
+  propertyManagerName?: string;
+  agency?: string;
 }
 
 export interface Electrician {

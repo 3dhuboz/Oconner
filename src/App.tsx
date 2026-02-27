@@ -324,22 +324,22 @@ function AppContent() {
         </ProtectedRoute>
       } />
       <Route path="/jobs" element={
-        <ProtectedRoute>
+        <ProtectedRoute jobs={jobs}>
           <JobBoard jobs={jobs} />
         </ProtectedRoute>
       } />
       <Route path="/jobs/new" element={
-        <AdminRoute>
+        <AdminRoute jobs={jobs}>
           <NewJob electricians={electricians} />
         </AdminRoute>
       } />
       <Route path="/jobs/:id" element={
-        <ProtectedRoute>
+        <ProtectedRoute jobs={jobs}>
           <JobDetail jobs={jobs} updateJob={updateJob} deleteJob={deleteJob} electricians={electricians} />
         </ProtectedRoute>
       } />
       <Route path="/calendar" element={
-        <ProtectedRoute>
+        <ProtectedRoute jobs={jobs}>
           <Calendar jobs={jobs} electricians={electricians} />
         </ProtectedRoute>
       } />

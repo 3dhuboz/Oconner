@@ -45,6 +45,38 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
   const [miscCharges, setMiscCharges] = useState<Array<{ id: string; description: string; amount: number }>>([]);
   const isAdmin = user?.role === 'admin' || user?.role === 'dev';
 
+  // ─── AI Parse Review state ───
+  const [reviewFields, setReviewFields] = useState({
+    tenantName: '',
+    tenantPhone: '',
+    tenantEmail: '',
+    propertyAddress: '',
+    description: '',
+    urgency: '',
+    accessCodes: '',
+    propertyManagerEmail: '',
+    propertyManagerName: '',
+    agency: '',
+  });
+  const [confirmingReview, setConfirmingReview] = useState(false);
+
+  React.useEffect(() => {
+    if (job?.aiNeedsReview) {
+      setReviewFields({
+        tenantName: job.tenantName || '',
+        tenantPhone: job.tenantPhone || '',
+        tenantEmail: job.tenantEmail || '',
+        propertyAddress: job.propertyAddress || '',
+        description: job.description || '',
+        urgency: job.urgency || 'NORMAL',
+        accessCodes: job.accessCodes || '',
+        propertyManagerEmail: job.propertyManagerEmail || '',
+        propertyManagerName: (job as any).propertyManagerName || '',
+        agency: (job as any).agency || '',
+      });
+    }
+  }, [job?.id]);
+
   // Initialize billing state from job
   React.useEffect(() => {
     if (job) {
@@ -88,6 +120,30 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
       }
     } else {
       updateJob(job.id, { status: newStatus });
+    }
+  };
+
+  const handleConfirmReview = async () => {
+    setConfirmingReview(true);
+    try {
+      await updateJob(job.id, {
+        tenantName: reviewFields.tenantName,
+        tenantPhone: reviewFields.tenantPhone,
+        tenantEmail: reviewFields.tenantEmail,
+        propertyAddress: reviewFields.propertyAddress,
+        description: reviewFields.description,
+        urgency: reviewFields.urgency,
+        accessCodes: reviewFields.accessCodes,
+        propertyManagerEmail: reviewFields.propertyManagerEmail,
+        propertyManagerName: reviewFields.propertyManagerName,
+        agency: reviewFields.agency,
+        aiNeedsReview: false,
+      } as any);
+      toast.success('Work order confirmed — job is ready to proceed.');
+    } catch {
+      toast.error('Failed to save review');
+    } finally {
+      setConfirmingReview(false);
     }
   };
 
@@ -451,6 +507,218 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
             )}
           </div>
         </div>
+
+        {/* ─── AI Parse Review Panel ─────────────────────────────── */}
+        {job.source === 'email' && job.aiNeedsReview && isAdmin && (() => {
+          const conf = job.aiConfidence;
+          const confColor = (v?: number) =>
+            !v ? 'text-slate-400' :
+            v >= 0.8 ? 'text-emerald-600' :
+            v >= 0.5 ? 'text-amber-500' : 'text-red-500';
+          const confLabel = (v?: number) =>
+            !v ? '?' : v >= 0.8 ? '✓' : v >= 0.5 ? '~' : '✗';
+          const confBg = (v?: number) =>
+            !v ? 'bg-slate-100' :
+            v >= 0.8 ? 'bg-emerald-50 border-emerald-200' :
+            v >= 0.5 ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200';
+
+          return (
+            <div className="border-b border-amber-200 bg-amber-50">
+              {/* Header */}
+              <div className="px-6 py-4 flex items-start justify-between gap-4 flex-wrap">
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center shrink-0 mt-0.5">
+                    <ShieldAlert className="w-5 h-5 text-amber-600" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h2 className="text-base font-bold text-amber-900">AI Work Order Review Required</h2>
+                      {job.detectedSoftware && (
+                        <span className="text-xs font-semibold bg-white border border-amber-200 text-amber-700 px-2 py-0.5 rounded-full">
+                          {job.detectedSoftware}
+                        </span>
+                      )}
+                      {conf?.overall !== undefined && (
+                        <span className={cn(
+                          'text-xs font-bold px-2 py-0.5 rounded-full border',
+                          conf.overall >= 0.8 ? 'bg-emerald-50 border-emerald-200 text-emerald-700' :
+                          conf.overall >= 0.5 ? 'bg-amber-50 border-amber-300 text-amber-700' :
+                          'bg-red-50 border-red-200 text-red-700'
+                        )}>
+                          {Math.round((conf.overall || 0) * 100)}% confidence
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-amber-700 mt-0.5">
+                      This job was auto-populated from an inbound email. Review each field below, correct any errors, then confirm.
+                    </p>
+                    <p className="text-xs text-amber-600 mt-1">
+                      <span className="font-semibold">From:</span> {job.rawEmailFrom} &nbsp;·&nbsp;
+                      <span className="font-semibold">Subject:</span> {job.rawEmailSubject}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  <button
+                    onClick={() => setShowRawEmail(true)}
+                    className="px-3 py-2 bg-white border border-amber-200 text-amber-700 hover:bg-amber-100 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                  >
+                    <Eye className="w-3.5 h-3.5" /> View Email
+                  </button>
+                </div>
+              </div>
+
+              {/* Editable fields grid */}
+              <div className="px-6 pb-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {/* Property Address */}
+                <div className={cn('rounded-xl border p-3 col-span-1 sm:col-span-2 lg:col-span-2', confBg(conf?.propertyAddress))}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Property Address</label>
+                    <span className={cn('text-xs font-bold', confColor(conf?.propertyAddress))}>
+                      {confLabel(conf?.propertyAddress)} {conf?.propertyAddress !== undefined ? `${Math.round((conf.propertyAddress) * 100)}%` : ''}
+                    </span>
+                  </div>
+                  <input
+                    value={reviewFields.propertyAddress}
+                    onChange={e => setReviewFields(f => ({ ...f, propertyAddress: e.target.value }))}
+                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    placeholder="Full property address..."
+                  />
+                </div>
+
+                {/* Urgency */}
+                <div className="rounded-xl border bg-white border-slate-200 p-3">
+                  <label className="text-xs font-bold text-slate-600 uppercase tracking-wide block mb-1.5">Urgency</label>
+                  <select
+                    value={reviewFields.urgency}
+                    onChange={e => setReviewFields(f => ({ ...f, urgency: e.target.value }))}
+                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  >
+                    <option value="URGENT">🚨 URGENT</option>
+                    <option value="HIGH">⚡ HIGH</option>
+                    <option value="NORMAL">✅ NORMAL</option>
+                    <option value="LOW">🕐 LOW</option>
+                  </select>
+                </div>
+
+                {/* Tenant Name */}
+                <div className={cn('rounded-xl border p-3', confBg(conf?.tenantName))}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Tenant Name</label>
+                    <span className={cn('text-xs font-bold', confColor(conf?.tenantName))}>
+                      {confLabel(conf?.tenantName)} {conf?.tenantName !== undefined ? `${Math.round((conf.tenantName) * 100)}%` : ''}
+                    </span>
+                  </div>
+                  <input
+                    value={reviewFields.tenantName}
+                    onChange={e => setReviewFields(f => ({ ...f, tenantName: e.target.value }))}
+                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    placeholder="Tenant full name..."
+                  />
+                </div>
+
+                {/* Tenant Phone */}
+                <div className={cn('rounded-xl border p-3', confBg(conf?.tenantPhone))}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Tenant Phone</label>
+                    <span className={cn('text-xs font-bold', confColor(conf?.tenantPhone))}>
+                      {confLabel(conf?.tenantPhone)} {conf?.tenantPhone !== undefined ? `${Math.round((conf.tenantPhone) * 100)}%` : ''}
+                    </span>
+                  </div>
+                  <input
+                    value={reviewFields.tenantPhone}
+                    onChange={e => setReviewFields(f => ({ ...f, tenantPhone: e.target.value }))}
+                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    placeholder="04xx xxx xxx"
+                  />
+                </div>
+
+                {/* Tenant Email */}
+                <div className={cn('rounded-xl border p-3', confBg(conf?.tenantEmail))}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Tenant Email</label>
+                    <span className={cn('text-xs font-bold', confColor(conf?.tenantEmail))}>
+                      {confLabel(conf?.tenantEmail)} {conf?.tenantEmail !== undefined ? `${Math.round((conf.tenantEmail) * 100)}%` : ''}
+                    </span>
+                  </div>
+                  <input
+                    value={reviewFields.tenantEmail}
+                    onChange={e => setReviewFields(f => ({ ...f, tenantEmail: e.target.value }))}
+                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    placeholder="tenant@email.com"
+                  />
+                </div>
+
+                {/* PM Email */}
+                <div className="rounded-xl border border-slate-200 bg-white p-3">
+                  <label className="text-xs font-bold text-slate-600 uppercase tracking-wide block mb-1.5">Property Manager Email</label>
+                  <input
+                    value={reviewFields.propertyManagerEmail}
+                    onChange={e => setReviewFields(f => ({ ...f, propertyManagerEmail: e.target.value }))}
+                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    placeholder="pm@agency.com.au"
+                  />
+                </div>
+
+                {/* Agency */}
+                <div className="rounded-xl border border-slate-200 bg-white p-3">
+                  <label className="text-xs font-bold text-slate-600 uppercase tracking-wide block mb-1.5">Agency / PM Name</label>
+                  <input
+                    value={reviewFields.agency || reviewFields.propertyManagerName}
+                    onChange={e => setReviewFields(f => ({ ...f, agency: e.target.value }))}
+                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    placeholder="Real estate agency name..."
+                  />
+                </div>
+
+                {/* Access Instructions */}
+                <div className="rounded-xl border border-slate-200 bg-white p-3">
+                  <label className="text-xs font-bold text-slate-600 uppercase tracking-wide block mb-1.5">Access / Entry Instructions</label>
+                  <input
+                    value={reviewFields.accessCodes}
+                    onChange={e => setReviewFields(f => ({ ...f, accessCodes: e.target.value }))}
+                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    placeholder="Key safe code, access instructions..."
+                  />
+                </div>
+
+                {/* Description — full width */}
+                <div className={cn('rounded-xl border p-3 col-span-1 sm:col-span-2 lg:col-span-3', confBg(conf?.issueDescription))}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Issue Description</label>
+                    <span className={cn('text-xs font-bold', confColor(conf?.issueDescription))}>
+                      {confLabel(conf?.issueDescription)} {conf?.issueDescription !== undefined ? `${Math.round((conf.issueDescription) * 100)}%` : ''}
+                    </span>
+                  </div>
+                  <textarea
+                    value={reviewFields.description}
+                    onChange={e => setReviewFields(f => ({ ...f, description: e.target.value }))}
+                    rows={3}
+                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-400 resize-none"
+                    placeholder="Describe the electrical issue in detail..."
+                  />
+                </div>
+              </div>
+
+              {/* Confirm bar */}
+              <div className="px-6 py-4 bg-amber-100/50 border-t border-amber-200 flex items-center justify-between gap-4 flex-wrap">
+                <p className="text-xs text-amber-700 font-medium">
+                  ✏️ Correct any fields above, then click <strong>Confirm Work Order</strong> to clear this review flag and proceed.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleConfirmReview}
+                    disabled={confirmingReview || !reviewFields.propertyAddress}
+                    className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-xl text-sm font-bold transition-colors flex items-center gap-2 shadow-sm"
+                  >
+                    {confirmingReview ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                    {confirmingReview ? 'Saving…' : 'Confirm Work Order'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         <div className="grid grid-cols-1 md:grid-cols-3 items-start divide-y md:divide-y-0 md:divide-x divide-slate-200">
           {/* Phase 1: Intake & Coordination */}

@@ -3,8 +3,9 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Layout } from './Layout';
 import { TechLayout } from './TechLayout';
+import type { Job } from '../types';
 
-const RoleRoute = ({ children, roles, forceLayout }: { children: React.ReactNode, roles: string[], forceLayout?: 'admin' | 'tech' }) => {
+const RoleRoute = ({ children, roles, forceLayout, jobs }: { children: React.ReactNode, roles: string[], forceLayout?: 'admin' | 'tech', jobs?: Job[] }) => {
   const { user, isLoading } = useAuth();
   const location = useLocation();
 
@@ -25,19 +26,19 @@ const RoleRoute = ({ children, roles, forceLayout }: { children: React.ReactNode
     return <TechLayout>{children}</TechLayout>;
   }
 
-  return <Layout>{children}</Layout>;
+  return <Layout jobs={jobs}>{children}</Layout>;
 };
 
-export const DevRoute = ({ children }: { children: React.ReactNode }) => (
-  <RoleRoute roles={['dev']}>{children}</RoleRoute>
+export const DevRoute = ({ children, jobs }: { children: React.ReactNode, jobs?: Job[] }) => (
+  <RoleRoute roles={['dev']} jobs={jobs}>{children}</RoleRoute>
 );
 
-export const AdminRoute = ({ children }: { children: React.ReactNode }) => (
-  <RoleRoute roles={['dev', 'admin']}>{children}</RoleRoute>
+export const AdminRoute = ({ children, jobs }: { children: React.ReactNode, jobs?: Job[] }) => (
+  <RoleRoute roles={['dev', 'admin']} jobs={jobs}>{children}</RoleRoute>
 );
 
-export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => (
-  <RoleRoute roles={['dev', 'admin', 'user']}>{children}</RoleRoute>
+export const ProtectedRoute = ({ children, jobs }: { children: React.ReactNode, jobs?: Job[] }) => (
+  <RoleRoute roles={['dev', 'admin', 'user']} jobs={jobs}>{children}</RoleRoute>
 );
 
 export const TechRoute = ({ children }: { children: React.ReactNode }) => (
