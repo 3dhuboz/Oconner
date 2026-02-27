@@ -21,38 +21,100 @@ import { Job, Electrician } from './types';
 import { db } from './services/firebase';
 import { collection, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { Toaster } from 'react-hot-toast';
+import toast from 'react-hot-toast';
 
 import { ProtectedRoute, AdminRoute, DevRoute } from './components/ProtectedRoute';
+
+import { offlineJobs, offlineElectricians, syncQueue } from './services/offlineDb';
+import { startSyncCron, stopSyncCron } from './services/syncService';
+import { useSyncStatus } from './hooks/useOfflineSync';
+import { NetworkStatusBar } from './components/NetworkStatusBar';
 
 function AppContent() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [electricians, setElectricians] = useState<Electrician[]>([]);
-  const { user } = useAuth(); // Get user to prevent fetches on logout
+  const { user } = useAuth();
+  const syncStatus = useSyncStatus();
 
-  // Effect for real-time jobs
+  // Start background sync cron on mount
+  useEffect(() => {
+    startSyncCron();
+    return () => stopSyncCron();
+  }, []);
+
+  // Load cached data from IndexedDB immediately (offline-first)
+  useEffect(() => {
+    if (!user) return;
+    offlineJobs.getAll().then(cached => {
+      if (cached.length > 0) setJobs(cached as Job[]);
+    });
+    offlineElectricians.getAll().then(cached => {
+      if (cached.length > 0) setElectricians(cached as Electrician[]);
+    });
+  }, [user]);
+
+  // Real-time Firestore sync — also persists to IndexedDB
   useEffect(() => {
     if (!user || !db) return;
-    const unsubscribe = onSnapshot(collection(db, 'jobs'), (snapshot) => {
-      const jobsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Job));
-      setJobs(jobsData);
-    });
+    const unsubscribe = onSnapshot(
+      collection(db, 'jobs'),
+      (snapshot) => {
+        const jobsData = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Job));
+        setJobs(jobsData);
+        offlineJobs.putAll(jobsData); // cache locally
+      },
+      (error) => {
+        console.warn('[Offline] Firestore jobs listener error, using cached data:', error.message);
+      }
+    );
     return unsubscribe;
   }, [user]);
 
-  // Effect for real-time electricians
   useEffect(() => {
     if (!user || !db) return;
-    const unsubscribe = onSnapshot(collection(db, 'electricians'), (snapshot) => {
-      const electriciansData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Electrician));
-      setElectricians(electriciansData);
-    });
+    const unsubscribe = onSnapshot(
+      collection(db, 'electricians'),
+      (snapshot) => {
+        const electriciansData = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Electrician));
+        setElectricians(electriciansData);
+        offlineElectricians.putAll(electriciansData); // cache locally
+      },
+      (error) => {
+        console.warn('[Offline] Firestore electricians listener error, using cached data:', error.message);
+      }
+    );
     return unsubscribe;
   }, [user]);
 
+  // Offline-aware job update
   const updateJob = async (id: string, updates: Partial<Job>) => {
-    if (!db) return;
-    const jobRef = doc(db, 'jobs', id);
-    await updateDoc(jobRef, updates);
+    // Optimistic local update
+    setJobs(prev => prev.map(j => j.id === id ? { ...j, ...updates } : j));
+    const allJobs = await offlineJobs.getAll();
+    const existing = allJobs.find((j: any) => j.id === id);
+    if (existing) {
+      await offlineJobs.put({ ...existing, ...updates });
+    }
+
+    // Try Firestore, queue if offline
+    if (navigator.onLine && db) {
+      try {
+        const jobRef = doc(db, 'jobs', id);
+        await updateDoc(jobRef, updates);
+        return;
+      } catch (error: any) {
+        console.warn('[Offline] Firestore update failed, queuing:', error.message);
+      }
+    }
+
+    // Queue for background sync
+    await syncQueue.add({
+      collection: 'jobs',
+      docId: id,
+      operation: 'update',
+      data: updates,
+    });
+    toast('Saved offline — will sync when connection returns', { icon: '📡' });
   };
 
   return (
@@ -122,6 +184,7 @@ function App() {
     <Router>
       <AuthProvider>
         <AppContentWrapper />
+        <NetworkStatusBar />
         <Toaster position="bottom-right" />
       </AuthProvider>
     </Router>
