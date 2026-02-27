@@ -347,28 +347,31 @@ function buildEmailText() {
   };
 }
 
-function showFallback(subject, bodyText) {
-  var TO = 'e35a378a68a971a219eb@cloudmailin.net';
+function showSubmitHelper(subject, bodyText, TO) {
   var overlay = document.createElement('div');
-  overlay.id = 'fb-overlay';
+  overlay.id = 'submit-helper';
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
   overlay.innerHTML =
     '<div style="background:#fff;border-radius:14px;padding:28px;max-width:560px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);font-family:Arial,sans-serif">' +
-    '<h2 style="margin:0 0 6px;font-size:17px;color:#0f172a">&#9993; Email client did not open</h2>' +
-    '<p style="font-size:13px;color:#64748b;margin:0 0 16px">Your browser blocked the email link. Use one of these options:</p>' +
+    '<h2 style="margin:0 0 6px;font-size:17px;color:#0f172a">&#9993; Submit Work Order</h2>' +
+    '<p style="font-size:13px;color:#64748b;margin:0 0 16px">If your email app opened, just hit send! Otherwise, use one of these options:</p>' +
     '<div style="background:#f1f5f9;border-radius:8px;padding:12px 14px;margin-bottom:14px">' +
     '<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Send to</div>' +
     '<div style="font-size:15px;font-weight:700;color:#0f172a;user-select:all">' + TO + '</div>' +
     '<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin:8px 0 4px">Subject</div>' +
     '<div style="font-size:13px;color:#0f172a;user-select:all">' + subject + '</div>' +
     '</div>' +
-    '<textarea id="fb-body" readonly style="width:100%;height:180px;border:1.5px solid #cbd5e1;border-radius:8px;padding:10px;font-size:12px;font-family:monospace;resize:none;box-sizing:border-box;color:#0f172a">' + bodyText.replace(/</g,'&lt;') + '</textarea>' +
+    '<textarea id="helper-body" readonly style="width:100%;height:180px;border:1.5px solid #cbd5e1;border-radius:8px;padding:10px;font-size:12px;font-family:monospace;resize:none;box-sizing:border-box;color:#0f172a">' + bodyText.replace(/</g,'&lt;') + '</textarea>' +
     '<div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">' +
-    '<button onclick="(function(){var t=document.getElementById(\'fb-body\');t.select();try{navigator.clipboard.writeText(t.value).then(function(){alert(\'Copied! Now open your email app, create a new email to: ' + TO + ' and paste.\')});}catch(e){document.execCommand(\'copy\');alert(\'Copied! Now open your email app, create a new email to: ' + TO + ' and paste.\');}})()" style="flex:1;padding:10px 16px;background:#f59e0b;color:#0f172a;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">&#128203; Copy Email Body</button>' +
-    '<a href="mailto:' + TO + '?subject=' + encodeURIComponent(subject) + '" target="_blank" style="flex:1;padding:10px 16px;background:#0f172a;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;text-align:center;text-decoration:none;display:inline-flex;align-items:center;justify-content:center">&#9993; Try Open Email App</a>' +
-    '<button onclick="document.getElementById(\'fb-overlay\').remove()" style="padding:10px 16px;background:#e2e8f0;color:#475569;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">Close</button>' +
+    '<button onclick="(function(){var t=document.getElementById(\'helper-body\');t.select();try{navigator.clipboard.writeText(t.value).then(function(){alert(\'✓ Copied! Now open your email app, create a new email to:\\n\\n' + TO + '\\n\\nand paste the content.\')});}catch(e){document.execCommand(\'copy\');alert(\'✓ Copied! Now open your email app, create a new email to:\\n\\n' + TO + '\\n\\nand paste the content.\');}})()" style="flex:1;padding:10px 16px;background:#f59e0b;color:#0f172a;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">&#128203; Copy to Clipboard</button>' +
+    '<a href="mailto:' + TO + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(bodyText) + '" style="flex:1;padding:10px 16px;background:#0f172a;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;text-align:center;text-decoration:none;display:inline-flex;align-items:center;justify-content:center">&#9993; Try Again</a>' +
+    '<button onclick="document.getElementById(\'submit-helper\').remove()" style="padding:10px 16px;background:#10b981;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">✓ Done</button>' +
     '</div></div>';
   document.body.appendChild(overlay);
+}
+
+function showFallback(subject, bodyText) {
+  showSubmitHelper(subject, bodyText, 'e35a378a68a971a219eb@cloudmailin.net');
 }
 
 function submitByEmail() {
@@ -385,19 +388,20 @@ function submitByEmail() {
   var TO = 'e35a378a68a971a219eb@cloudmailin.net';
   var mailtoUrl = 'mailto:' + TO + '?subject=' + encodeURIComponent(d.subject) + '&body=' + encodeURIComponent(d.body);
 
-  // Try window.open first (more reliable than location.href for mailto)
-  window.location.href = mailtoUrl;
+  // Attempt to open email client
+  var mailtoLink = document.createElement('a');
+  mailtoLink.href = mailtoUrl;
+  mailtoLink.target = '_blank';
+  mailtoLink.click();
   
-  // Only show fallback if user confirms email didn't open after 2 seconds
+  // Show helper modal immediately with both options
   setTimeout(function() {
-    if (confirm('Did your email app open? Click OK if it did NOT open (to see alternative options).')) {
-      showFallback(d.subject, d.body);
-    }
-  }, 2000);
+    showSubmitHelper(d.subject, d.body, TO);
+  }, 500);
 }
 function forwardForm() {
-  var subject = encodeURIComponent('Wirez R Us — Work Order Request Form');
-  var body = encodeURIComponent(
+  var subject = 'Wirez R Us — Work Order Request Form';
+  var body = 
     'Hi,\n\n' +
     'Please find attached the Wirez R Us Work Order Request Form.\n\n' +
     'HOW TO COMPLETE THIS FORM:\n' +
@@ -417,9 +421,34 @@ function forwardForm() {
     '     (Include the property address in the subject line.)\n' +
     '\n' +
     'We will be in touch within 1 business day to confirm scheduling.\n\n' +
-    'Regards,\nWirez R Us\njobs@wireznrus.com.au'
-  );
-  window.location.href = 'mailto:?subject=' + subject + '&body=' + body;
+    'Regards,\nWirez R Us\njobs@wireznrus.com.au';
+  
+  var mailtoUrl = 'mailto:?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+  var mailtoLink = document.createElement('a');
+  mailtoLink.href = mailtoUrl;
+  mailtoLink.target = '_blank';
+  mailtoLink.click();
+  
+  setTimeout(function() {
+    var overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+    overlay.innerHTML =
+      '<div style="background:#fff;border-radius:14px;padding:28px;max-width:560px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);font-family:Arial,sans-serif">' +
+      '<h2 style="margin:0 0 6px;font-size:17px;color:#0f172a">📧 Send Form to Someone</h2>' +
+      '<p style="font-size:13px;color:#64748b;margin:0 0 16px">If your email app opened, attach this HTML file and send! Otherwise:</p>' +
+      '<ol style="font-size:13px;color:#475569;line-height:1.8;margin:0 0 16px;padding-left:20px">' +
+      '<li>Open your email app manually</li>' +
+      '<li>Attach this HTML file to a new email</li>' +
+      '<li>Copy the message below and paste it into the email body</li>' +
+      '<li>Send to your recipient</li>' +
+      '</ol>' +
+      '<textarea readonly style="width:100%;height:180px;border:1.5px solid #cbd5e1;border-radius:8px;padding:10px;font-size:12px;font-family:monospace;resize:none;box-sizing:border-box;color:#0f172a" id="forward-body">' + body.replace(/</g,'&lt;') + '</textarea>' +
+      '<div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">' +
+      '<button onclick="(function(){var t=document.getElementById(\'forward-body\');t.select();try{navigator.clipboard.writeText(t.value).then(function(){alert(\'✓ Message copied! Now open your email app and paste.\')});}catch(e){document.execCommand(\'copy\');alert(\'✓ Message copied! Now open your email app and paste.\');}})()" style="flex:1;padding:10px 16px;background:#f59e0b;color:#0f172a;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">📋 Copy Message</button>' +
+      '<button onclick="this.parentElement.parentElement.parentElement.remove()" style="padding:10px 16px;background:#10b981;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">✓ Done</button>' +
+      '</div></div>';
+    document.body.appendChild(overlay);
+  }, 500);
 }
 </script>
 </body>
