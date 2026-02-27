@@ -306,7 +306,7 @@ function val(id) {
   var el = document.getElementById(id);
   return el ? el.value.trim() : '';
 }
-function submitByEmail() {
+function buildEmailText() {
   var address   = val('f_address');
   var tenantName  = val('f_tenant_name');
   var tenantPhone = val('f_tenant_phone');
@@ -318,49 +318,79 @@ function submitByEmail() {
   var access    = val('f_access');
   var prefDate  = val('f_preferred_date');
   var notAvail  = val('f_not_available');
+  var jobTypes  = getChecked(['jt_elec','jt_smoke','jt_emerg','jt_install','jt_inspect','jt_other']);
+  var urgencyEl = document.querySelector('input[name=urgency]:checked');
+  var urgency   = urgencyEl ? urgencyEl.value : 'Routine';
+  var accessTypes = getChecked(['ac_lockbox','ac_agency','ac_tenant','ac_agent']);
+  return {
+    address: address, tenantName: tenantName,
+    subject: 'Work Order Request — ' + address,
+    body:
+      'WIREZ R US — WORK ORDER REQUEST\n' +
+      '=====================================\n\n' +
+      'PROPERTY ADDRESS: ' + address + '\n\n' +
+      'TENANT NAME: ' + tenantName + '\n' +
+      'TENANT PHONE: ' + (tenantPhone || 'N/A') + '\n' +
+      'TENANT EMAIL: ' + (tenantEmail || 'N/A') + '\n\n' +
+      'PROPERTY MANAGER: ' + (pmName || 'N/A') + '\n' +
+      'PROPERTY MANAGER EMAIL: ' + (pmEmail || 'N/A') + '\n' +
+      'AGENCY: ' + (agency || 'N/A') + '\n\n' +
+      'JOB TYPE: ' + jobTypes + '\n' +
+      'URGENCY: ' + urgency + '\n\n' +
+      'DESCRIPTION OF ISSUE:\n' + description + '\n\n' +
+      'ACCESS INSTRUCTIONS: ' + (access || 'N/A') + '\n' +
+      'ACCESS TYPE: ' + accessTypes + '\n\n' +
+      'PREFERRED DATE/TIME: ' + (prefDate || 'Flexible') + '\n' +
+      'NOT AVAILABLE: ' + (notAvail || 'N/A') + '\n\n' +
+      '=====================================\n' +
+      'Submitted via Wirez R Us Work Order Form — ' + new Date().toLocaleDateString('en-AU')
+  };
+}
 
-  if (!address || !tenantName || !description) {
-    alert('Please fill in Property Address, Tenant Name, and Description before submitting.');
+function showFallback(subject, bodyText) {
+  var TO = 'e35a378a68a971a219eb@cloudmailin.net';
+  var overlay = document.createElement('div');
+  overlay.id = 'fb-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  overlay.innerHTML =
+    '<div style="background:#fff;border-radius:14px;padding:28px;max-width:560px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);font-family:Arial,sans-serif">' +
+    '<h2 style="margin:0 0 6px;font-size:17px;color:#0f172a">&#9993; Email client did not open</h2>' +
+    '<p style="font-size:13px;color:#64748b;margin:0 0 16px">Your browser blocked the email link. Use one of these options:</p>' +
+    '<div style="background:#f1f5f9;border-radius:8px;padding:12px 14px;margin-bottom:14px">' +
+    '<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Send to</div>' +
+    '<div style="font-size:15px;font-weight:700;color:#0f172a;user-select:all">' + TO + '</div>' +
+    '<div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin:8px 0 4px">Subject</div>' +
+    '<div style="font-size:13px;color:#0f172a;user-select:all">' + subject + '</div>' +
+    '</div>' +
+    '<textarea id="fb-body" readonly style="width:100%;height:180px;border:1.5px solid #cbd5e1;border-radius:8px;padding:10px;font-size:12px;font-family:monospace;resize:none;box-sizing:border-box;color:#0f172a">' + bodyText.replace(/</g,'&lt;') + '</textarea>' +
+    '<div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap">' +
+    '<button onclick="(function(){var t=document.getElementById(\'fb-body\');t.select();try{navigator.clipboard.writeText(t.value).then(function(){alert(\'Copied! Now open your email app, create a new email to: ' + TO + ' and paste.\')});}catch(e){document.execCommand(\'copy\');alert(\'Copied! Now open your email app, create a new email to: ' + TO + ' and paste.\');}})()" style="flex:1;padding:10px 16px;background:#f59e0b;color:#0f172a;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">&#128203; Copy Email Body</button>' +
+    '<a href="mailto:' + TO + '?subject=' + encodeURIComponent(subject) + '" target="_blank" style="flex:1;padding:10px 16px;background:#0f172a;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;text-align:center;text-decoration:none;display:inline-flex;align-items:center;justify-content:center">&#9993; Try Open Email App</a>' +
+    '<button onclick="document.getElementById(\'fb-overlay\').remove()" style="padding:10px 16px;background:#e2e8f0;color:#475569;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">Close</button>' +
+    '</div></div>';
+  document.body.appendChild(overlay);
+}
+
+function submitByEmail() {
+  var d = buildEmailText();
+  if (!d.address || !d.tenantName) {
+    alert('Please fill in Property Address and Tenant Name before submitting.');
+    return;
+  }
+  if (!d.body.includes('DESCRIPTION OF ISSUE:\nN') && d.body.split('DESCRIPTION OF ISSUE:\n')[1]?.trim().length === 0) {
+    alert('Please fill in the Description of Issue before submitting.');
     return;
   }
 
-  var jobTypes = getChecked(['jt_elec','jt_smoke','jt_emerg','jt_install','jt_inspect','jt_other']);
-  var urgencyEl = document.querySelector('input[name=urgency]:checked');
-  var urgency = urgencyEl ? urgencyEl.value : 'Routine';
-  var accessTypes = getChecked(['ac_lockbox','ac_agency','ac_tenant','ac_agent']);
+  var TO = 'e35a378a68a971a219eb@cloudmailin.net';
+  var mailtoUrl = 'mailto:' + TO + '?subject=' + encodeURIComponent(d.subject) + '&body=' + encodeURIComponent(d.body);
 
-  var subject = encodeURIComponent('Work Order Request — ' + address);
-  var body = encodeURIComponent(
-    'WIREZ R US — WORK ORDER REQUEST\n' +
-    '=====================================\n' +
-    '\n' +
-    'PROPERTY ADDRESS: ' + address + '\n' +
-    '\n' +
-    'TENANT NAME: ' + tenantName + '\n' +
-    'TENANT PHONE: ' + (tenantPhone || 'N/A') + '\n' +
-    'TENANT EMAIL: ' + (tenantEmail || 'N/A') + '\n' +
-    '\n' +
-    'PROPERTY MANAGER: ' + (pmName || 'N/A') + '\n' +
-    'PROPERTY MANAGER EMAIL: ' + (pmEmail || 'N/A') + '\n' +
-    'AGENCY: ' + (agency || 'N/A') + '\n' +
-    '\n' +
-    'JOB TYPE: ' + jobTypes + '\n' +
-    'URGENCY: ' + urgency + '\n' +
-    '\n' +
-    'DESCRIPTION OF ISSUE:\n' +
-    description + '\n' +
-    '\n' +
-    'ACCESS INSTRUCTIONS: ' + (access || 'N/A') + '\n' +
-    'ACCESS TYPE: ' + accessTypes + '\n' +
-    '\n' +
-    'PREFERRED DATE/TIME: ' + (prefDate || 'Flexible') + '\n' +
-    'NOT AVAILABLE: ' + (notAvail || 'N/A') + '\n' +
-    '\n' +
-    '=====================================\n' +
-    'Submitted via Wirez R Us Work Order Form — ' + new Date().toLocaleDateString('en-AU')
-  );
-
-  window.location.href = 'mailto:e35a378a68a971a219eb@cloudmailin.net?subject=' + subject + '&body=' + body;
+  // Try window.open first (more reliable than location.href for mailto)
+  var opened = window.open(mailtoUrl, '_self');
+  // Show fallback after 800ms if nothing happened (mailto silently failed)
+  setTimeout(function() {
+    showFallback(d.subject, d.body);
+  }, 800);
 }
 function forwardForm() {
   var subject = encodeURIComponent('Wirez R Us — Work Order Request Form');
