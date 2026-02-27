@@ -73,6 +73,14 @@ export interface Job {
   xeroInvoiceId?: string;
   complianceReportGenerated?: boolean;
 
+  // Payment (Stripe Payment Links for field collection)
+  paymentLinkUrl?: string;
+  paymentLinkId?: string;
+  paymentStatus?: 'pending' | 'paid' | 'failed' | 'refunded';
+  amountDue?: number;
+  paidAt?: string;
+  paymentIntentId?: string;
+
   // Email source data (when job created from inbound email)
   source?: string;
   extractionMethod?: string;

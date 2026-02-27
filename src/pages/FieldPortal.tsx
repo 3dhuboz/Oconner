@@ -631,6 +631,94 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
                 <CheckCircle2 className="w-5 h-5" /> Job submitted for Admin Review
               </div>
             )}
+
+            {/* ════════ PAYMENT COLLECTION ════════ */}
+            {['REVIEW', 'CLOSED'].includes(job.status) && job.paymentLinkUrl && (
+              <div className="bg-gradient-to-br from-emerald-50 to-teal-50 border-2 border-emerald-200 rounded-2xl p-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                    💳 Collect Payment
+                  </h3>
+                  <span className={cn(
+                    'px-3 py-1.5 rounded-full text-xs font-bold',
+                    job.paymentStatus === 'paid' ? 'bg-emerald-600 text-white' :
+                    job.paymentStatus === 'failed' ? 'bg-red-100 text-red-700' :
+                    'bg-amber-100 text-amber-700'
+                  )}>
+                    {job.paymentStatus === 'paid' ? '✓ PAID' :
+                     job.paymentStatus === 'failed' ? '✗ FAILED' :
+                     '⏳ PENDING'}
+                  </span>
+                </div>
+
+                {job.paymentStatus !== 'paid' && (
+                  <>
+                    {job.amountDue && (
+                      <div className="text-center py-3 bg-white/60 rounded-xl border border-emerald-200">
+                        <div className="text-4xl font-black text-slate-900">${job.amountDue.toFixed(2)}</div>
+                        <div className="text-sm text-slate-600 font-medium mt-1">Amount Due</div>
+                      </div>
+                    )}
+
+                    <div className="bg-white rounded-xl p-4 border border-emerald-200 space-y-3">
+                      <p className="text-sm text-slate-600 text-center font-medium">
+                        Show this QR code to the customer to pay with their phone
+                      </p>
+                      
+                      {/* QR Code */}
+                      <div className="flex justify-center">
+                        <img 
+                          src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(job.paymentLinkUrl)}`}
+                          alt="Payment QR Code"
+                          className="w-48 h-48 border-4 border-slate-900 rounded-xl"
+                        />
+                      </div>
+
+                      <div className="text-xs text-slate-500 text-center space-y-1">
+                        <p>Customer can tap their phone to the QR code</p>
+                        <p className="font-semibold">or</p>
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          window.open(job.paymentLinkUrl, '_blank');
+                        }}
+                        className="w-full px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-2"
+                      >
+                        📱 Open Payment Page
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(job.paymentLinkUrl!);
+                          alert('Payment link copied! You can now send it to the customer via SMS or email.');
+                        }}
+                        className="w-full px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-semibold text-sm transition-colors"
+                      >
+                        📋 Copy Payment Link
+                      </button>
+                    </div>
+
+                    <div className="text-xs text-slate-500 text-center leading-relaxed bg-white/40 rounded-lg p-3 border border-emerald-100">
+                      💡 <strong>Tip:</strong> Customer can pay with Apple Pay, Google Pay, or any credit/debit card. Payment is instant and secure via Stripe.
+                    </div>
+                  </>
+                )}
+
+                {job.paymentStatus === 'paid' && job.paidAt && (
+                  <div className="text-center py-6 bg-white/60 rounded-xl border border-emerald-200">
+                    <div className="text-5xl mb-3">✅</div>
+                    <div className="text-lg font-bold text-emerald-900">Payment Received!</div>
+                    <div className="text-sm text-slate-600 mt-2">
+                      Paid on {new Date(job.paidAt).toLocaleString('en-AU', { 
+                        dateStyle: 'medium', 
+                        timeStyle: 'short' 
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>

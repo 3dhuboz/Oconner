@@ -39,6 +39,7 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
   const [resendingSms, setResendingSms] = useState(false);
   const [editingTenant, setEditingTenant] = useState(false);
   const [showAvailability, setShowAvailability] = useState(false);
+  const [generatingPaymentLink, setGeneratingPaymentLink] = useState(false);
   const isAdmin = user?.role === 'admin' || user?.role === 'dev';
 
   if (!job) {
@@ -260,6 +261,51 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
       toast.error(`Xero sync failed: ${error.message}`);
     } finally {
       setIsSyncingXero(false);
+    }
+  };
+
+  const handleGeneratePaymentLink = async () => {
+    setGeneratingPaymentLink(true);
+    try {
+      // Calculate total from materials + labor
+      const materialsCost = job.materials.reduce((sum, m) => sum + (m.cost * m.quantity), 0);
+      const laborCost = (job.laborHours || 0) * 120; // $120/hr default rate
+      const total = materialsCost + laborCost;
+
+      if (total <= 0) {
+        toast.error('Cannot generate payment link - no charges recorded');
+        return;
+      }
+
+      const response = await fetch('/api/stripe/create-payment-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jobId: job.id,
+          amount: total,
+          description: `${job.title} - ${job.propertyAddress}`,
+          customerEmail: job.tenantEmail || undefined,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to create payment link');
+      }
+
+      updateJob(job.id, {
+        paymentLinkUrl: data.paymentLinkUrl,
+        paymentLinkId: data.paymentLinkId,
+        paymentStatus: 'pending',
+        amountDue: total,
+      });
+
+      toast.success('Payment link generated! Tech can now collect payment on-site.');
+    } catch (error: any) {
+      toast.error(`Payment link failed: ${error.message}`);
+    } finally {
+      setGeneratingPaymentLink(false);
     }
   };
 
@@ -1148,6 +1194,99 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
                       <FileText className="w-4 h-4" />
                       {job.complianceReportGenerated ? 'Report Generated' : 'Generate Compliance Report'}
                     </button>
+                  )}
+
+                  {/* Payment Link Generation */}
+                  {job.xeroInvoiceId && (
+                    <div className="mt-4 pt-4 border-t border-slate-200">
+                      <button
+                        onClick={handleGeneratePaymentLink}
+                        disabled={!!job.paymentLinkUrl || generatingPaymentLink}
+                        className="w-full px-4 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-500 text-white rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                      >
+                        {generatingPaymentLink ? <Loader2 className="w-4 h-4 animate-spin" /> : <DollarSign className="w-4 h-4" />}
+                        {job.paymentLinkUrl ? 'Payment Link Generated' : 'Generate Payment Link for Tech'}
+                      </button>
+
+                      {job.paymentLinkUrl && (
+                        <div className="mt-3 p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Payment Status</span>
+                            <span className={cn(
+                              'px-2.5 py-1 rounded-full text-xs font-bold',
+                              job.paymentStatus === 'paid' ? 'bg-emerald-100 text-emerald-700' :
+                              job.paymentStatus === 'failed' ? 'bg-red-100 text-red-700' :
+                              'bg-amber-100 text-amber-700'
+                            )}>
+                              {job.paymentStatus === 'paid' ? '✓ Paid' :
+                               job.paymentStatus === 'failed' ? '✗ Failed' :
+                               '⏳ Pending'}
+                            </span>
+                          </div>
+                          {job.amountDue && (
+                            <div className="text-center">
+                              <div className="text-2xl font-bold text-slate-900">${job.amountDue.toFixed(2)}</div>
+                              <div className="text-xs text-slate-500">Amount Due</div>
+                            </div>
+                          )}
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                value={job.paymentLinkUrl}
+                                readOnly
+                                className="flex-1 px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg font-mono"
+                              />
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(job.paymentLinkUrl!);
+                                  toast.success('Payment link copied!');
+                                }}
+                                className="px-3 py-2 bg-slate-900 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold transition-colors"
+                              >
+                                Copy
+                              </button>
+                            </div>
+                            <button
+                              onClick={async () => {
+                                const elec = electricians.find(e => e.id === job.assignedElectricianId);
+                                if (!elec?.phone) {
+                                  toast.error('No phone number for assigned tech');
+                                  return;
+                                }
+                                try {
+                                  const res = await fetch('/api/sms/send', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                      to: elec.phone,
+                                      message: `Payment link ready for job ${job.id} at ${job.propertyAddress}. Amount: $${job.amountDue?.toFixed(2)}. Link: ${job.paymentLinkUrl}`,
+                                    }),
+                                  });
+                                  if (res.ok) {
+                                    toast.success(`Payment link sent to ${elec.name}`);
+                                  } else {
+                                    throw new Error('SMS failed');
+                                  }
+                                } catch (e) {
+                                  toast.error('Failed to send SMS');
+                                }
+                              }}
+                              disabled={!job.assignedElectricianId}
+                              className="w-full px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 text-white rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-2"
+                            >
+                              <Send className="w-3 h-3" />
+                              Send Link to Tech via SMS
+                            </button>
+                          </div>
+                          {job.paidAt && (
+                            <div className="text-xs text-emerald-600 text-center pt-2 border-t border-slate-200">
+                              Paid on {new Date(job.paidAt).toLocaleString('en-AU')}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
               )}
