@@ -79,8 +79,8 @@ export function Dashboard({ jobs, electricians }: DashboardProps) {
         <div className="flex gap-2">
           <button
             onClick={() => {
-              const w = 280;
-              const h = 500;
+              const w = 320;
+              const h = 600;
               const left = window.screen.availWidth - w - 20;
               const top = window.screen.availHeight - h - 80;
               const features = [
