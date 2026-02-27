@@ -527,70 +527,323 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
                 </div>
               )}
 
-              {/* Email Template Download — always visible to admin */}
+              {/* Service Request Form Download — always visible to admin */}
               {isAdmin && (
                 <div>
-                  <h3 className="text-sm font-medium text-slate-500 mb-2">Property Manager Email Template</h3>
+                  <h3 className="text-sm font-medium text-slate-500 mb-2">Service Request Form</h3>
                   <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 space-y-2">
-                    <p className="text-xs text-emerald-700">Download a pre-filled template to send to property managers so jobs come through correctly.</p>
+                    <p className="text-xs text-emerald-700">Download a printable tick-and-flick form to give or email to property managers.</p>
                     <button
                       onClick={() => {
-                        const template = `Subject: Maintenance Job Request — ${job.propertyAddress || '[PROPERTY ADDRESS]'}
+                        const addr = job.propertyAddress || '';
+                        const tenantName = job.tenantName || '';
+                        const tenantPhone = job.tenantPhone || '';
+                        const tenantEmail = job.tenantEmail || '';
+                        const pmEmail = job.propertyManagerEmail || '';
+                        const today = new Date().toLocaleDateString('en-AU');
+                        const jobRef = job.id;
 
-Hi Wirez R Us,
+                        const checked = (val: boolean) => val ? '&#10003;' : '';
+                        const isElec = job.type === 'ELECTRICAL';
+                        const isSmoke = job.type === 'SMOKE_ALARM';
+                        const isEmerg = job.type === 'EMERGENCY';
+                        const isMaint = job.type === 'MAINTENANCE';
+                        const isInsp = job.type === 'INSPECTION';
+                        const isRoutine = job.urgency === 'Routine' || (!job.urgency && !isEmerg);
+                        const isUrgent = job.urgency === 'Urgent';
+                        const isEmergency = job.urgency === 'Emergency' || isEmerg;
 
-Please find below the details for a maintenance job request.
+                        const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Service Request Form — Wirez R Us</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 13px; color: #1e293b; background: #fff; }
+  .page { max-width: 210mm; margin: 0 auto; padding: 12mm 14mm; }
+  .header { display: flex; align-items: center; justify-content: space-between; border-bottom: 3px solid #0f172a; padding-bottom: 10px; margin-bottom: 16px; }
+  .brand { font-size: 22px; font-weight: 900; letter-spacing: -0.5px; color: #0f172a; }
+  .brand span { color: #f59e0b; }
+  .header-meta { text-align: right; font-size: 11px; color: #64748b; line-height: 1.6; }
+  .badge { display: inline-block; background: #0f172a; color: #fff; font-size: 10px; font-weight: bold; padding: 3px 10px; border-radius: 20px; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 14px; }
+  h2 { font-size: 15px; font-weight: 800; color: #0f172a; margin-bottom: 10px; border-left: 4px solid #f59e0b; padding-left: 8px; }
+  .section { margin-bottom: 18px; }
+  .field-row { display: flex; gap: 12px; margin-bottom: 8px; }
+  .field { flex: 1; }
+  .field label { display: block; font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px; }
+  .field .line { border-bottom: 1.5px solid #cbd5e1; min-height: 22px; padding-bottom: 2px; font-size: 13px; color: #0f172a; }
+  .field .line.prefilled { color: #1e293b; font-weight: 600; }
+  .check-group { display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 4px; }
+  .check-item { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+  .box { width: 16px; height: 16px; border: 2px solid #334155; border-radius: 3px; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; font-weight: bold; color: #0f172a; flex-shrink: 0; }
+  .box.checked { background: #0f172a; color: #fff; border-color: #0f172a; }
+  .textarea-field { border: 1.5px solid #cbd5e1; border-radius: 6px; min-height: 70px; padding: 8px; font-size: 13px; width: 100%; color: #0f172a; background: #f8fafc; }
+  .access-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .avail-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .avail-item { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+  .sig-row { display: flex; gap: 16px; margin-top: 6px; }
+  .sig-block { flex: 1; }
+  .sig-line { border-bottom: 1.5px solid #334155; height: 36px; margin-bottom: 4px; }
+  .footer { margin-top: 20px; border-top: 1px solid #e2e8f0; padding-top: 8px; display: flex; justify-content: space-between; align-items: center; }
+  .footer-text { font-size: 9px; color: #94a3b8; }
+  .important { background: #fef9c3; border: 1px solid #fbbf24; border-radius: 6px; padding: 8px 12px; font-size: 11px; color: #92400e; margin-bottom: 16px; }
+  @media print {
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .page { padding: 8mm 10mm; }
+    .no-print { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-JOB REQUEST — PLEASE FILL IN ALL FIELDS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  <!-- Header -->
+  <div class="header">
+    <div>
+      <div class="brand">WIREZ<span> R US</span></div>
+      <div style="font-size:11px;color:#64748b;margin-top:2px;">Licensed Electrical Contractors</div>
+    </div>
+    <div class="header-meta">
+      <strong>SERVICE REQUEST FORM</strong><br/>
+      Date: ${today}<br/>
+      Ref: ${jobRef ? jobRef : '______________'}
+    </div>
+  </div>
 
-PROPERTY ADDRESS: ${job.propertyAddress || '[e.g. 12 Smith Street, Brisbane QLD 4000]'}
+  <div class="important">
+    &#9888; Please complete <strong>ALL</strong> fields and tick where applicable. Incomplete forms will delay scheduling.
+    Return by email to: <strong>jobs@wireznrus.com.au</strong>
+  </div>
 
-TENANT NAME: ${job.tenantName || '[Full name of tenant]'}
-TENANT PHONE: ${job.tenantPhone || '[e.g. 0412 345 678]'}
-TENANT EMAIL: ${job.tenantEmail || '[e.g. tenant@email.com]'}
+  <!-- Section 1: Property Details -->
+  <div class="section">
+    <h2>1. Property Details</h2>
+    <div class="field-row">
+      <div class="field" style="flex:2">
+        <label>Property Address</label>
+        <div class="line ${addr ? 'prefilled' : ''}">${addr || ''}</div>
+      </div>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>Suburb</label>
+        <div class="line"></div>
+      </div>
+      <div class="field" style="flex:0.4">
+        <label>State</label>
+        <div class="line"></div>
+      </div>
+      <div class="field" style="flex:0.6">
+        <label>Postcode</label>
+        <div class="line"></div>
+      </div>
+    </div>
+  </div>
 
-PROPERTY MANAGER NAME: [Your full name]
-PROPERTY MANAGER EMAIL: ${job.propertyManagerEmail || '[Your email address]'}
-PROPERTY MANAGER PHONE: [Your phone number]
-AGENCY: [Agency name]
+  <!-- Section 2: Tenant Details -->
+  <div class="section">
+    <h2>2. Tenant / Occupant Details</h2>
+    <div class="field-row">
+      <div class="field">
+        <label>Full Name</label>
+        <div class="line ${tenantName ? 'prefilled' : ''}">${tenantName || ''}</div>
+      </div>
+      <div class="field">
+        <label>Phone</label>
+        <div class="line ${tenantPhone ? 'prefilled' : ''}">${tenantPhone || ''}</div>
+      </div>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>Email</label>
+        <div class="line ${tenantEmail ? 'prefilled' : ''}">${tenantEmail || ''}</div>
+      </div>
+      <div class="field">
+        <label>Best time to contact</label>
+        <div class="line"></div>
+      </div>
+    </div>
+    <div style="margin-top:6px">
+      <label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Tenant home during work?</label>
+      <div class="check-group" style="margin-top:4px">
+        <div class="check-item"><div class="box"></div> Yes</div>
+        <div class="check-item"><div class="box"></div> No</div>
+        <div class="check-item"><div class="box"></div> Key/access provided</div>
+      </div>
+    </div>
+  </div>
 
-JOB TYPE: [Choose one: Electrical / Smoke Alarm / Emergency / Maintenance / Inspection]
+  <!-- Section 3: Property Manager -->
+  <div class="section">
+    <h2>3. Property Manager / Agency Details</h2>
+    <div class="field-row">
+      <div class="field">
+        <label>Contact Name</label>
+        <div class="line"></div>
+      </div>
+      <div class="field">
+        <label>Agency Name</label>
+        <div class="line"></div>
+      </div>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>Email</label>
+        <div class="line ${pmEmail ? 'prefilled' : ''}">${pmEmail || ''}</div>
+      </div>
+      <div class="field">
+        <label>Phone</label>
+        <div class="line"></div>
+      </div>
+    </div>
+  </div>
 
-DESCRIPTION OF ISSUE:
-[Please describe the issue in as much detail as possible. Include when it started, any hazards observed, and any relevant history.]
+  <!-- Section 4: Job Type -->
+  <div class="section">
+    <h2>4. Type of Work Required <span style="font-size:11px;font-weight:400;color:#64748b;">(tick all that apply)</span></h2>
+    <div class="check-group">
+      <div class="check-item"><div class="box ${isElec ? 'checked' : ''}">${checked(isElec)}</div> Electrical Fault / Repair</div>
+      <div class="check-item"><div class="box ${isSmoke ? 'checked' : ''}">${checked(isSmoke)}</div> Smoke Alarm Service</div>
+      <div class="check-item"><div class="box ${isEmerg ? 'checked' : ''}">${checked(isEmerg)}</div> Emergency Call-out</div>
+      <div class="check-item"><div class="box ${isMaint ? 'checked' : ''}">${checked(isMaint)}</div> General Maintenance</div>
+      <div class="check-item"><div class="box ${isInsp ? 'checked' : ''}">${checked(isInsp)}</div> Safety Inspection</div>
+      <div class="check-item"><div class="box"></div> Other: ___________________</div>
+    </div>
+  </div>
 
-URGENCY: [Choose one: Routine / Urgent / Emergency]
+  <!-- Section 5: Urgency -->
+  <div class="section">
+    <h2>5. Urgency Level</h2>
+    <div class="check-group">
+      <div class="check-item"><div class="box ${isRoutine ? 'checked' : ''}">${checked(isRoutine)}</div> <span><strong>Routine</strong> — within 5–7 business days</span></div>
+      <div class="check-item"><div class="box ${isUrgent ? 'checked' : ''}">${checked(isUrgent)}</div> <span><strong>Urgent</strong> — within 24–48 hours</span></div>
+      <div class="check-item"><div class="box ${isEmergency ? 'checked' : ''}">${checked(isEmergency)}</div> <span><strong>Emergency</strong> — immediate response required</span></div>
+    </div>
+  </div>
 
-ACCESS INSTRUCTIONS:
-[e.g. Key in lockbox, code 1234. Tenant available Mon–Fri 9am–5pm. Do not attend before 9am.]
+  <!-- Section 6: Description -->
+  <div class="section">
+    <h2>6. Description of Issue</h2>
+    <div class="textarea-field">${job.description ? job.description.substring(0, 300) : ''}</div>
+    <div style="margin-top:10px">
+      <label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Hazards present?</label>
+      <div class="check-group" style="margin-top:4px">
+        <div class="check-item"><div class="box"></div> Exposed wiring</div>
+        <div class="check-item"><div class="box"></div> Burning smell / scorch marks</div>
+        <div class="check-item"><div class="box"></div> Tripped circuit breaker</div>
+        <div class="check-item"><div class="box"></div> Water near electrical</div>
+        <div class="check-item"><div class="box"></div> Smoke alarm beeping</div>
+        <div class="check-item"><div class="box"></div> No power to property</div>
+        <div class="check-item"><div class="box"></div> None</div>
+      </div>
+    </div>
+  </div>
 
-PREFERRED DATE/TIME:
-[e.g. Any weekday morning, or specifically Tuesday 3 March after 10am]
+  <!-- Section 7: Access -->
+  <div class="section">
+    <h2>7. Access Instructions</h2>
+    <div class="field-row">
+      <div class="field" style="flex:2">
+        <label>Key / Lockbox / Access Code Details</label>
+        <div class="line">${job.accessCodes || ''}</div>
+      </div>
+    </div>
+    <div style="margin-top:8px">
+      <label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Access type</label>
+      <div class="check-group" style="margin-top:4px">
+        <div class="check-item"><div class="box"></div> Lockbox on site</div>
+        <div class="check-item"><div class="box"></div> Key at agency</div>
+        <div class="check-item"><div class="box"></div> Tenant to provide access</div>
+        <div class="check-item"><div class="box"></div> Agent to attend</div>
+      </div>
+    </div>
+  </div>
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-IMPORTANT: Please ensure ALL fields above are filled in before sending.
-Incomplete requests will cause delays in scheduling.
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  <!-- Section 8: Availability -->
+  <div class="section">
+    <h2>8. Preferred Attendance Time</h2>
+    <div class="avail-grid">
+      <div class="avail-item"><div class="box"></div> Mon AM</div>
+      <div class="avail-item"><div class="box"></div> Mon PM</div>
+      <div class="avail-item"><div class="box"></div> Mon Anytime</div>
+      <div class="avail-item"><div class="box"></div> Tue AM</div>
+      <div class="avail-item"><div class="box"></div> Tue PM</div>
+      <div class="avail-item"><div class="box"></div> Tue Anytime</div>
+      <div class="avail-item"><div class="box"></div> Wed AM</div>
+      <div class="avail-item"><div class="box"></div> Wed PM</div>
+      <div class="avail-item"><div class="box"></div> Wed Anytime</div>
+      <div class="avail-item"><div class="box"></div> Thu AM</div>
+      <div class="avail-item"><div class="box"></div> Thu PM</div>
+      <div class="avail-item"><div class="box"></div> Thu Anytime</div>
+      <div class="avail-item"><div class="box"></div> Fri AM</div>
+      <div class="avail-item"><div class="box"></div> Fri PM</div>
+      <div class="avail-item"><div class="box"></div> Fri Anytime</div>
+    </div>
+    <div class="field-row" style="margin-top:10px">
+      <div class="field">
+        <label>Specific preferred date (if any)</label>
+        <div class="line">${job.scheduledDate ? new Date(job.scheduledDate).toLocaleDateString('en-AU') : ''}</div>
+      </div>
+      <div class="field">
+        <label>Dates / times NOT available</label>
+        <div class="line"></div>
+      </div>
+    </div>
+  </div>
 
-Thank you,
-[Your name]
-[Agency name]
-[Phone]
-`;
-                        const blob = new Blob([template], { type: 'text/plain' });
+  <!-- Section 9: Declaration -->
+  <div class="section">
+    <h2>9. Declaration</h2>
+    <p style="font-size:11px;color:#475569;margin-bottom:10px;line-height:1.5;">
+      I confirm that the information provided is accurate and that I am authorised to request the above works on behalf of the property owner / occupant.
+      I understand that a call-out fee may apply for emergency attendance outside business hours.
+    </p>
+    <div class="sig-row">
+      <div class="sig-block">
+        <div class="sig-line"></div>
+        <div style="font-size:10px;color:#64748b;">Signature</div>
+      </div>
+      <div class="sig-block">
+        <div class="sig-line"></div>
+        <div style="font-size:10px;color:#64748b;">Printed Name</div>
+      </div>
+      <div class="sig-block" style="flex:0.6">
+        <div class="sig-line"></div>
+        <div style="font-size:10px;color:#64748b;">Date</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div class="footer-text">Wirez R Us Electrical Services &bull; Licensed Electrical Contractors &bull; jobs@wireznrus.com.au</div>
+    <div class="footer-text">Form version 1.0 &bull; Generated ${today}</div>
+  </div>
+
+  <!-- Print button (hidden when printing) -->
+  <div class="no-print" style="text-align:center;margin-top:20px">
+    <button onclick="window.print()" style="padding:10px 28px;background:#0f172a;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;">
+      &#128438; Print / Save as PDF
+    </button>
+  </div>
+
+</div>
+</body>
+</html>`;
+
+                        const blob = new Blob([html], { type: 'text/html' });
                         const url = URL.createObjectURL(blob);
                         const a = document.createElement('a');
                         a.href = url;
-                        a.download = `job_request_template_${(job.propertyAddress || 'property').replace(/[^a-z0-9]/gi, '_').toLowerCase()}.txt`;
+                        a.download = `service_request_${(job.propertyAddress || 'form').replace(/[^a-z0-9]/gi, '_').toLowerCase()}.html`;
                         a.click();
                         URL.revokeObjectURL(url);
                       }}
                       className="w-full px-3 py-2 bg-white hover:bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-1.5"
                     >
                       <Download className="w-3.5 h-3.5" />
-                      Download Email Template
+                      Download Service Request Form
                     </button>
                   </div>
                 </div>
