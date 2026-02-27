@@ -19,11 +19,11 @@ function toFirestoreValue(val: any): any {
 function extractWithRegex(text: string, senderEmail: string) {
   // Australian phone numbers: 04xx, (0x) xxxx, +61, landline patterns
   const phonePatterns = [
-    /(?:\+?61|0)[2-478](?:[\s-]?\d){8}/g,              // AU mobile & landline
-    /(?:\+?61|0)4\d{2}[\s-]?\d{3}[\s-]?\d{3}/g,         // 04xx xxx xxx
-    /\(0[2-9]\)\s?\d{4}\s?\d{4}/g,                       // (0x) xxxx xxxx
-    /\b\d{4}[\s-]\d{3}[\s-]\d{3}\b/g,                    // xxxx xxx xxx
-    /\b1[38]00[\s-]?\d{3}[\s-]?\d{3}\b/g,                // 1300/1800
+    /(?:\+?61|0)[2-478](?:[\s-]?\d){8}/g,
+    /(?:\+?61|0)4\d{2}[\s-]?\d{3}[\s-]?\d{3}/g,
+    /\(0[2-9]\)\s?\d{4}\s?\d{4}/g,
+    /\b\d{4}[\s-]\d{3}[\s-]\d{3}\b/g,
+    /\b1[38]00[\s-]?\d{3}[\s-]?\d{3}\b/g,
   ];
 
   // Email addresses (exclude the sender)
@@ -35,11 +35,31 @@ function extractWithRegex(text: string, senderEmail: string) {
     /(?:Unit|Apt|Lot|Suite)\s*\d+[,\/\s]+\d+\s+[A-Za-z\s]+(?:St|Street|Rd|Road|Ave|Avenue|Dr|Drive)\b[^,\n]*\d{4}/gi,
   ];
 
-  // Labelled field patterns (NAME: xxx, PHONE: xxx, etc.)
-  const labelledName = text.match(/(?:tenant|name|resident|occupant|contact)\s*[:=]\s*([^\n,]{2,40})/i);
-  const labelledPhone = text.match(/(?:phone|mobile|cell|tel|contact\s*(?:number|no|#))\s*[:=]\s*([^\n,]{6,20})/i);
-  const labelledAddress = text.match(/(?:address|property|location|site|unit)\s*[:=]\s*([^\n]{5,80})/i);
-  const labelledEmail = text.match(/(?:email|e-mail)\s*[:=]\s*([^\n\s]{5,60})/i);
+  // ── Exact-label patterns matching the work order form output ──
+  // Form sends lines like: "PROPERTY ADDRESS: 123 Main St"
+  const label = (pattern: string) =>
+    new RegExp(`^[ \\t]*${pattern}[ \\t]*:[ \\t]*(.+)$`, 'im');
+
+  const labelledAddress   = text.match(label('PROPERTY\\s+ADDRESS'))
+                         || text.match(label('PROPERTY'))
+                         || text.match(label('ADDRESS'));
+  const labelledTenantName = text.match(label('TENANT\\s+(?:FULL\\s+)?NAME'))
+                          || text.match(label('TENANT'));
+  const labelledTenantPhone = text.match(label('TENANT\\s+PHONE'))
+                           || text.match(label('PHONE|MOBILE|TEL'));
+  const labelledTenantEmail = text.match(label('TENANT\\s+EMAIL'))
+                           || text.match(label('EMAIL|E-MAIL'));
+  const labelledPMName    = text.match(label('PROPERTY\\s+MANAGER(?:\\s+NAME)?'));
+  const labelledPMEmail   = text.match(label('PROPERTY\\s+MANAGER\\s+EMAIL'));
+  const labelledAgency    = text.match(label('AGENCY'));
+  const labelledJobType   = text.match(label('JOB\\s+TYPE'));
+  const labelledUrgency   = text.match(label('URGENCY'));
+  const labelledAccess    = text.match(label('ACCESS\\s+(?:INSTRUCTIONS?|TYPE|CODE|DETAILS?)'));
+  const labelledPrefDate  = text.match(label('PREFERRED\\s+DATE(?:\\/TIME)?'));
+  const labelledNotAvail  = text.match(label('NOT\\s+AVAILABLE'));
+
+  // Multi-line description: grab everything after "DESCRIPTION OF ISSUE:" until the next ALL-CAPS label or separator
+  const descMatch = text.match(/DESCRIPTION\s+OF\s+ISSUE\s*:\s*\n([\s\S]*?)(?=\n[A-Z\s]{4,}:|={4,}|$)/i);
 
   // Extract phones
   let phones: string[] = [];
@@ -63,10 +83,19 @@ function extractWithRegex(text: string, senderEmail: string) {
   addresses = [...new Set(addresses.map(a => a.trim()))];
 
   return {
-    tenantName: labelledName?.[1]?.trim() || '',
-    tenantPhone: labelledPhone?.[1]?.trim() || phones[0] || '',
-    tenantEmail: labelledEmail?.[1]?.trim() || emails[0] || '',
+    tenantName:    labelledTenantName?.[1]?.trim() || '',
+    tenantPhone:   labelledTenantPhone?.[1]?.trim() || phones[0] || '',
+    tenantEmail:   labelledTenantEmail?.[1]?.trim() || emails[0] || '',
     propertyAddress: labelledAddress?.[1]?.trim() || addresses[0] || '',
+    pmName:        labelledPMName?.[1]?.trim() || '',
+    pmEmail:       labelledPMEmail?.[1]?.trim() || '',
+    agency:        labelledAgency?.[1]?.trim() || '',
+    jobTypeLabel:  labelledJobType?.[1]?.trim() || '',
+    urgencyLabel:  labelledUrgency?.[1]?.trim() || '',
+    accessInstructions: labelledAccess?.[1]?.trim() || '',
+    preferredDate: labelledPrefDate?.[1]?.trim() || '',
+    notAvailable:  labelledNotAvail?.[1]?.trim() || '',
+    description:   descMatch?.[1]?.trim() || '',
     allPhones: phones,
     allEmails: emails,
     allAddresses: addresses,
@@ -193,39 +222,75 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const ai = await extractWithAI(emailContent, subject, from);
     if (ai) console.log('[CloudMailin] AI extracted:', JSON.stringify(ai, null, 2));
 
-    // ── Step 3: Merge — regex wins for phone/email, AI wins for name/address/issue ──
-    const tenantName = regex.tenantName || ai?.tenantName || '';
-    const tenantPhone = regex.tenantPhone || ai?.tenantPhone || '';
-    const tenantEmail = regex.tenantEmail || ai?.tenantEmail || '';
+    // ── Step 3: Merge — regex label wins first, then AI fills gaps ──
+    const tenantName      = regex.tenantName      || ai?.tenantName      || '';
+    const tenantPhone     = regex.tenantPhone     || ai?.tenantPhone     || '';
+    const tenantEmail     = regex.tenantEmail     || ai?.tenantEmail     || '';
     const propertyAddress = regex.propertyAddress || ai?.propertyAddress || '';
-    const jobType = ai?.jobType || classifyJobType(combined);
-    const urgency = ai?.urgency || classifyUrgency(combined);
-    const issueDescription = ai?.issueDescription || '';
+    const pmEmail         = regex.pmEmail         || '';
+    const pmName          = regex.pmName          || '';
+    const agency          = regex.agency          || '';
+    const accessInstructions = regex.accessInstructions || '';
+    const preferredDate   = regex.preferredDate   || '';
+    const notAvailable    = regex.notAvailable    || '';
+
+    // Urgency: labelled field wins, then AI, then keyword-classify
+    const urgencyRaw = regex.urgencyLabel || ai?.urgency || classifyUrgency(combined);
+    const urgency = /emergency/i.test(urgencyRaw) ? 'URGENT'
+                  : /urgent/i.test(urgencyRaw)    ? 'URGENT'
+                  : /high/i.test(urgencyRaw)      ? 'HIGH'
+                  : /low|routine/i.test(urgencyRaw) ? 'LOW'
+                  : 'NORMAL';
+
+    // Job type: labelled field wins, then AI, then keyword-classify
+    const jobTypeRaw = regex.jobTypeLabel || ai?.jobType || '';
+    const jobType = jobTypeRaw
+      ? (/smoke/i.test(jobTypeRaw) ? 'SMOKE_ALARM'
+       : /install/i.test(jobTypeRaw) ? 'INSTALLATION'
+       : 'GENERAL_REPAIR')
+      : classifyJobType(combined);
+
+    // Description: labelled field wins, then AI summary, then fallback
+    const issueDescription = regex.description || ai?.issueDescription || '';
 
     const extractionMethod = ai ? 'regex + AI' : 'regex only';
 
+    // Build a useful title: prefer "Job Type — Address" over raw subject
+    const titleAddress = propertyAddress ? propertyAddress.split(',')[0] : '';
+    const titleType = jobTypeRaw
+      ? jobTypeRaw.replace(/Electrical Fault \/ Repair/i, 'Electrical Fault')
+      : jobType.replace(/_/g, ' ');
+    const jobTitle = titleAddress
+      ? `${titleType} — ${titleAddress}`
+      : subject || 'New Work Order from Email';
+
     const newJob = {
-      title: subject || 'New Work Order from Email',
+      title: jobTitle,
       type: jobType,
       status: 'INTAKE',
-      urgency: urgency,
+      urgency,
       createdAt: now.toISOString(),
-      tenantName: tenantName || 'See email body',
-      tenantPhone: tenantPhone || 'TBD',
-      tenantEmail: tenantEmail || 'TBD',
-      propertyAddress: propertyAddress || 'See email body',
-      propertyManagerEmail: from,
+      tenantName:           tenantName    || 'See email body',
+      tenantPhone:          tenantPhone   || '',
+      tenantEmail:          tenantEmail   || '',
+      propertyAddress:      propertyAddress || 'See email body',
+      propertyManagerEmail: pmEmail || from,
+      accessCodes:          accessInstructions || undefined,
       contactAttempts: [],
       materials: [],
       photos: [],
-      siteNotes: '',
-      description: `WORK ORDER — Auto-generated from inbound email\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nDate Created: ${now.toLocaleDateString('en-AU', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}\nTime: ${now.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}\n\nFROM: ${from}\nSUBJECT: ${subject}\nTENANT: ${tenantName || 'Not identified'}\nPHONE: ${tenantPhone || 'Not found'}\nEMAIL: ${tenantEmail || 'Not found'}\nPROPERTY: ${propertyAddress || 'Not found'}\nURGENCY: ${urgency}\nTYPE: ${jobType}\n\n${issueDescription ? `ISSUE SUMMARY:\n${issueDescription}\n\n` : ''}ORIGINAL EMAIL:\n${emailContent}\n\nEXTRACTION: ${extractionMethod}\nSOURCE: CloudMailin Inbound Email`,
+      siteNotes: preferredDate
+        ? `Preferred attendance: ${preferredDate}${notAvailable ? `\nNot available: ${notAvailable}` : ''}`
+        : '',
+      description: issueDescription
+        ? `${issueDescription}\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nAuto-generated from inbound email\nFROM: ${from}\nSUBJECT: ${subject}\nAGENCY: ${agency || 'N/A'}\nPM NAME: ${pmName || 'N/A'}\nEXTRACTION: ${extractionMethod}`
+        : `Auto-generated from inbound email\nFROM: ${from}\nSUBJECT: ${subject}\nAGENCY: ${agency || 'N/A'}\nEXTRACTION: ${extractionMethod}`,
       source: 'email',
       extractionMethod,
-      rawEmailFrom: from,
+      rawEmailFrom:    from,
       rawEmailSubject: subject,
-      rawEmailBody: emailContent,
-      rawEmailHtml: html || '',
+      rawEmailBody:    emailContent,
+      rawEmailHtml:    html || '',
     };
 
     // ── Step 4: Authenticate with Firebase ──
