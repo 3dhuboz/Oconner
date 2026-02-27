@@ -26,15 +26,36 @@ This is your **inbound email address** that will receive emails and forward them
 2. Click "Edit" or "Configure"
 3. Set the **Target URL** to:
    ```
-   https://your-app-name.vercel.app/api/email/inbound
+   https://your-app-name.vercel.app/api/webhooks/email
    ```
    Replace `your-app-name` with your actual Vercel deployment URL
+   (Find your URL at: vercel.com/dashboard → your project → the URL shown at the top)
 
 4. Set **Format** to: `JSON (HTTP POST)`
 5. Set **Attachments** to: `Include as base64` (optional)
 6. Click "Save"
 
-## Step 4: Add Email to Environment Variables
+## Step 4: Configure Firebase Admin (Required for jobs to save to database)
+
+The webhook needs Firebase Admin credentials to write jobs to Firestore from the server side.
+
+1. Go to [Firebase Console](https://console.firebase.google.com/)
+2. Click ⚙️ → **Project settings**
+3. Click **Service accounts** tab
+4. Click **Generate new private key** → **Generate key**
+5. A JSON file will download — open it
+6. Copy these values into your `.env`:
+
+```env
+FIREBASE_CLIENT_EMAIL=firebase-adminsdk-xxxxx@your-project.iam.gserviceaccount.com
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMIIE...\n-----END PRIVATE KEY-----\n"
+```
+
+> **Important:** The private key must keep `\n` literally (not real newlines) when pasting into Vercel environment variables.
+
+Also add `VITE_FIREBASE_PROJECT_ID` which is already in your `.env`.
+
+## Step 5: Add Email to Environment Variables
 
 ### Local Development
 
@@ -50,9 +71,11 @@ Replace with your actual CloudMailin email address.
 
 1. Go to your Vercel project settings
 2. Navigate to "Environment Variables"
-3. Add:
-   - **Name**: `VITE_CLOUDMAILIN_EMAIL`
-   - **Value**: `abc123def456@cloudmailin.net`
+3. Add all of these:
+   - `VITE_CLOUDMAILIN_EMAIL` = `abc123def456@cloudmailin.net`
+   - `FIREBASE_CLIENT_EMAIL` = `firebase-adminsdk-xxxxx@your-project.iam.gserviceaccount.com`
+   - `FIREBASE_PRIVATE_KEY` = `-----BEGIN PRIVATE KEY-----\nMIIE...\n-----END PRIVATE KEY-----\n`
+   - `VITE_FIREBASE_PROJECT_ID` = `your-project-id` (already set if Firebase is configured)
 4. Redeploy your application
 
 ## Step 5: Test the Integration
@@ -108,7 +131,7 @@ CloudMailin sends a JSON payload to your webhook:
 }
 ```
 
-Your webhook at `/api/email/inbound` already handles this format.
+Your webhook at `/api/webhooks/email` already handles this format.
 
 ## Troubleshooting
 
