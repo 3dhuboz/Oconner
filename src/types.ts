@@ -73,6 +73,10 @@ export interface Job {
   xeroInvoiceId?: string;
   complianceReportGenerated?: boolean;
 
+  // Billing Configuration (admin-controlled)
+  hourlyRate?: number; // Admin-set rate for this job
+  miscCharges?: Array<{ id: string; description: string; amount: number }>;
+
   // Payment (Stripe Payment Links for field collection)
   paymentLinkUrl?: string;
   paymentLinkId?: string;

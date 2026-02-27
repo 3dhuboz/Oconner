@@ -7,7 +7,7 @@ import { PDFDocument, rgb } from 'pdf-lib';
 import { 
   ArrowLeft, Phone, Mail, FileText, Calendar as CalendarIcon, 
   CheckCircle2, AlertCircle, Camera, Wrench, DollarSign, Send, Loader2, User,
-  Download, Eye, X, MapPin, Trash2, ShieldAlert, Navigation
+  Download, Eye, X, MapPin, Trash2, ShieldAlert, Navigation, Plus
 } from 'lucide-react';
 import { cn } from '../utils';
 import { useAuth } from '../context/AuthContext';
@@ -40,7 +40,18 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
   const [editingTenant, setEditingTenant] = useState(false);
   const [showAvailability, setShowAvailability] = useState(false);
   const [generatingPaymentLink, setGeneratingPaymentLink] = useState(false);
+  const [editingBilling, setEditingBilling] = useState(false);
+  const [billingRate, setBillingRate] = useState<number>(120);
+  const [miscCharges, setMiscCharges] = useState<Array<{ id: string; description: string; amount: number }>>([]);
   const isAdmin = user?.role === 'admin' || user?.role === 'dev';
+
+  // Initialize billing state from job
+  React.useEffect(() => {
+    if (job) {
+      setBillingRate(job.hourlyRate || 120);
+      setMiscCharges(job.miscCharges || []);
+    }
+  }, [job.id]);
 
   if (!job) {
     return <div>Job not found</div>;
@@ -264,19 +275,49 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
     }
   };
 
+  const handleSaveBilling = () => {
+    updateJob(job.id, {
+      hourlyRate: billingRate,
+      miscCharges: miscCharges,
+    });
+    setEditingBilling(false);
+    toast.success('Billing configuration saved');
+  };
+
+  const handleAddMiscCharge = () => {
+    const newCharge = {
+      id: `mc${Date.now()}`,
+      description: '',
+      amount: 0,
+    };
+    setMiscCharges([...miscCharges, newCharge]);
+  };
+
+  const handleUpdateMiscCharge = (id: string, field: 'description' | 'amount', value: string | number) => {
+    setMiscCharges(miscCharges.map(c => c.id === id ? { ...c, [field]: value } : c));
+  };
+
+  const handleRemoveMiscCharge = (id: string) => {
+    setMiscCharges(miscCharges.filter(c => c.id !== id));
+  };
+
+  const calculateTotal = () => {
+    const materialsCost = job.materials.reduce((sum, m) => sum + (m.cost * m.quantity), 0);
+    const laborCost = (job.laborHours || 0) * (job.hourlyRate || billingRate);
+    const miscTotal = (job.miscCharges || miscCharges).reduce((sum, c) => sum + c.amount, 0);
+    return materialsCost + laborCost + miscTotal;
+  };
+
   const handleGeneratePaymentLink = async () => {
+    const total = calculateTotal();
+
+    if (total <= 0) {
+      toast.error('Cannot generate payment link - no charges recorded');
+      return;
+    }
+
     setGeneratingPaymentLink(true);
     try {
-      // Calculate total from materials + labor
-      const materialsCost = job.materials.reduce((sum, m) => sum + (m.cost * m.quantity), 0);
-      const laborCost = (job.laborHours || 0) * 120; // $120/hr default rate
-      const total = materialsCost + laborCost;
-
-      if (total <= 0) {
-        toast.error('Cannot generate payment link - no charges recorded');
-        return;
-      }
-
       const response = await fetch('/api/stripe/create-payment-link', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -285,6 +326,20 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
           amount: total,
           description: `${job.title} - ${job.propertyAddress}`,
           customerEmail: job.tenantEmail || undefined,
+          lineItems: [
+            ...(job.materials.length > 0 ? [{
+              name: 'Materials',
+              amount: job.materials.reduce((sum, m) => sum + (m.cost * m.quantity), 0),
+            }] : []),
+            ...((job.laborHours || 0) > 0 ? [{
+              name: `Labor (${job.laborHours} hrs @ $${job.hourlyRate || billingRate}/hr)`,
+              amount: (job.laborHours || 0) * (job.hourlyRate || billingRate),
+            }] : []),
+            ...(job.miscCharges || miscCharges).map(c => ({
+              name: c.description,
+              amount: c.amount,
+            })),
+          ],
         }),
       });
 
@@ -1194,6 +1249,136 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
                       <FileText className="w-4 h-4" />
                       {job.complianceReportGenerated ? 'Report Generated' : 'Generate Compliance Report'}
                     </button>
+                  )}
+
+                  {/* Billing Configuration */}
+                  {job.xeroInvoiceId && !job.paymentLinkUrl && (
+                    <div className="mt-4 pt-4 border-t border-slate-200 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-sm font-bold text-slate-700">Invoice Configuration</h4>
+                        {!editingBilling ? (
+                          <button
+                            onClick={() => setEditingBilling(true)}
+                            className="text-xs text-blue-600 hover:text-blue-700 font-semibold"
+                          >
+                            Edit Billing
+                          </button>
+                        ) : (
+                          <div className="flex gap-2">
+                            <button
+                              onClick={handleSaveBilling}
+                              className="text-xs px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-semibold"
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={() => {
+                                setBillingRate(job.hourlyRate || 120);
+                                setMiscCharges(job.miscCharges || []);
+                                setEditingBilling(false);
+                              }}
+                              className="text-xs px-3 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-semibold"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="bg-slate-50 rounded-xl p-4 space-y-3 border border-slate-200">
+                        {/* Labor */}
+                        <div className="flex items-center justify-between text-sm">
+                          <div className="flex items-center gap-2">
+                            <span className="text-slate-600">Labor:</span>
+                            <span className="font-medium text-slate-900">{job.laborHours || 0} hrs</span>
+                            {editingBilling ? (
+                              <div className="flex items-center gap-1">
+                                <span className="text-slate-500">@</span>
+                                <span className="text-slate-500">$</span>
+                                <input
+                                  type="number"
+                                  value={billingRate}
+                                  onChange={e => setBillingRate(Number(e.target.value))}
+                                  className="w-20 px-2 py-1 border border-slate-300 rounded text-sm"
+                                  step="10"
+                                />
+                                <span className="text-slate-500">/hr</span>
+                              </div>
+                            ) : (
+                              <span className="text-slate-500">@ ${job.hourlyRate || billingRate}/hr</span>
+                            )}
+                          </div>
+                          <span className="font-bold text-slate-900">${((job.laborHours || 0) * (job.hourlyRate || billingRate)).toFixed(2)}</span>
+                        </div>
+
+                        {/* Materials */}
+                        {job.materials.length > 0 && (
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-slate-600">Materials ({job.materials.length} items)</span>
+                            <span className="font-bold text-slate-900">${job.materials.reduce((sum, m) => sum + (m.cost * m.quantity), 0).toFixed(2)}</span>
+                          </div>
+                        )}
+
+                        {/* Misc Charges */}
+                        {(job.miscCharges || miscCharges).length > 0 && (
+                          <div className="space-y-2">
+                            <div className="text-xs font-bold text-slate-500 uppercase tracking-wide">Additional Charges</div>
+                            {(editingBilling ? miscCharges : (job.miscCharges || [])).map(charge => (
+                              <div key={charge.id} className="flex items-center gap-2">
+                                {editingBilling ? (
+                                  <>
+                                    <input
+                                      type="text"
+                                      value={charge.description}
+                                      onChange={e => handleUpdateMiscCharge(charge.id, 'description', e.target.value)}
+                                      placeholder="Description"
+                                      className="flex-1 px-2 py-1 border border-slate-300 rounded text-sm"
+                                    />
+                                    <div className="flex items-center gap-1">
+                                      <span className="text-slate-500">$</span>
+                                      <input
+                                        type="number"
+                                        value={charge.amount}
+                                        onChange={e => handleUpdateMiscCharge(charge.id, 'amount', Number(e.target.value))}
+                                        className="w-24 px-2 py-1 border border-slate-300 rounded text-sm"
+                                        step="0.01"
+                                      />
+                                    </div>
+                                    <button
+                                      onClick={() => handleRemoveMiscCharge(charge.id)}
+                                      className="p-1 text-red-500 hover:bg-red-50 rounded"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <span className="flex-1 text-sm text-slate-600">{charge.description}</span>
+                                    <span className="font-bold text-slate-900 text-sm">${charge.amount.toFixed(2)}</span>
+                                  </>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {editingBilling && (
+                          <button
+                            onClick={handleAddMiscCharge}
+                            className="w-full px-3 py-2 border-2 border-dashed border-slate-300 hover:border-slate-400 rounded-lg text-sm text-slate-600 hover:text-slate-700 font-medium transition-colors flex items-center justify-center gap-2"
+                          >
+                            <Plus className="w-4 h-4" />
+                            Add Misc Charge
+                          </button>
+                        )}
+
+                        {/* Total */}
+                        <div className="pt-3 border-t border-slate-300 flex items-center justify-between">
+                          <span className="font-bold text-slate-900">Total Invoice</span>
+                          <span className="text-2xl font-black text-slate-900">${calculateTotal().toFixed(2)}</span>
+                        </div>
+                      </div>
+                    </div>
                   )}
 
                   {/* Payment Link Generation */}
