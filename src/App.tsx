@@ -61,15 +61,95 @@ function AppContent() {
     });
   }, [user]);
 
-  // Real-time Firestore sync — also persists to IndexedDB
+  // Real-time Firestore sync — also persists to IndexedDB + new job notifications
+  const knownJobIds = React.useRef<Set<string>>(new Set());
+  const isFirstLoad = React.useRef(true);
+
   useEffect(() => {
     if (!user || !db) return;
+    const isAdmin = user.role === 'admin' || user.role === 'dev';
     const unsubscribe = onSnapshot(
       collection(db, 'jobs'),
       (snapshot) => {
         const jobsData = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Job));
         setJobs(jobsData);
-        offlineJobs.putAll(jobsData); // cache locally
+        offlineJobs.putAll(jobsData);
+
+        // Detect genuinely new jobs (skip initial load)
+        if (isFirstLoad.current) {
+          jobsData.forEach(j => knownJobIds.current.add(j.id));
+          isFirstLoad.current = false;
+          return;
+        }
+
+        if (isAdmin) {
+          snapshot.docChanges().forEach(change => {
+            if (change.type === 'added') {
+              const job = { id: change.doc.id, ...change.doc.data() } as Job;
+              if (knownJobIds.current.has(job.id)) return;
+              knownJobIds.current.add(job.id);
+
+              const isUrgent = ['urgent', 'emergency', 'URGENT', 'EMERGENCY'].some(
+                u => (job.urgency || '').toLowerCase().includes(u.toLowerCase()) ||
+                     (job.title || '').toLowerCase().includes('emergency') ||
+                     (job.title || '').toLowerCase().includes('urgent')
+              );
+
+              if (isUrgent) {
+                toast.custom(
+                  (t) => (
+                    <div
+                      className={`${t.visible ? 'animate-enter' : 'animate-leave'} max-w-sm w-full bg-red-600 text-white shadow-2xl rounded-2xl pointer-events-auto flex ring-2 ring-red-400 cursor-pointer`}
+                      onClick={() => { window.location.href = `/jobs/${job.id}`; toast.dismiss(t.id); }}
+                    >
+                      <div className="flex-1 p-4">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-lg">🚨</span>
+                          <span className="font-black uppercase tracking-wide text-sm">Urgent Job Received</span>
+                        </div>
+                        <p className="font-semibold text-sm truncate">{job.title}</p>
+                        <p className="text-red-200 text-xs truncate">{job.propertyAddress}</p>
+                      </div>
+                      <div className="flex items-center pr-4">
+                        <span className="text-red-200 text-xs font-bold">View →</span>
+                      </div>
+                    </div>
+                  ),
+                  { duration: 12000, position: 'top-right' }
+                );
+                // Browser notification if permitted
+                if (Notification.permission === 'granted') {
+                  new Notification('🚨 Urgent Job Received', {
+                    body: `${job.title} — ${job.propertyAddress}`,
+                    icon: '/favicon.ico',
+                  });
+                }
+              } else {
+                toast.custom(
+                  (t) => (
+                    <div
+                      className={`${t.visible ? 'animate-enter' : 'animate-leave'} max-w-sm w-full bg-slate-900 text-white shadow-xl rounded-2xl pointer-events-auto flex cursor-pointer`}
+                      onClick={() => { window.location.href = `/jobs/${job.id}`; toast.dismiss(t.id); }}
+                    >
+                      <div className="flex-1 p-4">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-base">📋</span>
+                          <span className="font-bold text-sm">New Job</span>
+                        </div>
+                        <p className="text-slate-200 text-xs truncate">{job.title}</p>
+                        <p className="text-slate-400 text-xs truncate">{job.propertyAddress}</p>
+                      </div>
+                      <div className="flex items-center pr-4">
+                        <span className="text-slate-400 text-xs font-bold">View →</span>
+                      </div>
+                    </div>
+                  ),
+                  { duration: 6000, position: 'top-right' }
+                );
+              }
+            }
+          });
+        }
       },
       (error) => {
         console.warn('[Offline] Firestore jobs listener error, using cached data:', error.message);
