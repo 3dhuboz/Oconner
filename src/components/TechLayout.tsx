@@ -1,8 +1,10 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ClipboardList, Calendar, User, Zap, LogOut } from 'lucide-react';
+import { ClipboardList, Calendar, User, Zap, LogOut, Wifi, WifiOff, CloudOff, RefreshCw } from 'lucide-react';
 import { cn } from '../utils';
 import { useAuth } from '../context/AuthContext';
+import { useSyncStatus } from '../hooks/useOfflineSync';
+import { forceSyncNow } from '../services/syncService';
 
 interface TechLayoutProps {
   children: React.ReactNode;
@@ -11,6 +13,7 @@ interface TechLayoutProps {
 export function TechLayout({ children }: TechLayoutProps) {
   const location = useLocation();
   const { user, logout } = useAuth();
+  const { isOnline, pendingCount, isSyncing } = useSyncStatus();
 
   if (!user) return null;
 
@@ -33,8 +36,29 @@ export function TechLayout({ children }: TechLayoutProps) {
             <span className="text-[10px] text-slate-400 ml-2">Tech Portal</span>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-slate-400 hidden sm:block">{user.name}</span>
+        <div className="flex items-center gap-2">
+          {/* Online/Offline indicator */}
+          <button
+            onClick={() => { if (isOnline && pendingCount > 0) forceSyncNow(); }}
+            className={cn(
+              "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold transition-colors",
+              isOnline
+                ? pendingCount > 0
+                  ? "bg-amber-500/20 text-amber-400"
+                  : "bg-emerald-500/20 text-emerald-400"
+                : "bg-rose-500/20 text-rose-400"
+            )}
+          >
+            {isSyncing ? (
+              <><RefreshCw className="w-3 h-3 animate-spin" /> Syncing</>
+            ) : !isOnline ? (
+              <><WifiOff className="w-3 h-3" /> Offline</>
+            ) : pendingCount > 0 ? (
+              <><CloudOff className="w-3 h-3" /> {pendingCount} pending</>
+            ) : (
+              <><Wifi className="w-3 h-3" /> Online</>
+            )}
+          </button>
           <button
             onClick={logout}
             className="p-2 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"

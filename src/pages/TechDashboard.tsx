@@ -4,8 +4,8 @@ import { Job, Electrician } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { format, isToday, isTomorrow } from 'date-fns';
 import {
-  MapPin, Clock, Navigation, ChevronRight, AlertCircle,
-  CheckCircle2, Wrench, Phone, Calendar
+  MapPin, Clock, Navigation, ChevronRight,
+  CheckCircle2, Wrench, Phone, Calendar, Camera, DollarSign
 } from 'lucide-react';
 import { cn } from '../utils';
 
@@ -53,6 +53,7 @@ export function TechDashboard({ jobs, electricians }: TechDashboardProps) {
 
   // Active (in progress)
   const inProgress = myJobs.filter(j => j.status === 'EXECUTION');
+  const dispatched = myJobs.filter(j => j.status === 'DISPATCHED');
 
   return (
     <div className="px-4 py-5 max-w-lg mx-auto space-y-5">
@@ -64,6 +65,22 @@ export function TechDashboard({ jobs, electricians }: TechDashboardProps) {
         <p className="text-sm text-slate-500 mt-0.5">
           {format(new Date(), 'EEEE, d MMM')} &bull; {myJobs.length} active job{myJobs.length !== 1 ? 's' : ''}
         </p>
+      </div>
+
+      {/* Quick stats */}
+      <div className="flex gap-3">
+        <div className="flex-1 bg-orange-50 border border-orange-200 rounded-xl p-3 text-center">
+          <p className="text-2xl font-bold text-orange-700">{inProgress.length}</p>
+          <p className="text-[11px] font-medium text-orange-600">In Progress</p>
+        </div>
+        <div className="flex-1 bg-amber-50 border border-amber-200 rounded-xl p-3 text-center">
+          <p className="text-2xl font-bold text-amber-700">{dispatched.length}</p>
+          <p className="text-[11px] font-medium text-amber-600">Dispatched</p>
+        </div>
+        <div className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-3 text-center">
+          <p className="text-2xl font-bold text-slate-700">{todayJobs.length}</p>
+          <p className="text-[11px] font-medium text-slate-500">Today</p>
+        </div>
       </div>
 
       {/* Active job banner — if currently executing */}
@@ -84,7 +101,19 @@ export function TechDashboard({ jobs, electricians }: TechDashboardProps) {
                 <MapPin className="w-4 h-4 shrink-0" />
                 <span className="truncate">{job.propertyAddress}</span>
               </div>
-              <div className="flex items-center justify-between">
+              {/* Action hints */}
+              <div className="flex items-center gap-3 mb-3">
+                <span className="text-[11px] bg-white/15 px-2 py-1 rounded-lg flex items-center gap-1">
+                  <Clock className="w-3 h-3" /> Log Time
+                </span>
+                <span className="text-[11px] bg-white/15 px-2 py-1 rounded-lg flex items-center gap-1">
+                  <DollarSign className="w-3 h-3" /> Materials
+                </span>
+                <span className="text-[11px] bg-white/15 px-2 py-1 rounded-lg flex items-center gap-1">
+                  <Camera className="w-3 h-3" /> Photos
+                </span>
+              </div>
+              <div className="flex items-center justify-between border-t border-white/20 pt-3">
                 <span className="text-sm font-medium flex items-center gap-1.5">
                   <Wrench className="w-4 h-4" /> Continue Working
                 </span>
@@ -96,39 +125,36 @@ export function TechDashboard({ jobs, electricians }: TechDashboardProps) {
       )}
 
       {/* Today's Schedule */}
-      {todayJobs.length > 0 && (
+      {todayJobs.length > 0 && inProgress.length === 0 && (
         <div>
           <h2 className="text-sm font-bold text-slate-700 flex items-center gap-2 mb-3">
             <Calendar className="w-4 h-4 text-amber-500" /> Today's Schedule
           </h2>
           <div className="space-y-2">
-            {todayJobs.map(job => {
-              const cfg = STATUS_CONFIG[job.status] || { label: job.status, color: 'text-slate-700', bg: 'bg-slate-50 border-slate-200' };
-              return (
-                <Link
-                  key={job.id}
-                  to={job.status === 'EXECUTION' || job.status === 'DISPATCHED' ? `/field/${job.id}` : `/jobs/${job.id}`}
-                  className="flex items-center gap-3 bg-white rounded-xl border border-slate-200 p-3.5 shadow-sm active:bg-slate-50 transition-colors"
-                >
-                  <div className="text-center shrink-0 w-12">
-                    <p className="text-sm font-bold text-slate-900">
-                      {format(new Date(job.scheduledDate!), 'h:mm')}
-                    </p>
-                    <p className="text-[10px] text-slate-500 uppercase">
-                      {format(new Date(job.scheduledDate!), 'a')}
-                    </p>
-                  </div>
-                  <div className="w-0.5 h-10 bg-amber-400 rounded-full shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-slate-800 truncate">{job.title}</p>
-                    <p className="text-xs text-slate-500 truncate flex items-center gap-1">
-                      <MapPin className="w-3 h-3 shrink-0" /> {job.propertyAddress}
-                    </p>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-slate-300 shrink-0" />
-                </Link>
-              );
-            })}
+            {todayJobs.map(job => (
+              <Link
+                key={job.id}
+                to={job.status === 'EXECUTION' || job.status === 'DISPATCHED' ? `/field/${job.id}` : `/jobs/${job.id}`}
+                className="flex items-center gap-3 bg-white rounded-xl border border-slate-200 p-3.5 shadow-sm active:bg-slate-50 transition-colors"
+              >
+                <div className="text-center shrink-0 w-12">
+                  <p className="text-sm font-bold text-slate-900">
+                    {format(new Date(job.scheduledDate!), 'h:mm')}
+                  </p>
+                  <p className="text-[10px] text-slate-500 uppercase">
+                    {format(new Date(job.scheduledDate!), 'a')}
+                  </p>
+                </div>
+                <div className="w-0.5 h-10 bg-amber-400 rounded-full shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-slate-800 truncate">{job.title}</p>
+                  <p className="text-xs text-slate-500 truncate flex items-center gap-1">
+                    <MapPin className="w-3 h-3 shrink-0" /> {job.propertyAddress}
+                  </p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-300 shrink-0" />
+              </Link>
+            ))}
           </div>
         </div>
       )}
@@ -136,7 +162,7 @@ export function TechDashboard({ jobs, electricians }: TechDashboardProps) {
       {/* All My Jobs */}
       <div>
         <h2 className="text-sm font-bold text-slate-700 flex items-center gap-2 mb-3">
-          <Wrench className="w-4 h-4 text-slate-400" /> My Jobs
+          <Wrench className="w-4 h-4 text-slate-400" /> All Jobs
         </h2>
 
         {sortedJobs.length === 0 ? (
@@ -193,12 +219,22 @@ export function TechDashboard({ jobs, electricians }: TechDashboardProps) {
                     </div>
                   </div>
 
-                  {/* Navigate button for active jobs */}
-                  {isActive && job.propertyAddress && job.propertyAddress !== 'See email body' && (
+                  {/* Action bar for active jobs */}
+                  {isActive && (
                     <div className="border-t border-slate-100 px-4 py-2.5 flex items-center justify-between bg-blue-50">
-                      <span className="text-xs font-semibold text-blue-700 flex items-center gap-1.5">
-                        <Navigation className="w-3.5 h-3.5" /> Navigate to Job
-                      </span>
+                      <div className="flex items-center gap-3">
+                        {job.propertyAddress && job.propertyAddress !== 'See email body' && (
+                          <span className="text-xs font-semibold text-blue-700 flex items-center gap-1">
+                            <Navigation className="w-3.5 h-3.5" /> Navigate
+                          </span>
+                        )}
+                        <span className="text-xs font-semibold text-blue-700 flex items-center gap-1">
+                          <Clock className="w-3.5 h-3.5" /> Time
+                        </span>
+                        <span className="text-xs font-semibold text-blue-700 flex items-center gap-1">
+                          <Camera className="w-3.5 h-3.5" /> Photo
+                        </span>
+                      </div>
                       <ChevronRight className="w-4 h-4 text-blue-400" />
                     </div>
                   )}

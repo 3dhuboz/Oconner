@@ -74,25 +74,17 @@ export function FieldPortal({ jobs, updateJob }: FieldPortalProps) {
     });
     
     alert("Job submitted successfully! The office has been notified.");
-    navigate('/jobs');
+    navigate('/');
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-20">
-      {/* Mobile Header */}
-      <div className="bg-slate-900 text-white p-4 sticky top-0 z-10 shadow-md">
-        <div className="max-w-md mx-auto flex items-center gap-3">
-          <button onClick={() => navigate(-1)} className="p-2 -ml-2 hover:bg-slate-800 rounded-lg">
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <div>
-            <h1 className="font-bold text-lg leading-tight">Field Portal</h1>
-            <p className="text-slate-400 text-xs">Wirez R Us Technician App</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="max-w-md mx-auto p-4 space-y-6 mt-4">
+    <div className="bg-slate-50 pb-4">
+      <div className="max-w-lg mx-auto px-4 py-4 space-y-5">
+        {/* Back button */}
+        <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-slate-500 hover:text-slate-900 text-sm transition-colors">
+          <ArrowLeft className="w-4 h-4" />
+          Back
+        </button>
         {/* Job Info Card */}
         <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">
           <div className="flex justify-between items-start mb-3">

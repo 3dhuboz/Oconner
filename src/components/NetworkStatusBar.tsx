@@ -2,12 +2,17 @@ import React from 'react';
 import { Wifi, WifiOff, RefreshCw, Cloud, CloudOff } from 'lucide-react';
 import { useSyncStatus } from '../hooks/useOfflineSync';
 import { forceSyncNow } from '../services/syncService';
+import { useAuth } from '../context/AuthContext';
 
 export function NetworkStatusBar() {
   const { isOnline, pendingCount, isSyncing, lastSyncAt } = useSyncStatus();
+  const { user } = useAuth();
 
   // Don't show bar when online and nothing pending
   if (isOnline && pendingCount === 0 && !isSyncing) return null;
+
+  // Tech users have their own indicator in TechLayout header — hide the bottom bar
+  if (user?.role === 'user') return null;
 
   return (
     <div className={`fixed bottom-0 left-0 right-0 z-50 px-4 py-2 text-sm font-medium flex items-center justify-between gap-3 transition-colors ${
