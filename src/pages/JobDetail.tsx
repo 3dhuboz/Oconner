@@ -1174,90 +1174,154 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
       </div>
 
       {/* ─── Availability Popout Modal ─── */}
-      {showAvailability && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowAvailability(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
-            {/* Header */}
-            <div className="flex items-center justify-between p-5 border-b border-slate-200">
-              <div>
-                <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                  <CalendarIcon className="w-5 h-5 text-purple-500" />
-                  Technician Availability
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  {job.scheduledDate
-                    ? <>Job scheduled: <span className="font-semibold text-slate-700">{format(new Date(job.scheduledDate), 'EEE d MMM, h:mm a')}</span></>
-                    : 'No scheduled time set for this job yet'}
+      {showAvailability && (() => {
+        // For each tech, find their active jobs (not CLOSED) excluding this one
+        const BUSY_STATUSES: JobStatus[] = ['SCHEDULING', 'DISPATCHED', 'EXECUTION', 'REVIEW'];
+        const techJobs = (techId: string) =>
+          jobs.filter(j => j.id !== job.id && j.assignedElectricianId === techId && BUSY_STATUSES.includes(j.status as JobStatus));
+
+        // Check overlap with this job's scheduled time (±4 hours window)
+        const isTimeConflict = (techId: string) => {
+          if (!job.scheduledDate) return false;
+          const jobTime = new Date(job.scheduledDate).getTime();
+          return techJobs(techId).some(j => {
+            if (!j.scheduledDate) return false;
+            const diff = Math.abs(new Date(j.scheduledDate).getTime() - jobTime);
+            return diff < 4 * 60 * 60 * 1000; // within 4 hours
+          });
+        };
+
+        return (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowAvailability(false)}>
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+              {/* Header */}
+              <div className="flex items-center justify-between p-5 border-b border-slate-200 shrink-0">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                    <CalendarIcon className="w-5 h-5 text-purple-500" />
+                    Technician Availability
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {job.scheduledDate
+                      ? <>Checking against: <span className="font-semibold text-slate-700">{format(new Date(job.scheduledDate), 'EEE d MMM, h:mm a')}</span></>
+                      : <span className="text-amber-600 font-medium">⚠ No scheduled time set — set a time to detect conflicts</span>}
+                  </p>
+                </div>
+                <button onClick={() => setShowAvailability(false)} className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition-colors">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Tech list */}
+              <div className="p-5 space-y-3 overflow-y-auto">
+                {electricians.length === 0 ? (
+                  <p className="text-sm text-slate-400 text-center py-4">No technicians found. Add team members in the Team page.</p>
+                ) : (
+                  electricians.map(elec => {
+                    const isAssigned = elec.id === job.assignedElectricianId;
+                    const activeJobs = techJobs(elec.id);
+                    const conflict = isTimeConflict(elec.id);
+                    const isBusy = activeJobs.length > 0;
+
+                    let statusBadge: React.ReactNode;
+                    let cardClass: string;
+                    if (isAssigned) {
+                      statusBadge = <span className="px-2.5 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-bold">Assigned</span>;
+                      cardClass = 'bg-purple-50 border-purple-200';
+                    } else if (conflict) {
+                      statusBadge = <span className="px-2.5 py-1 bg-red-100 text-red-700 rounded-full text-xs font-bold">⚠ Time Conflict</span>;
+                      cardClass = 'bg-red-50 border-red-200';
+                    } else if (isBusy) {
+                      statusBadge = <span className="px-2.5 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-bold">Busy ({activeJobs.length} job{activeJobs.length > 1 ? 's' : ''})</span>;
+                      cardClass = 'bg-amber-50 border-amber-200';
+                    } else {
+                      statusBadge = <span className="px-2.5 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-bold">✓ Free</span>;
+                      cardClass = 'bg-emerald-50 border-emerald-200';
+                    }
+
+                    return (
+                      <div key={elec.id} className={cn('rounded-xl border transition-all', cardClass)}>
+                        <div className="flex items-center justify-between p-4">
+                          <div className="flex items-center gap-3">
+                            <div className={cn(
+                              'w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm shrink-0',
+                              isAssigned ? 'bg-purple-200 text-purple-700'
+                              : conflict ? 'bg-red-200 text-red-700'
+                              : isBusy ? 'bg-amber-200 text-amber-700'
+                              : 'bg-emerald-200 text-emerald-700'
+                            )}>
+                              {elec.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+                            </div>
+                            <div>
+                              <p className="font-semibold text-slate-900 text-sm">{elec.name}</p>
+                              <p className="text-xs text-slate-500">{elec.phone}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {statusBadge}
+                            {!isAssigned && (
+                              <button
+                                onClick={() => {
+                                  updateJob(job.id, { assignedElectricianId: elec.id });
+                                  toast.success(`${elec.name} assigned`);
+                                  setShowAvailability(false);
+                                }}
+                                className={cn(
+                                  'px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors text-white',
+                                  conflict ? 'bg-red-600 hover:bg-red-700' : 'bg-slate-900 hover:bg-slate-700'
+                                )}
+                              >
+                                {conflict ? 'Assign Anyway' : 'Assign'}
+                              </button>
+                            )}
+                            {isAssigned && (
+                              <button
+                                onClick={() => {
+                                  updateJob(job.id, { assignedElectricianId: '' });
+                                  toast.success(`${elec.name} unassigned`);
+                                }}
+                                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition-colors"
+                              >
+                                Unassign
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        {/* Show conflicting jobs */}
+                        {(isBusy || conflict) && !isAssigned && (
+                          <div className="px-4 pb-3 space-y-1">
+                            {activeJobs.map(aj => (
+                              <div key={aj.id} className="flex items-center justify-between text-xs bg-white/70 rounded-lg px-3 py-1.5 border border-slate-200">
+                                <span className="font-medium text-slate-700 truncate max-w-[200px]">{aj.propertyAddress || aj.title}</span>
+                                <div className="flex items-center gap-2 shrink-0 ml-2">
+                                  <span className={cn(
+                                    'px-1.5 py-0.5 rounded text-[10px] font-bold uppercase',
+                                    aj.status === 'DISPATCHED' ? 'bg-blue-100 text-blue-700'
+                                    : aj.status === 'EXECUTION' ? 'bg-orange-100 text-orange-700'
+                                    : 'bg-slate-100 text-slate-600'
+                                  )}>{aj.status}</span>
+                                  {aj.scheduledDate && <span className="text-slate-400">{format(new Date(aj.scheduledDate), 'MMM d h:mm a')}</span>}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="px-5 pb-5 shrink-0">
+                <p className="text-[11px] text-slate-400 text-center">
+                  Full calendar view in the <button onClick={() => { setShowAvailability(false); navigate('/calendar'); }} className="text-purple-600 hover:underline font-medium">Calendar</button> page.
                 </p>
               </div>
-              <button onClick={() => setShowAvailability(false)} className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition-colors">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Tech list */}
-            <div className="p-5 space-y-3">
-              {electricians.length === 0 ? (
-                <p className="text-sm text-slate-400 text-center py-4">No technicians found. Add team members in the Team page.</p>
-              ) : (
-                electricians.map(elec => {
-                  const isAssigned = elec.id === job.assignedElectricianId;
-                  return (
-                    <div
-                      key={elec.id}
-                      className={cn(
-                        "flex items-center justify-between p-4 rounded-xl border transition-all",
-                        isAssigned
-                          ? "bg-purple-50 border-purple-200"
-                          : "bg-slate-50 border-slate-200"
-                      )}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className={cn(
-                          "w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm shrink-0",
-                          isAssigned ? "bg-purple-200 text-purple-700" : "bg-slate-200 text-slate-600"
-                        )}>
-                          {elec.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
-                        </div>
-                        <div>
-                          <p className="font-semibold text-slate-900 text-sm">{elec.name}</p>
-                          <p className="text-xs text-slate-500">{elec.phone}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {isAssigned ? (
-                          <span className="px-2.5 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-bold">Assigned</span>
-                        ) : (
-                          <span className="px-2.5 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-bold">Available</span>
-                        )}
-                        {!isAssigned && job.status === 'SCHEDULING' && (
-                          <button
-                            onClick={() => {
-                              updateJob(job.id, { assignedElectricianId: elec.id });
-                              toast.success(`${elec.name} assigned to this job`);
-                              setShowAvailability(false);
-                            }}
-                            className="px-3 py-1.5 bg-slate-900 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold transition-colors"
-                          >
-                            Assign
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-
-            {/* Footer hint */}
-            <div className="px-5 pb-5">
-              <p className="text-[11px] text-slate-400 text-center">
-                Full calendar view available in the <button onClick={() => { setShowAvailability(false); navigate('/calendar'); }} className="text-purple-600 hover:underline font-medium">Calendar</button> page.
-              </p>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ─── Raw Email Viewer Modal ─── */}
       {showRawEmail && job.source === 'email' && (

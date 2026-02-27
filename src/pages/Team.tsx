@@ -22,6 +22,18 @@ export function Team({ electricians, setElectricians }: TeamProps) {
     setIsAdding(false);
   };
 
+  const normalisePhone = (raw: string): string => {
+    const digits = raw.replace(/[\s\-().+]/g, '');
+    // Already E.164 international
+    if (raw.startsWith('+')) return raw.replace(/\s/g, '');
+    // 61XXXXXXXXX → +61XXXXXXXXX
+    if (digits.startsWith('61') && digits.length === 11) return `+${digits}`;
+    // 04XXXXXXXX → +614XXXXXXXX
+    if (digits.startsWith('0') && digits.length === 10) return `+61${digits.slice(1)}`;
+    // Anything else returned as-is
+    return raw.trim();
+  };
+
   const handleSave = async () => {
     if (!editForm.name?.trim() || !editForm.phone?.trim()) {
       toast.error('Name and phone are required.');
@@ -29,22 +41,24 @@ export function Team({ electricians, setElectricians }: TeamProps) {
     }
     if (!db) { toast.error('Database not connected'); return; }
 
+    const normalisedPhone = normalisePhone(editForm.phone);
+
     setSaving(true);
     try {
       if (isAdding) {
         const newElectrician: Electrician = {
           id: `e${Date.now()}`,
           name: editForm.name.trim(),
-          phone: editForm.phone.trim(),
+          phone: normalisedPhone,
           email: editForm.email?.trim() || '',
         };
         await setDoc(doc(db, 'electricians', newElectrician.id), newElectrician);
-        toast.success(`${newElectrician.name} added to team`);
+        toast.success(`${newElectrician.name} added — phone saved as ${normalisedPhone}`);
         setIsAdding(false);
       } else if (editingId) {
-        const updated = { name: editForm.name.trim(), phone: editForm.phone.trim(), email: editForm.email?.trim() || '' };
+        const updated = { name: editForm.name.trim(), phone: normalisedPhone, email: editForm.email?.trim() || '' };
         await updateDoc(doc(db, 'electricians', editingId), updated);
-        toast.success('Technician updated');
+        toast.success(`Technician updated — phone saved as ${normalisedPhone}`);
         setEditingId(null);
       }
       setEditForm({});
