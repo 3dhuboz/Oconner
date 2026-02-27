@@ -20,7 +20,7 @@ import { DashboardWidget } from './pages/DashboardWidget';
 
 import { Job, Electrician } from './types';
 import { db } from './services/firebase';
-import { collection, onSnapshot, doc, updateDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { Toaster } from 'react-hot-toast';
 import toast from 'react-hot-toast';
 
@@ -118,6 +118,23 @@ function AppContent() {
     toast('Saved offline — will sync when connection returns', { icon: '📡' });
   };
 
+  // Admin-only job deletion
+  const deleteJob = async (id: string) => {
+    // Remove from local state
+    setJobs(prev => prev.filter(j => j.id !== id));
+    await offlineJobs.delete(id);
+
+    // Delete from Firestore
+    if (navigator.onLine && db) {
+      try {
+        await deleteDoc(doc(db, 'jobs', id));
+      } catch (error: any) {
+        console.error('[Delete] Firestore delete failed:', error.message);
+        toast.error('Failed to delete from server');
+      }
+    }
+  };
+
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
@@ -162,7 +179,7 @@ function AppContent() {
       } />
       <Route path="/jobs/:id" element={
         <ProtectedRoute>
-          <JobDetail jobs={jobs} updateJob={updateJob} electricians={electricians} />
+          <JobDetail jobs={jobs} updateJob={updateJob} deleteJob={deleteJob} electricians={electricians} />
         </ProtectedRoute>
       } />
       <Route path="/calendar" element={

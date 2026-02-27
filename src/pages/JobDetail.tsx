@@ -7,25 +7,36 @@ import { PDFDocument, rgb } from 'pdf-lib';
 import { 
   ArrowLeft, Phone, Mail, FileText, Calendar as CalendarIcon, 
   CheckCircle2, AlertCircle, Camera, Wrench, DollarSign, Send, Loader2, User,
-  Download, Eye, X, MapPin
+  Download, Eye, X, MapPin, Trash2, ShieldAlert
 } from 'lucide-react';
 import { cn } from '../utils';
+import { useAuth } from '../context/AuthContext';
+import toast from 'react-hot-toast';
 
 interface JobDetailProps {
   jobs: Job[];
   updateJob: (id: string, updates: Partial<Job>) => void;
+  deleteJob: (id: string) => Promise<void>;
   electricians: Electrician[];
 }
 
-export function JobDetail({ jobs, updateJob, electricians }: JobDetailProps) {
+export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetailProps) {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const job = jobs.find(j => j.id === id);
   
   const [newNote, setNewNote] = useState('');
   const [isSyncingXero, setIsSyncingXero] = useState(false);
   const [proposedEntryDate, setProposedEntryDate] = useState('');
   const [showRawEmail, setShowRawEmail] = useState(false);
+
+  // ─── Delete confirmation state (multi-step) ───
+  const [deleteStep, setDeleteStep] = useState<0 | 1 | 2 | 3>(0);
+  const [deleteReason, setDeleteReason] = useState('');
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+  const isAdmin = user?.role === 'admin' || user?.role === 'dev';
 
   if (!job) {
     return <div>Job not found</div>;
@@ -311,6 +322,16 @@ export function JobDetail({ jobs, updateJob, electricians }: JobDetailProps) {
             {job.status === 'REVIEW' && (
               <button onClick={() => handleStatusChange('CLOSED')} className="btn-primary bg-emerald-600 hover:bg-emerald-700 text-white">
                 Close Job
+              </button>
+            )}
+            {/* Admin-only delete button */}
+            {isAdmin && (
+              <button
+                onClick={() => setDeleteStep(1)}
+                className="px-3 py-2 bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5"
+                title="Delete this job (Admin only)"
+              >
+                <Trash2 className="w-4 h-4" />
               </button>
             )}
           </div>
@@ -708,6 +729,186 @@ export function JobDetail({ jobs, updateJob, electricians }: JobDetailProps) {
                 </pre>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Multi-Step Delete Confirmation Modal ─── */}
+      {deleteStep > 0 && isAdmin && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => { setDeleteStep(0); setDeleteReason(''); setDeleteConfirmText(''); }}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden" onClick={e => e.stopPropagation()}>
+
+            {/* Step 1: Initial Warning */}
+            {deleteStep === 1 && (
+              <div className="p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
+                    <ShieldAlert className="w-6 h-6 text-red-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900">Delete Job?</h3>
+                    <p className="text-xs text-slate-500">Admin action — cannot be undone</p>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg mb-4">
+                  <p className="text-sm text-red-800 font-medium mb-1">You are about to permanently delete:</p>
+                  <p className="text-sm text-red-700"><strong>{job.id}</strong> — {job.title}</p>
+                  <p className="text-xs text-red-600 mt-1">Created: {format(new Date(job.createdAt), 'MMM d, yyyy h:mm a')}</p>
+                  {job.source === 'email' && (
+                    <p className="text-xs text-red-600 mt-0.5">Source: Inbound email from {job.rawEmailFrom || job.propertyManagerEmail}</p>
+                  )}
+                </div>
+
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg mb-5 text-xs text-amber-800 space-y-1">
+                  <p className="font-semibold flex items-center gap-1"><AlertCircle className="w-3.5 h-3.5" /> Before deleting, consider:</p>
+                  <ul className="list-disc list-inside space-y-0.5 text-amber-700">
+                    <li>Has this job been assigned to an electrician?</li>
+                    <li>Are there any contact attempts or scheduled dates?</li>
+                    <li>Could this be a legitimate work order sent in error?</li>
+                    <li>Would archiving be more appropriate than deleting?</li>
+                  </ul>
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => { setDeleteStep(0); setDeleteReason(''); setDeleteConfirmText(''); }}
+                    className="flex-1 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => setDeleteStep(2)}
+                    className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    I understand, continue
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 2: Reason Required */}
+            {deleteStep === 2 && (
+              <div className="p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                    <Trash2 className="w-5 h-5 text-red-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900">Reason for Deletion</h3>
+                    <p className="text-xs text-slate-500">Step 2 of 3 — A reason is required for audit purposes</p>
+                  </div>
+                </div>
+
+                <div className="space-y-3 mb-5">
+                  <label className="block text-sm font-medium text-slate-700">Why is this job being deleted?</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {['Spam / Junk email', 'Duplicate job', 'Test / Accidental entry', 'Client cancelled'].map(reason => (
+                      <button
+                        key={reason}
+                        onClick={() => setDeleteReason(reason)}
+                        className={cn(
+                          "px-3 py-2 rounded-lg text-xs font-medium border transition-colors text-left",
+                          deleteReason === reason
+                            ? 'bg-red-50 border-red-300 text-red-700'
+                            : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                        )}
+                      >
+                        {reason}
+                      </button>
+                    ))}
+                  </div>
+                  <textarea
+                    value={deleteReason}
+                    onChange={e => setDeleteReason(e.target.value)}
+                    placeholder="Or type a custom reason..."
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm min-h-[60px] focus:ring-2 focus:ring-red-200 focus:border-red-400 outline-none"
+                  />
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setDeleteStep(1)}
+                    className="flex-1 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    Back
+                  </button>
+                  <button
+                    onClick={() => setDeleteStep(3)}
+                    disabled={!deleteReason.trim()}
+                    className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-700 disabled:bg-red-300 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors"
+                  >
+                    Continue to final step
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 3: Type to Confirm */}
+            {deleteStep === 3 && (
+              <div className="p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-full bg-red-600 flex items-center justify-center">
+                    <ShieldAlert className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-red-700">Final Confirmation</h3>
+                    <p className="text-xs text-slate-500">Step 3 of 3 — This action is permanent</p>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg mb-4 text-sm text-red-800">
+                  <p className="font-medium mb-1">Deleting: <strong>{job.title}</strong></p>
+                  <p className="text-xs text-red-700">Reason: {deleteReason}</p>
+                  <p className="text-xs text-red-700">Performed by: {user?.email}</p>
+                </div>
+
+                <div className="mb-5">
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    Type <strong className="text-red-600">DELETE</strong> to confirm:
+                  </label>
+                  <input
+                    type="text"
+                    value={deleteConfirmText}
+                    onChange={e => setDeleteConfirmText(e.target.value)}
+                    placeholder="Type DELETE here"
+                    className="w-full px-3 py-2 border-2 border-red-200 rounded-lg text-sm font-mono text-center tracking-widest uppercase focus:ring-2 focus:ring-red-300 focus:border-red-400 outline-none"
+                    autoFocus
+                  />
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => { setDeleteStep(0); setDeleteReason(''); setDeleteConfirmText(''); }}
+                    className="flex-1 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={async () => {
+                      setIsDeleting(true);
+                      try {
+                        await deleteJob(job.id);
+                        toast.success(`Job ${job.id} deleted — ${deleteReason}`);
+                        navigate('/jobs');
+                      } catch (err) {
+                        toast.error('Failed to delete job');
+                      } finally {
+                        setIsDeleting(false);
+                        setDeleteStep(0);
+                        setDeleteReason('');
+                        setDeleteConfirmText('');
+                      }
+                    }}
+                    disabled={deleteConfirmText !== 'DELETE' || isDeleting}
+                    className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-700 disabled:bg-red-300 disabled:cursor-not-allowed text-white rounded-lg text-sm font-bold transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                    {isDeleting ? 'Deleting...' : 'Permanently Delete'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
