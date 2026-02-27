@@ -15,6 +15,7 @@ import { SuperAdmin } from './pages/SuperAdmin';
 import { Billing } from './pages/Billing';
 import { PromoFlyer } from './pages/PromoFlyer';
 import { Purchase } from './pages/Purchase';
+import { DashboardWidget } from './pages/DashboardWidget';
 
 
 import { Job, Electrician } from './types';
@@ -172,6 +173,12 @@ function AppContent() {
       <Route path="/field/:id" element={
         <ProtectedRoute>
           <FieldPortal jobs={jobs} updateJob={updateJob} />
+        </ProtectedRoute>
+      } />
+      
+      <Route path="/widget" element={
+        <ProtectedRoute>
+          <DashboardWidget jobs={jobs} electricians={electricians} />
         </ProtectedRoute>
       } />
       
