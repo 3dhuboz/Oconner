@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getFirestore, Firestore } from 'firebase/firestore';
 import { getAuth, Auth } from 'firebase/auth';
+import { getStorage, FirebaseStorage } from 'firebase/storage';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FB_API_KEY || import.meta.env.VITE_FIREBASE_API_KEY,
@@ -14,6 +15,7 @@ const firebaseConfig = {
 let app = null;
 let db = null;
 let auth = null;
+let storage: FirebaseStorage | null = null;
 
 try {
   if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
@@ -22,10 +24,11 @@ try {
     app = initializeApp(firebaseConfig);
     db = getFirestore(app);
     auth = getAuth(app);
+    storage = getStorage(app);
     console.log('Firebase Initialized. Project ID:', firebaseConfig.projectId);
   }
 } catch (error) {
   console.error('Failed to initialize Firebase:', error);
 }
 
-export { db, app, auth };
+export { db, app, auth, storage };

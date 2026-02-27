@@ -349,7 +349,7 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-slate-200">
+        <div className="grid grid-cols-1 md:grid-cols-3 items-start divide-y md:divide-y-0 md:divide-x divide-slate-200">
           {/* Phase 1: Intake & Coordination */}
           <div className={cn("p-6 sm:p-8", job.status === 'INTAKE' ? "bg-blue-50/30" : "")}>
             <div className="flex items-center gap-2 mb-6">
@@ -578,8 +578,35 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
                 <div className="space-y-4">
                   <div className="flex justify-between items-center text-sm">
                     <span className="text-slate-500">Labor Hours:</span>
-                    <span className="font-medium text-slate-900">{job.laborHours || '—'} hrs</span>
+                    <span className="font-medium text-slate-900">{job.laborHours ? `${job.laborHours} hrs` : '—'}</span>
                   </div>
+
+                  {/* Time Log from clock on/off system */}
+                  {job.timeLog && job.timeLog.length > 0 && (
+                    <details className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+                      <summary className="px-3 py-2 text-xs font-semibold text-slate-500 cursor-pointer hover:text-slate-700 hover:bg-slate-50">
+                        View time log ({job.timeLog.length} entries)
+                      </summary>
+                      <div className="px-3 pb-2 space-y-1">
+                        {job.timeLog.map((entry: any, i: number) => (
+                          <div key={i} className="flex items-center justify-between text-xs">
+                            <span className={cn(
+                              "font-semibold capitalize",
+                              entry.type === 'clock_on' ? "text-emerald-600" :
+                              entry.type === 'clock_off' ? "text-rose-600" :
+                              entry.type === 'break_start' ? "text-amber-600" :
+                              "text-blue-600"
+                            )}>
+                              {entry.type.replace(/_/g, ' ')}
+                            </span>
+                            <span className="text-slate-400 font-mono">
+                              {new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  )}
                   
                   <div>
                     <span className="text-sm text-slate-500 block mb-1">Materials Used:</span>

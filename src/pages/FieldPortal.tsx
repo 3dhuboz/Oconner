@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Job, Material, TimeEntry, CatalogPart } from '../types';
-import { MapPin, Clock, Camera, Plus, Trash2, CheckCircle2, FileText, ArrowLeft, Navigation, Play, Square, Coffee, Package, Search } from 'lucide-react';
+import { MapPin, Clock, Camera, Plus, Trash2, CheckCircle2, FileText, ArrowLeft, Navigation, Play, Square, Coffee, Package, Search, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useGpsTracking } from '../hooks/useGpsTracking';
 import { cn } from '../utils';
+import { storage } from '../services/firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 interface FieldPortalProps {
   jobs: Job[];
@@ -169,10 +171,33 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
     setMaterials(materials.filter(m => m.id !== mid));
   };
 
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const [uploading, setUploading] = useState(false);
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      setPhotos([...photos, URL.createObjectURL(file)]);
+    if (!file || !job) return;
+
+    if (!storage) {
+      // Fallback: if storage not configured, use blob URL (won't persist to admin)
+      setPhotos(prev => [...prev, URL.createObjectURL(file)]);
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const timestamp = Date.now();
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const storageRef = ref(storage, `job-photos/${job.id}/${timestamp}_${safeName}`);
+      await uploadBytes(storageRef, file);
+      const downloadUrl = await getDownloadURL(storageRef);
+      setPhotos(prev => [...prev, downloadUrl]);
+    } catch (err: any) {
+      console.error('Photo upload failed:', err);
+      // Fallback to blob URL if upload fails (offline etc)
+      setPhotos(prev => [...prev, URL.createObjectURL(file)]);
+      alert('Photo saved locally. It will be visible to you but may not sync to the office until you have network.');
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -553,11 +578,18 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
                   </div>
                 ))}
                 {job.status === 'EXECUTION' && (
-                  <label className="aspect-square rounded-xl border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 hover:bg-slate-50 hover:border-slate-400 transition-colors cursor-pointer">
-                    <Camera className="w-6 h-6 mb-1" />
-                    <span className="text-xs font-medium">Add Photo</span>
-                    <input type="file" className="hidden" accept="image/*" capture="environment" onChange={handlePhotoUpload} />
-                  </label>
+                  uploading ? (
+                    <div className="aspect-square rounded-xl border-2 border-dashed border-amber-300 bg-amber-50 flex flex-col items-center justify-center text-amber-500">
+                      <Loader2 className="w-6 h-6 mb-1 animate-spin" />
+                      <span className="text-[10px] font-medium">Uploading...</span>
+                    </div>
+                  ) : (
+                    <label className="aspect-square rounded-xl border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-slate-400 hover:bg-slate-50 hover:border-slate-400 transition-colors cursor-pointer">
+                      <Camera className="w-6 h-6 mb-1" />
+                      <span className="text-xs font-medium">Add Photo</span>
+                      <input type="file" className="hidden" accept="image/*" capture="environment" onChange={handlePhotoUpload} />
+                    </label>
+                  )
                 )}
               </div>
             </div>
