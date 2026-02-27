@@ -380,7 +380,7 @@ function submitByEmail() {
     alert('Please fill in Property Address and Tenant Name before submitting.');
     return;
   }
-  if (!d.body.includes('DESCRIPTION OF ISSUE:\nN') && d.body.split('DESCRIPTION OF ISSUE:\n')[1]?.trim().length === 0) {
+  if (!val('f_description')) {
     alert('Please fill in the Description of Issue before submitting.');
     return;
   }
