@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, ClipboardList, Calendar, Settings, Zap, Users, Shield, CreditCard, LogOut, Headphones, ExternalLink } from 'lucide-react';
+import { LayoutDashboard, ClipboardList, Calendar, Settings, Zap, Users, Shield, CreditCard, LogOut, Headphones, ExternalLink, MapPin } from 'lucide-react';
 import { cn } from '../utils';
 import { useAuth } from '../context/AuthContext';
 
@@ -16,6 +16,7 @@ export function Layout({ children }: LayoutProps) {
     { name: 'Dashboard', path: '/', icon: LayoutDashboard, roles: ['dev', 'admin', 'user'] },
     { name: 'Job Board', path: '/jobs', icon: ClipboardList, roles: ['dev', 'admin', 'user'] },
     { name: 'Calendar', path: '/calendar', icon: Calendar, roles: ['dev', 'admin', 'user'] },
+    { name: 'Live Map', path: '/map', icon: MapPin, roles: ['dev', 'admin'] },
     { name: 'Team', path: '/team', icon: Users, roles: ['dev', 'admin'] },
     { name: 'Integrations', path: '/integrations', icon: Settings, roles: ['dev', 'admin'] },
     { name: 'Billing', path: '/billing', icon: CreditCard, roles: ['dev', 'admin'] },

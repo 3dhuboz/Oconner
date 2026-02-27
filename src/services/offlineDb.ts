@@ -112,6 +112,7 @@ export const offlineJobs = {
   getAll: () => getAll<any>(JOBS_STORE),
   put: (job: any) => put(JOBS_STORE, job),
   putAll: (jobs: any[]) => putAll(JOBS_STORE, jobs),
+  delete: (id: string) => deleteItem(JOBS_STORE, id),
   clear: () => clearStore(JOBS_STORE),
 };
 

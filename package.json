@@ -16,6 +16,7 @@
     "@square/web-payments-sdk-types": "^1.82.6",
     "@stripe/stripe-js": "^8.8.0",
     "@tailwindcss/vite": "^4.1.14",
+    "@vis.gl/react-google-maps": "^1.7.1",
     "@vitejs/plugin-react": "^5.0.4",
     "better-sqlite3": "^12.4.1",
     "clsx": "^2.1.1",

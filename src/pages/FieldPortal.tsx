@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Job, Material } from '../types';
-import { MapPin, Clock, Camera, Plus, Trash2, CheckCircle2, FileText, Upload, ArrowLeft } from 'lucide-react';
+import { MapPin, Clock, Camera, Plus, Trash2, CheckCircle2, FileText, Upload, ArrowLeft, Navigation } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { useGpsTracking } from '../hooks/useGpsTracking';
 
 interface FieldPortalProps {
   jobs: Job[];
@@ -11,7 +13,15 @@ interface FieldPortalProps {
 export function FieldPortal({ jobs, updateJob }: FieldPortalProps) {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const job = jobs.find(j => j.id === id);
+
+  // Background GPS tracking — writes location to Firestore every 30s
+  useGpsTracking({
+    uid: user?.uid || '',
+    enabled: !!user?.uid && !!job && ['DISPATCHED', 'EXECUTION'].includes(job?.status || ''),
+    intervalMs: 30_000,
+  });
 
   const [laborHours, setLaborHours] = useState<number | ''>(job?.laborHours || '');
   const [materials, setMaterials] = useState<Material[]>(job?.materials || []);
@@ -113,6 +123,18 @@ export function FieldPortal({ jobs, updateJob }: FieldPortalProps) {
             {job.workOrderUrl && (
               <a href={job.workOrderUrl} target="_blank" rel="noopener noreferrer" className="mt-4 flex items-center justify-center gap-2 w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-medium transition-colors">
                 <FileText className="w-4 h-4" /> View Work Order PDF
+              </a>
+            )}
+
+            {/* Navigate to job address via Google Maps */}
+            {job.propertyAddress && job.propertyAddress !== 'See email body' && (
+              <a
+                href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(job.propertyAddress)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 flex items-center justify-center gap-2 w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm transition-colors shadow-md shadow-blue-600/20 active:scale-[0.98]"
+              >
+                <Navigation className="w-5 h-5" /> Navigate to Job
               </a>
             )}
           </div>

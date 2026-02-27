@@ -7,7 +7,7 @@ import { PDFDocument, rgb } from 'pdf-lib';
 import { 
   ArrowLeft, Phone, Mail, FileText, Calendar as CalendarIcon, 
   CheckCircle2, AlertCircle, Camera, Wrench, DollarSign, Send, Loader2, User,
-  Download, Eye, X, MapPin, Trash2, ShieldAlert
+  Download, Eye, X, MapPin, Trash2, ShieldAlert, Navigation
 } from 'lucide-react';
 import { cn } from '../utils';
 import { useAuth } from '../context/AuthContext';
@@ -283,9 +283,21 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
               </span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">{job.title}</h1>
-            <p className="text-slate-500 mt-2 flex items-center gap-2">
-              <MapPin className="w-4 h-4" /> {job.propertyAddress}
-            </p>
+            <div className="flex items-center gap-3 mt-2">
+              <p className="text-slate-500 flex items-center gap-2">
+                <MapPin className="w-4 h-4" /> {job.propertyAddress}
+              </p>
+              {job.propertyAddress && job.propertyAddress !== 'See email body' && (
+                <a
+                  href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(job.propertyAddress)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 rounded-lg text-xs font-medium transition-colors shrink-0"
+                >
+                  <Navigation className="w-3.5 h-3.5" /> Navigate
+                </a>
+              )}
+            </div>
           </div>
           
           <div className="flex gap-3">

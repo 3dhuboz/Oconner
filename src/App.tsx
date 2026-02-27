@@ -16,6 +16,7 @@ import { Billing } from './pages/Billing';
 import { PromoFlyer } from './pages/PromoFlyer';
 import { Purchase } from './pages/Purchase';
 import { DashboardWidget } from './pages/DashboardWidget';
+import { LiveMap } from './pages/LiveMap';
 
 
 import { Job, Electrician } from './types';
@@ -163,6 +164,11 @@ function AppContent() {
       <Route path="/integrations" element={
         <AdminRoute>
           <Integrations />
+        </AdminRoute>
+      } />
+      <Route path="/map" element={
+        <AdminRoute>
+          <LiveMap jobs={jobs} electricians={electricians} />
         </AdminRoute>
       } />
 
