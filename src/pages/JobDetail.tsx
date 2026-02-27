@@ -37,6 +37,7 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
   const [resendingSms, setResendingSms] = useState(false);
+  const [editingTenant, setEditingTenant] = useState(false);
   const isAdmin = user?.role === 'admin' || user?.role === 'dev';
 
   if (!job) {
@@ -360,21 +361,124 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
             
             <div className="space-y-6">
               <div>
-                <h3 className="text-sm font-medium text-slate-500 mb-2">Tenant Details</h3>
-                <div className="bg-slate-50 rounded-xl p-4 space-y-3 border border-slate-100">
-                  <div className="flex items-center gap-3">
-                    <User className="w-4 h-4 text-slate-400" />
-                    <span className="font-medium text-slate-900">{job.tenantName}</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Phone className="w-4 h-4 text-slate-400" />
-                    <a href={`tel:${job.tenantPhone}`} className="text-blue-600 hover:underline">{job.tenantPhone}</a>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Mail className="w-4 h-4 text-slate-400" />
-                    <a href={`mailto:${job.tenantEmail}`} className="text-blue-600 hover:underline">{job.tenantEmail}</a>
-                  </div>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-medium text-slate-500">Tenant Details</h3>
+                  {isAdmin && (
+                    <button
+                      onClick={() => setEditingTenant(v => !v)}
+                      className="text-xs text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+                    >
+                      {editingTenant ? 'Done' : 'Edit'}
+                    </button>
+                  )}
                 </div>
+
+                {editingTenant ? (
+                  <div className="bg-slate-50 rounded-xl p-4 space-y-3 border border-slate-200">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-500 mb-1">Full Name</label>
+                      <input
+                        type="text"
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white"
+                        value={job.tenantName}
+                        onChange={e => updateJob(job.id, { tenantName: e.target.value })}
+                        placeholder="Tenant full name"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-500 mb-1">Phone</label>
+                      <input
+                        type="tel"
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white"
+                        value={job.tenantPhone}
+                        onChange={e => updateJob(job.id, { tenantPhone: e.target.value })}
+                        placeholder="04xx xxx xxx"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-500 mb-1">Email</label>
+                      <input
+                        type="email"
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white"
+                        value={job.tenantEmail}
+                        onChange={e => updateJob(job.id, { tenantEmail: e.target.value })}
+                        placeholder="tenant@email.com"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-500 mb-1">Property Address</label>
+                      <input
+                        type="text"
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white"
+                        value={job.propertyAddress}
+                        onChange={e => updateJob(job.id, { propertyAddress: e.target.value })}
+                        placeholder="123 Main St, Suburb, State"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-500 mb-1">Property Manager Email</label>
+                      <input
+                        type="email"
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white"
+                        value={job.propertyManagerEmail || ''}
+                        onChange={e => updateJob(job.id, { propertyManagerEmail: e.target.value })}
+                        placeholder="manager@agency.com.au"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-500 mb-1">Job Type</label>
+                      <select
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white"
+                        value={job.type}
+                        onChange={e => updateJob(job.id, { type: e.target.value as any })}
+                      >
+                        <option value="ELECTRICAL">Electrical</option>
+                        <option value="SMOKE_ALARM">Smoke Alarm</option>
+                        <option value="EMERGENCY">Emergency</option>
+                        <option value="MAINTENANCE">Maintenance</option>
+                        <option value="INSPECTION">Inspection</option>
+                      </select>
+                    </div>
+                    <p className="text-[10px] text-slate-400">Changes save automatically to Firestore.</p>
+                  </div>
+                ) : (
+                  <div className="bg-slate-50 rounded-xl p-4 space-y-3 border border-slate-100">
+                    <div className="flex items-center gap-3">
+                      <User className="w-4 h-4 text-slate-400 shrink-0" />
+                      <span className={cn("font-medium", job.tenantName ? "text-slate-900" : "text-slate-400 italic")}>{job.tenantName || 'No name set'}</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <Phone className="w-4 h-4 text-slate-400 shrink-0" />
+                      {job.tenantPhone
+                        ? <a href={`tel:${job.tenantPhone}`} className="text-blue-600 hover:underline">{job.tenantPhone}</a>
+                        : <span className="text-slate-400 italic text-sm">No phone set</span>}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <Mail className="w-4 h-4 text-slate-400 shrink-0" />
+                      {job.tenantEmail
+                        ? <a href={`mailto:${job.tenantEmail}`} className="text-blue-600 hover:underline">{job.tenantEmail}</a>
+                        : <span className="text-slate-400 italic text-sm">No email set</span>}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <MapPin className="w-4 h-4 text-slate-400 shrink-0" />
+                      <span className={cn("text-sm", job.propertyAddress ? "text-slate-700" : "text-slate-400 italic")}>{job.propertyAddress || 'No address set'}</span>
+                    </div>
+                    {job.propertyManagerEmail && (
+                      <div className="flex items-center gap-3">
+                        <Mail className="w-4 h-4 text-slate-300 shrink-0" />
+                        <span className="text-xs text-slate-500">PM: {job.propertyManagerEmail}</span>
+                      </div>
+                    )}
+                    {(!job.tenantName || !job.tenantPhone || !job.tenantEmail) && isAdmin && (
+                      <button
+                        onClick={() => setEditingTenant(true)}
+                        className="w-full mt-1 py-1.5 border border-dashed border-amber-300 bg-amber-50 text-amber-700 rounded-lg text-xs font-medium hover:bg-amber-100 transition-colors"
+                      >
+                        ⚠ Missing details — click to fill in
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Raw Email View/Download — only for email-sourced jobs */}
@@ -419,6 +523,75 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
                         Download Email
                       </button>
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Email Template Download — always visible to admin */}
+              {isAdmin && (
+                <div>
+                  <h3 className="text-sm font-medium text-slate-500 mb-2">Property Manager Email Template</h3>
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 space-y-2">
+                    <p className="text-xs text-emerald-700">Download a pre-filled template to send to property managers so jobs come through correctly.</p>
+                    <button
+                      onClick={() => {
+                        const template = `Subject: Maintenance Job Request — ${job.propertyAddress || '[PROPERTY ADDRESS]'}
+
+Hi Wirez R Us,
+
+Please find below the details for a maintenance job request.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+JOB REQUEST — PLEASE FILL IN ALL FIELDS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+PROPERTY ADDRESS: ${job.propertyAddress || '[e.g. 12 Smith Street, Brisbane QLD 4000]'}
+
+TENANT NAME: ${job.tenantName || '[Full name of tenant]'}
+TENANT PHONE: ${job.tenantPhone || '[e.g. 0412 345 678]'}
+TENANT EMAIL: ${job.tenantEmail || '[e.g. tenant@email.com]'}
+
+PROPERTY MANAGER NAME: [Your full name]
+PROPERTY MANAGER EMAIL: ${job.propertyManagerEmail || '[Your email address]'}
+PROPERTY MANAGER PHONE: [Your phone number]
+AGENCY: [Agency name]
+
+JOB TYPE: [Choose one: Electrical / Smoke Alarm / Emergency / Maintenance / Inspection]
+
+DESCRIPTION OF ISSUE:
+[Please describe the issue in as much detail as possible. Include when it started, any hazards observed, and any relevant history.]
+
+URGENCY: [Choose one: Routine / Urgent / Emergency]
+
+ACCESS INSTRUCTIONS:
+[e.g. Key in lockbox, code 1234. Tenant available Mon–Fri 9am–5pm. Do not attend before 9am.]
+
+PREFERRED DATE/TIME:
+[e.g. Any weekday morning, or specifically Tuesday 3 March after 10am]
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+IMPORTANT: Please ensure ALL fields above are filled in before sending.
+Incomplete requests will cause delays in scheduling.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Thank you,
+[Your name]
+[Agency name]
+[Phone]
+`;
+                        const blob = new Blob([template], { type: 'text/plain' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `job_request_template_${(job.propertyAddress || 'property').replace(/[^a-z0-9]/gi, '_').toLowerCase()}.txt`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                      }}
+                      className="w-full px-3 py-2 bg-white hover:bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-1.5"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      Download Email Template
+                    </button>
                   </div>
                 </div>
               )}
