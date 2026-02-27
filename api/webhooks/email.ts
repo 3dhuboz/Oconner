@@ -222,6 +222,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       description: `WORK ORDER — Auto-generated from inbound email\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\nDate Created: ${now.toLocaleDateString('en-AU', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}\nTime: ${now.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}\n\nFROM: ${from}\nSUBJECT: ${subject}\nTENANT: ${tenantName || 'Not identified'}\nPHONE: ${tenantPhone || 'Not found'}\nEMAIL: ${tenantEmail || 'Not found'}\nPROPERTY: ${propertyAddress || 'Not found'}\nURGENCY: ${urgency}\nTYPE: ${jobType}\n\n${issueDescription ? `ISSUE SUMMARY:\n${issueDescription}\n\n` : ''}ORIGINAL EMAIL:\n${emailContent}\n\nEXTRACTION: ${extractionMethod}\nSOURCE: CloudMailin Inbound Email`,
       source: 'email',
       extractionMethod,
+      rawEmailFrom: from,
+      rawEmailSubject: subject,
+      rawEmailBody: emailContent,
+      rawEmailHtml: html || '',
     };
 
     // ── Step 4: Authenticate with Firebase ──

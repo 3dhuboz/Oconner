@@ -6,7 +6,8 @@ import jsPDF from 'jspdf';
 import { PDFDocument, rgb } from 'pdf-lib';
 import { 
   ArrowLeft, Phone, Mail, FileText, Calendar as CalendarIcon, 
-  CheckCircle2, AlertCircle, Camera, Wrench, DollarSign, Send, Loader2, User
+  CheckCircle2, AlertCircle, Camera, Wrench, DollarSign, Send, Loader2, User,
+  Download, Eye, X, MapPin
 } from 'lucide-react';
 import { cn } from '../utils';
 
@@ -24,6 +25,7 @@ export function JobDetail({ jobs, updateJob, electricians }: JobDetailProps) {
   const [newNote, setNewNote] = useState('');
   const [isSyncingXero, setIsSyncingXero] = useState(false);
   const [proposedEntryDate, setProposedEntryDate] = useState('');
+  const [showRawEmail, setShowRawEmail] = useState(false);
 
   if (!job) {
     return <div>Job not found</div>;
@@ -341,6 +343,52 @@ export function JobDetail({ jobs, updateJob, electricians }: JobDetailProps) {
                 </div>
               </div>
 
+              {/* Raw Email View/Download — only for email-sourced jobs */}
+              {job.source === 'email' && (job.rawEmailBody || job.rawEmailHtml) && (
+                <div>
+                  <h3 className="text-sm font-medium text-slate-500 mb-2">Original Email</h3>
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs text-blue-700">
+                        <span className="font-medium">From:</span> {job.rawEmailFrom || job.propertyManagerEmail}
+                        {job.extractionMethod && (
+                          <span className="ml-2 px-1.5 py-0.5 bg-blue-100 rounded text-[10px] font-medium">Extracted: {job.extractionMethod}</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setShowRawEmail(true)}
+                        className="flex-1 px-3 py-2 bg-white hover:bg-blue-50 border border-blue-200 text-blue-700 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-1.5"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        View Original Email
+                      </button>
+                      <button
+                        onClick={() => {
+                          const content = job.rawEmailHtml || job.rawEmailBody || '';
+                          const isHtml = !!job.rawEmailHtml;
+                          const blob = new Blob(
+                            [isHtml ? content : `From: ${job.rawEmailFrom || ''}\nSubject: ${job.rawEmailSubject || ''}\nDate: ${job.createdAt}\n\n${content}`],
+                            { type: isHtml ? 'text/html' : 'text/plain' }
+                          );
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = `email_${job.id}.${isHtml ? 'html' : 'txt'}`;
+                          a.click();
+                          URL.revokeObjectURL(url);
+                        }}
+                        className="flex-1 px-3 py-2 bg-white hover:bg-blue-50 border border-blue-200 text-blue-700 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-1.5"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        Download Email
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div>
                 <h3 className="text-sm font-medium text-slate-500 mb-2">Three-Try Contact Rule</h3>
                 <div className="space-y-3 mb-4">
@@ -601,11 +649,68 @@ export function JobDetail({ jobs, updateJob, electricians }: JobDetailProps) {
           </div>
         </div>
       </div>
+
+      {/* ─── Raw Email Viewer Modal ─── */}
+      {showRawEmail && job.source === 'email' && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowRawEmail(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-5 border-b border-slate-200">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Original Email</h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  From: {job.rawEmailFrom || job.propertyManagerEmail || 'Unknown'} &bull; {format(new Date(job.createdAt), 'MMM d, yyyy h:mm a')}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    const content = job.rawEmailHtml || job.rawEmailBody || '';
+                    const isHtml = !!job.rawEmailHtml;
+                    const blob = new Blob(
+                      [isHtml ? content : `From: ${job.rawEmailFrom || ''}\nSubject: ${job.rawEmailSubject || ''}\nDate: ${job.createdAt}\n\n${content}`],
+                      { type: isHtml ? 'text/html' : 'text/plain' }
+                    );
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `email_${job.id}.${isHtml ? 'html' : 'txt'}`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                  className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-500 hover:text-slate-700"
+                  title="Download email"
+                >
+                  <Download className="w-4 h-4" />
+                </button>
+                <button onClick={() => setShowRawEmail(false)} className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-500 hover:text-slate-700">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            <div className="px-5 py-3 bg-slate-50 border-b border-slate-200 text-sm">
+              <span className="font-medium text-slate-600">Subject:</span>{' '}
+              <span className="text-slate-900">{job.rawEmailSubject || job.title}</span>
+              {job.extractionMethod && (
+                <span className="ml-3 px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px] font-medium">
+                  Extraction: {job.extractionMethod}
+                </span>
+              )}
+            </div>
+            <div className="flex-1 overflow-y-auto p-5">
+              {job.rawEmailHtml ? (
+                <div
+                  className="prose prose-sm max-w-none text-slate-800"
+                  dangerouslySetInnerHTML={{ __html: job.rawEmailHtml }}
+                />
+              ) : (
+                <pre className="text-sm text-slate-700 whitespace-pre-wrap font-mono leading-relaxed">
+                  {job.rawEmailBody || 'No email content available.'}
+                </pre>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
-}
-
-// Helper component for MapPin since it wasn't imported at top
-function MapPin(props: any) {
-  return <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
 }

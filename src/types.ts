@@ -58,6 +58,15 @@ export interface Job {
   // Phase 4: Office Admin & Close-out
   xeroInvoiceId?: string;
   complianceReportGenerated?: boolean;
+
+  // Email source data (when job created from inbound email)
+  source?: string;
+  extractionMethod?: string;
+  urgency?: string;
+  rawEmailFrom?: string;
+  rawEmailSubject?: string;
+  rawEmailBody?: string;
+  rawEmailHtml?: string;
 }
 
 export interface Electrician {
