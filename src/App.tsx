@@ -151,7 +151,7 @@ function AppContent() {
       {/* General Protected Routes */}
       <Route path="/" element={
         <ProtectedRoute>
-          <Dashboard jobs={jobs} />
+          <Dashboard jobs={jobs} electricians={electricians} />
         </ProtectedRoute>
       } />
       <Route path="/jobs" element={
