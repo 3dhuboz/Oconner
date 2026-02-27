@@ -21,11 +21,12 @@ import { TechDashboard } from './pages/TechDashboard';
 import { TechToday } from './pages/TechToday';
 import { TechProfile } from './pages/TechProfile';
 import { PartsCatalog } from './pages/PartsCatalog';
+import { NewJob } from './pages/NewJob';
 
 
 import { Job, Electrician, CatalogPart } from './types';
 import { db } from './services/firebase';
-import { collection, onSnapshot, doc, updateDoc, deleteDoc, setDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, updateDoc, deleteDoc, setDoc, addDoc } from 'firebase/firestore';
 import { Toaster } from 'react-hot-toast';
 import toast from 'react-hot-toast';
 
@@ -246,6 +247,11 @@ function AppContent() {
         <ProtectedRoute>
           <JobBoard jobs={jobs} />
         </ProtectedRoute>
+      } />
+      <Route path="/jobs/new" element={
+        <AdminRoute>
+          <NewJob electricians={electricians} />
+        </AdminRoute>
       } />
       <Route path="/jobs/:id" element={
         <ProtectedRoute>
