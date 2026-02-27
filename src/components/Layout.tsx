@@ -144,10 +144,20 @@ export function Layout({ children }: LayoutProps) {
   .footer{margin-top:16px;border-top:1px solid #e2e8f0;padding-top:7px;display:flex;justify-content:space-between}
   .footer-text{font-size:9px;color:#94a3b8}
   .action-bar{display:flex;gap:10px;justify-content:center;margin-top:18px;flex-wrap:wrap}
-  .btn{padding:10px 24px;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer}
+  .btn{padding:10px 24px;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;transition:transform 0.1s,box-shadow 0.1s,opacity 0.15s;position:relative;overflow:hidden;min-width:160px}
   .btn-dark{background:#0f172a;color:#fff}
   .btn-amber{background:#f59e0b;color:#0f172a}
-  .btn:hover{opacity:0.88}
+  .btn:hover{opacity:0.88;box-shadow:0 4px 12px rgba(0,0,0,0.18)}
+  .btn:active{transform:scale(0.96);box-shadow:none}
+  .btn:disabled{opacity:0.6;cursor:not-allowed;transform:none}
+  .btn-success{background:#10b981!important;color:#fff!important}
+  .btn-error{background:#ef4444!important;color:#fff!important}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .spinner{display:inline-block;width:13px;height:13px;border:2px solid rgba(255,255,255,0.4);border-top-color:#fff;border-radius:50%;animation:spin 0.7s linear infinite;vertical-align:middle;margin-right:6px}
+  .spinner-dark{border-color:rgba(0,0,0,0.2);border-top-color:#0f172a}
+  #btn-status{text-align:center;margin-top:10px;font-size:12px;font-weight:600;min-height:20px;transition:opacity 0.3s}
+  #btn-status.ok{color:#059669}
+  #btn-status.err{color:#dc2626}
   .important{background:#fef9c3;border:1px solid #fbbf24;border-radius:6px;padding:7px 11px;font-size:11px;color:#92400e;margin-bottom:14px}
   .instructions{display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap}
   .instr-box{flex:1;min-width:200px;border-radius:7px;padding:10px 13px;font-size:11.5px;line-height:1.6}
@@ -289,10 +299,11 @@ export function Layout({ children }: LayoutProps) {
   </div>
 
   <div class="action-bar no-print">
-    <button class="btn btn-amber" onclick="submitByEmail()">&#9993; Submit by Email</button>
-    <button class="btn btn-dark" onclick="window.print()">&#128438; Print / Save as PDF</button>
-    <button class="btn" style="background:#6366f1;color:#fff" onclick="forwardForm()">&#128279; Send Form to Someone</button>
+    <button id="btn-submit" class="btn btn-amber" onclick="submitByEmail()">&#9993; Submit by Email</button>
+    <button id="btn-print" class="btn btn-dark" onclick="doPrint()">&#128438; Print / Save as PDF</button>
+    <button id="btn-forward" class="btn" style="background:#6366f1;color:#fff" onclick="forwardForm()">&#128279; Send Form to Someone</button>
   </div>
+  <div id="btn-status"></div>
 
 </div>
 
@@ -374,32 +385,72 @@ function showFallback(subject, bodyText) {
   showSubmitHelper(subject, bodyText, 'e35a378a68a971a219eb@cloudmailin.net');
 }
 
+function setStatus(msg, type) {
+  var el = document.getElementById('btn-status');
+  if (!el) return;
+  el.textContent = msg;
+  el.className = type || '';
+  if (msg) setTimeout(function() { if (el.textContent === msg) { el.textContent = ''; el.className = ''; } }, 5000);
+}
+function setBtnState(id, loading, label, originalLabel) {
+  var btn = document.getElementById(id);
+  if (!btn) return;
+  btn.disabled = loading;
+  if (loading) {
+    btn.setAttribute('data-orig', btn.innerHTML);
+    btn.innerHTML = '<span class="spinner' + (id === 'btn-print' ? ' spinner-dark' : '') + '"></span>' + label;
+  } else {
+    btn.innerHTML = btn.getAttribute('data-orig') || originalLabel || btn.innerHTML;
+  }
+}
 function submitByEmail() {
   var d = buildEmailText();
   if (!d.address || !d.tenantName) {
-    alert('Please fill in Property Address and Tenant Name before submitting.');
+    setStatus('\u26a0 Please fill in Property Address and Tenant Name.', 'err');
+    var el = document.getElementById('f_address');
+    if (el) { el.style.borderColor = '#ef4444'; el.focus(); setTimeout(function(){ el.style.borderColor = ''; }, 3000); }
     return;
   }
   if (!val('f_description')) {
-    alert('Please fill in the Description of Issue before submitting.');
+    setStatus('\u26a0 Please fill in the Description of Issue.', 'err');
+    var el2 = document.getElementById('f_description');
+    if (el2) { el2.style.borderColor = '#ef4444'; el2.focus(); setTimeout(function(){ el2.style.borderColor = ''; }, 3000); }
     return;
   }
+
+  setBtnState('btn-submit', true, 'Opening email...');
+  setStatus('Opening your email app\u2026', '');
 
   var TO = 'e35a378a68a971a219eb@cloudmailin.net';
   var mailtoUrl = 'mailto:' + TO + '?subject=' + encodeURIComponent(d.subject) + '&body=' + encodeURIComponent(d.body);
 
-  // Attempt to open email client
   var mailtoLink = document.createElement('a');
   mailtoLink.href = mailtoUrl;
   mailtoLink.target = '_blank';
   mailtoLink.click();
-  
-  // Show helper modal immediately with both options
+
   setTimeout(function() {
+    setBtnState('btn-submit', false);
+    setStatus('\u2713 Email app launched \u2014 check below if it did not open.', 'ok');
     showSubmitHelper(d.subject, d.body, TO);
-  }, 500);
+  }, 800);
+}
+function doPrint() {
+  setBtnState('btn-print', true, 'Preparing\u2026');
+  setStatus('Preparing print preview\u2026', '');
+  setTimeout(function() {
+    setBtnState('btn-print', false);
+    setStatus('');
+    window.print();
+  }, 300);
 }
 function forwardForm() {
+  setBtnState('btn-forward', true, 'Opening\u2026');
+  setStatus('Opening your email app\u2026', '');
+  setTimeout(function() {
+    setBtnState('btn-forward', false);
+    setStatus('\u2713 Done \u2014 check below if email did not open.', 'ok');
+  }, 800);
   var subject = 'Wirez R Us — Work Order Request Form';
   var body = 
     'Hi,\n\n' +
