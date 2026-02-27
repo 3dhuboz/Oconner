@@ -79,10 +79,10 @@ export function Dashboard({ jobs, electricians }: DashboardProps) {
         <div className="flex gap-2">
           <button
             onClick={() => {
-              const w = 400;
-              const h = window.screen.availHeight - 100;
-              const left = window.screen.availWidth - w - 10;
-              const top = 50;
+              const w = 280;
+              const h = 500;
+              const left = window.screen.availWidth - w - 20;
+              const top = window.screen.availHeight - h - 80;
               const features = [
                 `width=${w}`,
                 `height=${h}`,
@@ -96,7 +96,6 @@ export function Dashboard({ jobs, electricians }: DashboardProps) {
                 'status=no',
                 'directories=no',
                 'titlebar=no',
-                'chrome=yes',
               ].join(',');
               
               const widgetWindow = window.open(
@@ -105,14 +104,13 @@ export function Dashboard({ jobs, electricians }: DashboardProps) {
                 features
               );
               
-              // Focus the widget window
               if (widgetWindow) {
                 widgetWindow.focus();
               }
             }}
             className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors shadow-sm"
           >
-            <ExternalLink className="w-4 h-4" /> Open as Widget
+            <ExternalLink className="w-4 h-4" /> Open Widget
           </button>
           <Link to="/jobs/new" className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-medium hover:bg-slate-800 transition-colors shadow-sm">
             <Plus className="w-4 h-4" /> New Work Order
