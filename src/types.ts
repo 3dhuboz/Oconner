@@ -132,6 +132,10 @@ export interface Job {
   tenantNotifiedAt?: string;
   tenantNotificationType?: string;
 
+  // Running late detection
+  runningLateNotified?: boolean;
+  runningLateNotifiedAt?: string;
+
   // SA Compliance Report fields
   smokeAlarms?: SmokeAlarmEntry[];
   complianceNotes?: string;

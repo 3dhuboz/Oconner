@@ -65,8 +65,62 @@ export function Dashboard({ jobs, electricians }: DashboardProps) {
     }));
   }, [electricians, jobs]);
 
+  // ─── Running-late detection (EXECUTION jobs past their window) ────
+  const overrunningJobs = useMemo(() => {
+    const now = Date.now();
+    return jobs.filter(j => {
+      if (j.status !== 'EXECUTION' || !j.scheduledDate) return false;
+      const start = new Date(j.scheduledDate).getTime();
+      if (isNaN(start)) return false;
+      const expectedMin = j.type === 'SMOKE_ALARM' ? 15 : 60;
+      const graceMin = 10;
+      return now > start + (expectedMin + graceMin) * 60_000;
+    }).map(j => {
+      const start = new Date(j.scheduledDate!).getTime();
+      const expectedMin = j.type === 'SMOKE_ALARM' ? 15 : 60;
+      const overrunMin = Math.round((Date.now() - start - expectedMin * 60_000) / 60_000);
+      return { ...j, overrunMin };
+    });
+  }, [jobs]);
+
   return (
     <div className="max-w-7xl mx-auto space-y-5">
+      {/* ─── Running Late Alert ─────────────────────────────── */}
+      {overrunningJobs.length > 0 && (
+        <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <AlertCircle className="w-5 h-5 text-red-600" />
+            <h3 className="text-sm font-bold text-red-800">
+              {overrunningJobs.length} job{overrunningJobs.length > 1 ? 's' : ''} running late
+            </h3>
+          </div>
+          <div className="space-y-2">
+            {overrunningJobs.map(j => {
+              const tech = electricians.find(e => e.id === j.assignedElectricianId);
+              return (
+                <Link
+                  key={j.id}
+                  to={`/jobs/${j.id}`}
+                  className="flex items-center justify-between px-3 py-2 bg-white border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-xs font-bold text-red-600">+{j.overrunMin}min</span>
+                    <span className="text-sm font-medium text-slate-700 truncate">{j.propertyAddress}</span>
+                    {tech && <span className="text-xs text-slate-400">({tech.name})</span>}
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {j.runningLateNotified && (
+                      <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-bold">NOTIFIED</span>
+                    )}
+                    <span className="text-xs text-red-600 font-medium">View →</span>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* ─── Header Row ──────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
         <div>
