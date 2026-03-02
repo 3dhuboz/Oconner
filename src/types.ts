@@ -121,6 +121,16 @@ export interface Job {
   pauseReason?: string;
   needsReschedule?: boolean;
   completionOverrideReason?: string;
+
+  // Finish Job (field tech sends report/invoice to customer)
+  finishedJobEmailSent?: boolean;
+  finishedJobEmailSentAt?: string;
+  finishedJobEmailTo?: string;
+  finishedJobDocType?: 'compliance_report' | 'invoice';
+
+  // Tenant notification tracking
+  tenantNotifiedAt?: string;
+  tenantNotificationType?: string;
 }
 
 export interface Electrician {

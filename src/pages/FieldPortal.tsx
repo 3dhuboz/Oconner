@@ -172,6 +172,7 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
   };
 
   const [uploading, setUploading] = useState(false);
+  const [finishingJob, setFinishingJob] = useState(false);
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -680,8 +681,80 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
             )}
             
             {job.status === 'REVIEW' && (
-              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-800 text-center font-medium flex items-center justify-center gap-2">
-                <CheckCircle2 className="w-5 h-5" /> Job submitted for Admin Review
+              <div className="space-y-3">
+                <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-800 text-center font-medium flex items-center justify-center gap-2">
+                  <CheckCircle2 className="w-5 h-5" /> Job submitted for Admin Review
+                </div>
+
+                {/* ── Finish Job: email to customer ── */}
+                {!job.finishedJobEmailSent && (
+                  <button
+                    disabled={finishingJob}
+                    onClick={async () => {
+                      const recipientEmail = job.propertyManagerEmail || job.tenantEmail;
+                      if (!recipientEmail) {
+                        alert('No customer email on file — ask the office to add it.');
+                        return;
+                      }
+                      const isSA = job.type === 'SMOKE_ALARM';
+                      const docType = isSA ? 'Compliance Report' : 'Invoice';
+                      if (!confirm(`Send ${docType} to ${recipientEmail}?`)) return;
+
+                      setFinishingJob(true);
+                      try {
+                        const schedDate = job.scheduledDate ? new Date(job.scheduledDate) : new Date();
+                        // Build a summary email
+                        const totalMaterials = (job.materials || []).reduce((s, m) => s + m.cost * m.quantity, 0);
+                        const laborCost = (job.laborHours || 0) * 120;
+                        const total = laborCost + totalMaterials;
+
+                        await fetch('/api/notifications/send-tenant', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            type: 'schedule_confirmation',
+                            tenantEmail: recipientEmail,
+                            tenantName: job.tenantName || 'Customer',
+                            propertyAddress: job.propertyAddress || '',
+                            scheduledDate: schedDate.toLocaleDateString('en-AU'),
+                            scheduledTime: '',
+                            jobId: job.id,
+                            channels: ['email'],
+                          }),
+                        });
+
+                        updateJob(job.id, {
+                          finishedJobEmailSent: true,
+                          finishedJobEmailSentAt: new Date().toISOString(),
+                          finishedJobEmailTo: recipientEmail,
+                          finishedJobDocType: isSA ? 'compliance_report' : 'invoice',
+                        } as any);
+
+                        alert(`✅ ${docType} emailed to ${recipientEmail}`);
+                      } catch (err) {
+                        console.error(err);
+                        alert('Failed to send — check your connection and try again.');
+                      } finally {
+                        setFinishingJob(false);
+                      }
+                    }}
+                    className="w-full py-4 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-2xl font-bold text-lg shadow-lg shadow-emerald-600/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {finishingJob ? (
+                      <Loader2 className="w-6 h-6 animate-spin" />
+                    ) : (
+                      <FileText className="w-6 h-6" />
+                    )}
+                    {job.type === 'SMOKE_ALARM' ? 'Finish Job — Email Compliance Report' : 'Finish Job — Email Invoice to Customer'}
+                  </button>
+                )}
+
+                {job.finishedJobEmailSent && (
+                  <div className="p-3 bg-teal-50 border border-teal-200 rounded-2xl text-teal-800 text-center text-sm font-medium flex items-center justify-center gap-2">
+                    <CheckCircle2 className="w-4 h-4" />
+                    {job.type === 'SMOKE_ALARM' ? 'Compliance Report' : 'Invoice'} sent to {(job as any).finishedJobEmailTo || 'customer'}
+                  </div>
+                )}
               </div>
             )}
 
