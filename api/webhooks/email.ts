@@ -258,6 +258,20 @@ Overall confidence = average of the 5 critical field confidence scores.`
 
 // ─── Main handler ──────────────────────────────────────────────
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  // GET = diagnostic check
+  if (req.method === 'GET') {
+    const checks = {
+      endpoint: '✅ /api/webhooks/email is reachable',
+      VITE_FIREBASE_PROJECT_ID: process.env.VITE_FIREBASE_PROJECT_ID ? '✅ set' : '❌ MISSING',
+      VITE_FIREBASE_API_KEY: (process.env.VITE_FIREBASE_API_KEY || process.env.VITE_FB_API_KEY) ? '✅ set' : '❌ MISSING',
+      OPENAI_API_KEY: process.env.OPENAI_API_KEY ? '✅ set' : '⚠️ missing (AI extraction disabled, regex only)',
+      WEBHOOK_AUTH_EMAIL: process.env.WEBHOOK_AUTH_EMAIL ? '✅ set' : '⚠️ missing (will try anonymous auth)',
+      WEBHOOK_AUTH_PASSWORD: process.env.WEBHOOK_AUTH_PASSWORD ? '✅ set' : '⚠️ missing',
+      firebaseReady: (process.env.VITE_FIREBASE_PROJECT_ID && (process.env.VITE_FIREBASE_API_KEY || process.env.VITE_FB_API_KEY)) ? '✅ can write to Firestore' : '❌ CANNOT write to Firestore — add VITE_FIREBASE_PROJECT_ID and VITE_FIREBASE_API_KEY to Vercel env vars',
+    };
+    return res.status(200).json({ status: 'Email webhook diagnostic', checks });
+  }
+
   try {
     if (req.method !== 'POST') {
       return res.status(405).json({ error: 'Method not allowed' });

@@ -26,6 +26,26 @@ APP_URL=https://your-app.vercel.app
 NODE_ENV=production
 ```
 
+### Email-to-Job Pipeline (REQUIRED for inbound work orders)
+
+```bash
+# OpenAI — powers AI extraction of work orders from any PM software
+OPENAI_API_KEY=sk-...
+
+# CloudMailin — inbound email catch-all
+VITE_CLOUDMAILIN_EMAIL=e35a378a68a971a219eb@cloudmailin.net
+
+# Firebase webhook auth (create a dedicated user in Firebase Auth for this)
+WEBHOOK_AUTH_EMAIL=webhook@wireznrus.com.au
+WEBHOOK_AUTH_PASSWORD=a_strong_random_password
+```
+
+> **CloudMailin webhook URL** must be set to:
+> `https://YOUR-APP.vercel.app/api/webhooks/email`
+> Format: JSON (HTTP POST)
+>
+> **Test it**: Visit `https://YOUR-APP.vercel.app/api/webhooks/email` in a browser — you'll see a diagnostic page showing which env vars are configured.
+
 ### Optional Integration Variables
 
 ```bash
