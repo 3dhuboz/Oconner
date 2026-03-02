@@ -1257,25 +1257,41 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
                   </div>
                 )}
 
-                {job.contactAttempts.length >= 3 && !job.contactAttempts.some(a => a.successful) && !job.form9Sent && (
-                  <div className="mt-4 p-4 bg-rose-50 border border-rose-100 rounded-xl">
-                    <p className="text-sm text-rose-800 font-medium mb-3">3 attempts failed. Form 9 required.</p>
+                {/* Form 9 — always available (no 3-contact rule), 2hr window */}
+                {!job.form9Sent && (
+                  <div className="mt-4 p-4 bg-slate-50 border border-slate-200 rounded-xl">
+                    <p className="text-sm text-slate-700 font-medium mb-1">Form 9 — Entry Notice</p>
+                    <p className="text-xs text-slate-500 mb-3">
+                      {job.type === 'SMOKE_ALARM'
+                        ? 'SA check — Form 9 will be auto-sent to tenant on generation.'
+                        : 'Non-SA job — Form 9 generated for download. Click "Send" separately when ready.'}
+                    </p>
                     <div className="mb-3">
-                      <label className="block text-xs font-medium text-rose-700 mb-1">Proposed Entry Date & Time (Min 24h notice)</label>
+                      <label className="block text-xs font-medium text-slate-600 mb-1">Proposed Entry Date & Time (Min 24h notice, 2hr window)</label>
                       <input 
                         type="datetime-local" 
-                        className="w-full px-3 py-2 border border-rose-200 rounded-lg text-sm bg-white"
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white"
                         value={proposedEntryDate}
                         onChange={e => setProposedEntryDate(e.target.value)}
                       />
+                      {proposedEntryDate && (
+                        <p className="text-xs text-slate-500 mt-1">
+                          Window: {format(new Date(proposedEntryDate), 'h:mm a')} – {format(new Date(new Date(proposedEntryDate).getTime() + 2 * 60 * 60 * 1000), 'h:mm a')}
+                        </p>
+                      )}
                     </div>
                     <button 
                       onClick={handleGenerateForm9} 
                       disabled={!proposedEntryDate}
-                      className="w-full px-4 py-2 bg-rose-600 hover:bg-rose-700 disabled:bg-rose-300 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                      className={cn(
+                        "w-full px-4 py-2 text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 disabled:cursor-not-allowed",
+                        job.type === 'SMOKE_ALARM'
+                          ? "bg-rose-600 hover:bg-rose-700 disabled:bg-rose-300"
+                          : "bg-slate-700 hover:bg-slate-800 disabled:bg-slate-300"
+                      )}
                     >
                       <FileText className="w-4 h-4" />
-                      Generate & Send Form 9
+                      {job.type === 'SMOKE_ALARM' ? 'Generate & Send Form 9 to Tenant' : 'Generate Form 9 (Download Only)'}
                     </button>
                   </div>
                 )}

@@ -22,6 +22,7 @@ import { TechToday } from './pages/TechToday';
 import { TechProfile } from './pages/TechProfile';
 import { PartsCatalog } from './pages/PartsCatalog';
 import { NewJob } from './pages/NewJob';
+import { PropertyHistory } from './pages/PropertyHistory';
 
 
 import { Job, Electrician, CatalogPart } from './types';
@@ -353,6 +354,11 @@ function AppContent() {
         <ProtectedRoute>
           <DashboardWidget jobs={jobs} electricians={electricians} />
         </ProtectedRoute>
+      } />
+      <Route path="/properties" element={
+        <AdminRoute jobs={jobs}>
+          <PropertyHistory jobs={jobs} />
+        </AdminRoute>
       } />
       
       <Route path="*" element={<div className="p-8 text-slate-500">Page not found or under construction.</div>} />
