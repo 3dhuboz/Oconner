@@ -152,15 +152,16 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
         return prev.smokeAlarms.map(a => ({
           ...a,
           id: Math.random().toString(36).substr(2, 9),
-          tested: false,
-          passed: false,
-          replaced: false,
-          notes: '',
+          installReason: 'Existing - Compliant',
         }));
       }
     }
     return [];
   });
+  const [saSmokeTick, setSaSmokeTick] = useState<boolean>(job?.complianceSmokeAlarmsTick ?? true);
+  const [saSafetyTick, setSaSafetyTick] = useState<boolean>(job?.complianceSafetySwitchTick ?? true);
+  const [saComments, setSaComments] = useState(job?.complianceNotes || '');
+  const [saComments2, setSaComments2] = useState(job?.complianceNotes2 || '');
 
   if (!job) {
     return <div className="p-8 text-center text-slate-500">Job not found.</div>;
@@ -768,121 +769,191 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
 
             {/* ════════ SA COMPLIANCE FORM (Smoke Alarm jobs only) ════════ */}
             {job.type === 'SMOKE_ALARM' && job.status === 'EXECUTION' && (
-              <div className="bg-white rounded-2xl p-5 border-2 border-rose-200 shadow-sm">
-                <label className="block text-sm font-bold text-rose-700 mb-1">
-                  🔥 Smoke Alarm Inspection
-                </label>
-                <p className="text-xs text-slate-500 mb-3">Record each alarm location, type, and test result.</p>
-
-                {/* Alarm entries */}
-                <div className="space-y-3 mb-3">
-                  {saAlarms.map((alarm, idx) => (
-                    <div key={alarm.id} className="bg-rose-50 border border-rose-200 rounded-xl p-3 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-rose-700">Alarm #{idx + 1}</span>
-                        <button
-                          onClick={() => setSaAlarms(prev => prev.filter(a => a.id !== alarm.id))}
-                          className="text-slate-400 hover:text-red-500 transition-colors"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                      <input
-                        type="text"
-                        placeholder="Location (e.g. Master Bedroom, Hallway)"
-                        value={alarm.location}
-                        onChange={e => setSaAlarms(prev => prev.map(a => a.id === alarm.id ? { ...a, location: e.target.value } : a))}
-                        className="w-full px-3 py-2 border border-rose-200 rounded-lg text-sm bg-white"
-                      />
-                      <div className="grid grid-cols-2 gap-2">
-                        <select
-                          value={alarm.type}
-                          onChange={e => setSaAlarms(prev => prev.map(a => a.id === alarm.id ? { ...a, type: e.target.value as any } : a))}
-                          className="px-2 py-1.5 border border-rose-200 rounded-lg text-xs bg-white"
-                        >
-                          <option value="photoelectric">Photoelectric</option>
-                          <option value="ionisation">Ionisation</option>
-                          <option value="dual_sensor">Dual Sensor</option>
-                          <option value="heat">Heat</option>
-                          <option value="unknown">Unknown</option>
-                        </select>
-                        <select
-                          value={alarm.power}
-                          onChange={e => setSaAlarms(prev => prev.map(a => a.id === alarm.id ? { ...a, power: e.target.value as any } : a))}
-                          className="px-2 py-1.5 border border-rose-200 rounded-lg text-xs bg-white"
-                        >
-                          <option value="hardwired">Hardwired (240V)</option>
-                          <option value="battery">Battery Only</option>
-                          <option value="240v_battery_backup">240V + Battery</option>
-                          <option value="unknown">Unknown</option>
-                        </select>
-                      </div>
-                      <div className="flex gap-3">
-                        <label className="flex items-center gap-1.5 text-xs">
-                          <input
-                            type="checkbox"
-                            checked={alarm.tested}
-                            onChange={e => setSaAlarms(prev => prev.map(a => a.id === alarm.id ? { ...a, tested: e.target.checked } : a))}
-                            className="rounded border-rose-300"
-                          />
-                          Tested
-                        </label>
-                        <label className="flex items-center gap-1.5 text-xs">
-                          <input
-                            type="checkbox"
-                            checked={alarm.passed}
-                            onChange={e => setSaAlarms(prev => prev.map(a => a.id === alarm.id ? { ...a, passed: e.target.checked } : a))}
-                            className="rounded border-rose-300"
-                          />
-                          Passed
-                        </label>
-                        <label className="flex items-center gap-1.5 text-xs">
-                          <input
-                            type="checkbox"
-                            checked={alarm.replaced}
-                            onChange={e => setSaAlarms(prev => prev.map(a => a.id === alarm.id ? { ...a, replaced: e.target.checked } : a))}
-                            className="rounded border-rose-300"
-                          />
-                          Replaced
-                        </label>
-                      </div>
-                      <input
-                        type="text"
-                        placeholder="Notes (optional)"
-                        value={alarm.notes || ''}
-                        onChange={e => setSaAlarms(prev => prev.map(a => a.id === alarm.id ? { ...a, notes: e.target.value } : a))}
-                        className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs bg-white"
-                      />
-                    </div>
-                  ))}
+              <div className="bg-white rounded-2xl border-2 border-red-400 shadow-sm overflow-hidden">
+                {/* Red/Yellow header matching template */}
+                <div className="bg-yellow-400 px-5 py-3">
+                  <h3 className="text-lg font-black text-red-700 tracking-wide">COMPLIANCE REPORT</h3>
                 </div>
 
-                <button
-                  onClick={() => setSaAlarms(prev => [...prev, {
-                    id: Math.random().toString(36).substr(2, 9),
-                    location: '',
-                    type: 'photoelectric',
-                    power: 'hardwired',
-                    tested: false,
-                    passed: false,
-                    replaced: false,
-                  }])}
-                  className="w-full py-2.5 border-2 border-dashed border-rose-300 text-rose-600 rounded-xl text-sm font-medium hover:bg-rose-50 transition-colors flex items-center justify-center gap-1.5"
-                >
-                  <Plus className="w-4 h-4" /> Add Alarm
-                </button>
+                <div className="p-5 space-y-4">
+                  {/* ── Tick / Cross compliance boxes ── */}
+                  <div className="space-y-3">
+                    <div className={cn(
+                      'p-3 rounded-xl border-2 flex items-center gap-3 cursor-pointer transition-colors',
+                      saSmokeTick ? 'bg-yellow-50 border-yellow-400' : 'bg-red-50 border-red-300'
+                    )} onClick={() => setSaSmokeTick(!saSmokeTick)}>
+                      <span className="text-lg">{saSmokeTick ? '✅' : '❌'}</span>
+                      <span className="text-sm font-semibold text-slate-800">
+                        On the Inspection Date smoke alarms were present and tested.
+                      </span>
+                    </div>
+                    <div className={cn(
+                      'p-3 rounded-xl border-2 flex items-center gap-3 cursor-pointer transition-colors',
+                      saSafetyTick ? 'bg-yellow-50 border-yellow-400' : 'bg-red-50 border-red-300'
+                    )} onClick={() => setSaSafetyTick(!saSafetyTick)}>
+                      <span className="text-lg">{saSafetyTick ? '✅' : '❌'}</span>
+                      <span className="text-sm font-semibold text-slate-800">
+                        On the Inspection Date a Safety Switch was present and tested.
+                      </span>
+                    </div>
+                  </div>
 
-                {saAlarms.length > 0 && (
+                  {/* ── Comments ── */}
+                  <div>
+                    <label className="block text-xs font-bold text-red-700 mb-1 uppercase tracking-wider">Comments</label>
+                    <textarea
+                      value={saComments}
+                      onChange={e => setSaComments(e.target.value)}
+                      placeholder="Any comments about the inspection..."
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm min-h-[60px]"
+                    />
+                  </div>
+
+                  {/* ── SMOKE ALARMS table ── */}
+                  <div>
+                    <label className="block text-xs font-bold text-red-700 mb-1 uppercase tracking-wider">Smoke Alarms</label>
+                    <p className="text-[10px] text-slate-500 mb-2">At this inspection, the following alarms were present or installed.</p>
+
+                    <div className="space-y-3">
+                      {saAlarms.map((alarm, idx) => (
+                        <div key={alarm.id} className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-slate-600">Alarm #{idx + 1}</span>
+                            <button
+                              title="Remove alarm"
+                              onClick={() => setSaAlarms(prev => prev.filter(a => a.id !== alarm.id))}
+                              className="text-slate-400 hover:text-red-500 transition-colors"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <span className="text-[10px] font-semibold text-slate-500 uppercase">Voltage</span>
+                              <select
+                                title="Voltage"
+                                value={alarm.voltage}
+                                onChange={e => setSaAlarms(prev => prev.map(a => a.id === alarm.id ? { ...a, voltage: e.target.value as any } : a))}
+                                className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white mt-0.5"
+                              >
+                                <option value="240V">240V</option>
+                                <option value="9V">9V</option>
+                                <option value="10yr Lithium">10yr Lithium</option>
+                                <option value="unknown">Unknown</option>
+                              </select>
+                            </div>
+                            <div>
+                              <span className="text-[10px] font-semibold text-slate-500 uppercase">Type</span>
+                              <select
+                                title="Alarm type"
+                                value={alarm.type}
+                                onChange={e => setSaAlarms(prev => prev.map(a => a.id === alarm.id ? { ...a, type: e.target.value as any } : a))}
+                                className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white mt-0.5"
+                              >
+                                <option value="Photoelectric">Photoelectric</option>
+                                <option value="Ionisation">Ionisation</option>
+                                <option value="Dual Sensor">Dual Sensor</option>
+                                <option value="Heat">Heat</option>
+                                <option value="unknown">Unknown</option>
+                              </select>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <span className="text-[10px] font-semibold text-slate-500 uppercase">Expires</span>
+                              <input
+                                type="text"
+                                placeholder="e.g. 2030"
+                                value={alarm.expires}
+                                onChange={e => setSaAlarms(prev => prev.map(a => a.id === alarm.id ? { ...a, expires: e.target.value } : a))}
+                                className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white mt-0.5"
+                              />
+                            </div>
+                            <div>
+                              <span className="text-[10px] font-semibold text-slate-500 uppercase">Level</span>
+                              <input
+                                type="text"
+                                placeholder="e.g. Upper, Ground"
+                                value={alarm.level}
+                                onChange={e => setSaAlarms(prev => prev.map(a => a.id === alarm.id ? { ...a, level: e.target.value } : a))}
+                                className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white mt-0.5"
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-semibold text-slate-500 uppercase">Location</span>
+                            <input
+                              type="text"
+                              placeholder="e.g. Master Bedroom, Hallway"
+                              value={alarm.location}
+                              onChange={e => setSaAlarms(prev => prev.map(a => a.id === alarm.id ? { ...a, location: e.target.value } : a))}
+                              className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white mt-0.5"
+                            />
+                          </div>
+                          <div>
+                            <span className="text-[10px] font-semibold text-slate-500 uppercase">Install Reason</span>
+                            <select
+                              title="Install reason"
+                              value={alarm.installReason}
+                              onChange={e => setSaAlarms(prev => prev.map(a => a.id === alarm.id ? { ...a, installReason: e.target.value } : a))}
+                              className="w-full px-2 py-1.5 border border-slate-200 rounded-lg text-xs bg-white mt-0.5"
+                            >
+                              <option value="Existing - Compliant">Existing - Compliant</option>
+                              <option value="Replacement">Replacement</option>
+                              <option value="New Install">New Install</option>
+                              <option value="Existing - Non Compliant">Existing - Non Compliant</option>
+                              <option value="Existing - Faulty">Existing - Faulty</option>
+                              <option value="Removed">Removed</option>
+                            </select>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <button
+                      onClick={() => setSaAlarms(prev => [...prev, {
+                        id: Math.random().toString(36).substr(2, 9),
+                        voltage: '240V',
+                        type: 'Photoelectric',
+                        expires: '',
+                        location: '',
+                        level: '',
+                        installReason: 'Existing - Compliant',
+                      }])}
+                      className="w-full mt-3 py-2.5 border-2 border-dashed border-red-300 text-red-600 rounded-xl text-sm font-medium hover:bg-red-50 transition-colors flex items-center justify-center gap-1.5"
+                    >
+                      <Plus className="w-4 h-4" /> Add Alarm
+                    </button>
+                  </div>
+
+                  {/* ── Bottom Comments ── */}
+                  <div>
+                    <label className="block text-xs font-bold text-red-700 mb-1 uppercase tracking-wider">Comments</label>
+                    <textarea
+                      value={saComments2}
+                      onChange={e => setSaComments2(e.target.value)}
+                      placeholder="Additional comments..."
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm min-h-[50px]"
+                    />
+                  </div>
+
+                  {/* ── Save button ── */}
                   <button
                     onClick={() => {
-                      updateJob(job.id, { smokeAlarms: saAlarms } as any);
-                      alert(`✅ ${saAlarms.length} alarm${saAlarms.length > 1 ? 's' : ''} saved to job`);
+                      updateJob(job.id, {
+                        smokeAlarms: saAlarms,
+                        complianceSmokeAlarmsTick: saSmokeTick,
+                        complianceSafetySwitchTick: saSafetyTick,
+                        complianceNotes: saComments,
+                        complianceNotes2: saComments2,
+                      } as any);
+                      alert('✅ Compliance data saved');
                     }}
-                    className="w-full mt-3 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-sm font-bold transition-colors"
+                    className="w-full py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-bold transition-colors"
                   >
-                    Save Alarm Data ({saAlarms.length} alarm{saAlarms.length > 1 ? 's' : ''})
+                    Save Compliance Data ({saAlarms.length} alarm{saAlarms.length !== 1 ? 's' : ''})
                   </button>
-                )}
+                </div>
               </div>
             )}
 

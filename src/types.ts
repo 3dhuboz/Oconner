@@ -139,24 +139,30 @@ export interface Job {
   // SA Compliance Report fields
   smokeAlarms?: SmokeAlarmEntry[];
   complianceNotes?: string;
+  complianceNotes2?: string;          // second comments box on template
   complianceInspectorName?: string;
   complianceLicenceNo?: string;
   complianceDate?: string;
   complianceEmailSentTo?: string;
   complianceEmailSentAt?: string;
+  complianceWoNumber?: string;
+  complianceClientRef?: string;
+  complianceSmokeAlarmsTick?: boolean;  // tick = compliant, cross = non-compliant
+  complianceSafetySwitchTick?: boolean;
 }
 
 export interface SmokeAlarmEntry {
   id: string;
-  location: string;       // e.g. "Master Bedroom", "Hallway", "Kitchen"
-  type: 'photoelectric' | 'ionisation' | 'dual_sensor' | 'heat' | 'unknown';
-  power: 'hardwired' | 'battery' | '240v_battery_backup' | 'unknown';
-  brand?: string;
-  model?: string;
-  expiryDate?: string;    // manufacture + 10 years
-  tested: boolean;
-  passed: boolean;
-  replaced: boolean;
+  voltage: '240V' | '9V' | '10yr Lithium' | 'unknown';
+  type: 'Photoelectric' | 'Ionisation' | 'Dual Sensor' | 'Heat' | 'unknown';
+  expires: string;          // expiry date string e.g. "2030"
+  location: string;         // e.g. "Master Bedroom", "Hallway", "Kitchen"
+  level: string;            // e.g. "Upper", "Lower", "Ground", "1"
+  installReason: string;    // e.g. "Replacement", "New Install", "Existing - Compliant"
+  // Legacy fields kept for backwards compat
+  tested?: boolean;
+  passed?: boolean;
+  replaced?: boolean;
   notes?: string;
 }
 

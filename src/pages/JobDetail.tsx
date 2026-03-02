@@ -224,167 +224,375 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
   const handleGenerateCompliance = () => {
     const doc = new jsPDF();
     const alarms = job.smokeAlarms || [];
-    const allPassed = alarms.length > 0 && alarms.every(a => a.tested && a.passed);
     const inspDate = format(new Date(), 'dd/MM/yyyy');
     const techName = job.complianceInspectorName || (job.assignedElectricianId
-      ? electricians.find(e => e.id === job.assignedElectricianId)?.name || 'Wirez R Us Technician'
-      : 'Wirez R Us Technician');
-    const licNo = job.complianceLicenceNo || 'QLD Lic: 999999';
-    
-    // Header
-    doc.setFillColor(23, 37, 84);
-    doc.rect(0, 0, 210, 40, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(20);
+      ? electricians.find(e => e.id === job.assignedElectricianId)?.name || 'N. Cakovan'
+      : 'N. Cakovan');
+    const smokeTick = job.complianceSmokeAlarmsTick !== false;
+    const safetyTick = job.complianceSafetySwitchTick !== false;
+    const woNumber = job.complianceWoNumber || job.id.slice(0, 8).toUpperCase();
+    const clientRef = job.complianceClientRef || job.agency || '';
+
+    // ═══════════════════════════════════════════════════
+    // PAGE 1 — Inspection Details
+    // ═══════════════════════════════════════════════════
+
+    // Yellow header bar
+    doc.setFillColor(255, 215, 0);
+    doc.rect(0, 0, 210, 25, 'F');
+    doc.setTextColor(200, 30, 30);
+    doc.setFontSize(26);
     doc.setFont("helvetica", "bold");
-    doc.text("SMOKE ALARM COMPLIANCE CERTIFICATE", 20, 22);
+    doc.text("COMPLIANCE REPORT", 75, 18);
+
+    // Wirez R Us text in header
     doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
-    doc.text("In accordance with the Fire and Emergency Services Act 1990 (Qld)", 20, 32);
-    
-    // Certificate ref
-    doc.setTextColor(200, 200, 200);
-    doc.setFontSize(8);
-    doc.text(`Ref: COMP-${job.id}`, 170, 12);
-    doc.text(`Date: ${inspDate}`, 170, 18);
+    doc.setTextColor(100, 50, 0);
+    doc.text("WIREZ R US", 15, 12);
+    doc.setFontSize(6);
+    doc.text("ELECTRICAL & SMOKE ALARMS", 15, 17);
 
-    // Property Details
-    doc.setTextColor(0, 0, 0);
-    doc.setFontSize(13);
-    doc.setFont("helvetica", "bold");
-    doc.text("Property Details", 20, 55);
-    doc.setDrawColor(200, 200, 200);
-    doc.line(20, 58, 190, 58);
-    
-    doc.setFontSize(10);
-    doc.setFont("helvetica", "normal");
-    const details = [
-      ['Address:', job.propertyAddress],
-      ['Tenant:', job.tenantName],
-      ['Owner/Agent:', job.propertyManagerEmail || job.agency || '—'],
-      ['Inspection Date:', inspDate],
-    ];
-    let y = 66;
-    details.forEach(([label, val]) => {
-      doc.setFont("helvetica", "bold");
-      doc.text(label, 20, y);
-      doc.setFont("helvetica", "normal");
-      doc.text(val || '—', 65, y);
-      y += 8;
-    });
-
-    // Alarm Detail Table
-    y += 5;
-    doc.setFontSize(13);
-    doc.setFont("helvetica", "bold");
-    doc.text("Smoke Alarm Details", 20, y);
-    doc.line(20, y + 3, 190, y + 3);
-    y += 10;
-
-    if (alarms.length > 0) {
-      // Table header
-      doc.setFontSize(8);
-      doc.setFont("helvetica", "bold");
-      doc.setFillColor(240, 240, 240);
-      doc.rect(20, y - 4, 170, 8, 'F');
-      const cols = [20, 55, 85, 110, 135, 155, 170];
-      const headers = ['Location', 'Type', 'Power', 'Tested', 'Passed', 'Replaced', 'Notes'];
-      headers.forEach((h, i) => doc.text(h, cols[i], y));
-      y += 6;
-
-      // Table rows
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(8);
-      alarms.forEach(alarm => {
-        if (y > 250) { doc.addPage(); y = 20; }
-        doc.text(alarm.location || '—', cols[0], y);
-        doc.text(alarm.type.replace('_', ' '), cols[1], y);
-        doc.text(alarm.power.replace('_', ' '), cols[2], y);
-        doc.text(alarm.tested ? '✓' : '✗', cols[3] + 5, y);
-        doc.text(alarm.passed ? '✓' : '✗', cols[4] + 5, y);
-        doc.text(alarm.replaced ? 'Yes' : 'No', cols[5], y);
-        doc.text((alarm.notes || '').substring(0, 20), cols[6], y);
-        y += 7;
-      });
-    } else {
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "italic");
-      doc.setTextColor(150, 150, 150);
-      doc.text("No individual alarm data recorded — generic checklist applied.", 20, y);
-      doc.setTextColor(0, 0, 0);
-      y += 10;
-      
-      const items = [
-        "Smoke alarms installed in all required locations",
-        "Alarms are less than 10 years old",
-        "Alarms interconnected where required",
-        "Alarms tested and functioning correctly",
-        "Batteries replaced (if applicable)",
-        "Decibel level test passed (>85dB)"
-      ];
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "normal");
-      items.forEach(item => {
-        doc.text(`[X]  ${item}`, 25, y);
-        y += 8;
-      });
-    }
-
-    // Compliance summary
-    y += 10;
-    doc.setFontSize(12);
-    doc.setFont("helvetica", "bold");
-    if (allPassed) {
-      doc.setTextColor(16, 120, 16);
-      doc.text("RESULT: COMPLIANT", 20, y);
-    } else if (alarms.length > 0) {
-      doc.setTextColor(200, 50, 50);
-      doc.text("RESULT: NON-COMPLIANT — ACTION REQUIRED", 20, y);
-    } else {
-      doc.setTextColor(0, 0, 0);
-      doc.text("RESULT: COMPLIANT (GENERAL INSPECTION)", 20, y);
-    }
-    doc.setTextColor(0, 0, 0);
-
-    // Notes
-    if (job.complianceNotes || job.siteNotes) {
-      y += 12;
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "bold");
-      doc.text("Inspector Notes:", 20, y);
-      y += 7;
-      doc.setFont("helvetica", "normal");
-      const notes = job.complianceNotes || job.siteNotes || '';
-      const lines = doc.splitTextToSize(notes, 170);
-      doc.text(lines, 20, y);
-      y += lines.length * 5;
-    }
-
-    // Technician Declaration
-    y += 12;
-    doc.setFontSize(11);
-    doc.setFont("helvetica", "bold");
-    doc.text("Technician Declaration", 20, y);
-    doc.line(20, y + 3, 190, y + 3);
-    
-    y += 12;
+    // ── Name & Address box ──
+    doc.setTextColor(200, 30, 30);
     doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
-    doc.text("I certify that the smoke alarms at the above address have been inspected, tested,", 20, y);
-    doc.text("and comply with the relevant state legislation and Australian Standards (AS 3786:2014).", 20, y + 5);
+    doc.text("Name & Address", 15, 33);
 
-    y += 18;
-    doc.setFont("helvetica", "bold");
-    doc.text(`Inspector: ${techName}`, 20, y);
-    doc.text(`Licence: ${licNo}`, 20, y + 7);
-    doc.text(`Signature: __________________________`, 110, y);
-    doc.text(`Date: ${inspDate}`, 110, y + 7);
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(0.5);
+    doc.rect(15, 36, 80, 30); // address box
 
-    // Footer
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    // Client name / agency
+    const addrLines = [];
+    if (job.agency) addrLines.push(job.agency);
+    if (job.tenantName && job.tenantName !== job.agency) addrLines.push(job.tenantName);
+    addrLines.push(job.propertyAddress || '');
+    addrLines.push('AUSTRALIA');
+    addrLines.forEach((line, i) => {
+      doc.text(line, 18, 43 + i * 6);
+    });
+
+    // ── WO Number & Client Reference ──
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "normal");
+    doc.text("WO Number", 110, 33);
+    doc.rect(110, 35, 35, 8);
+    doc.setFontSize(9);
+    doc.text(woNumber, 112, 41);
+
+    doc.setFontSize(8);
+    doc.text("Client Reference", 155, 33);
+    doc.rect(155, 35, 40, 8);
+    doc.setFontSize(9);
+    doc.text(clientRef, 157, 41);
+
+    // ── Inspection Address ──
     doc.setFontSize(7);
-    doc.setTextColor(150, 150, 150);
-    doc.text("Wirez R Us Electrical Services | ABN: XX XXX XXX XXX | Ph: 1300 WIREZ US | jobs@wireznrus.com.au", 105, 285, { align: "center" });
-    
+    doc.setFont("helvetica", "italic");
+    doc.setTextColor(100, 100, 100);
+    doc.text("Inspection Address (Address where smoke alarms were inspected)", 110, 50);
+    doc.setDrawColor(0, 0, 0);
+    doc.rect(110, 52, 85, 8);
+    doc.setTextColor(0, 0, 0);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.text(job.propertyAddress || '', 112, 58);
+
+    // ── Inspection Date ──
+    doc.setFontSize(8);
+    doc.text("Inspection Date:", 155, 65);
+    doc.rect(155, 67, 40, 8);
+    doc.setFontSize(9);
+    doc.text(inspDate, 157, 73);
+
+    // ── Inspected By ──
+    doc.setFontSize(8);
+    doc.text("Inspected By", 110, 80);
+    doc.rect(110, 82, 85, 8);
+    doc.setFontSize(9);
+    doc.text(techName, 112, 88);
+
+    // ── Tick / Cross explanation ──
+    let y = 100;
+    doc.setFontSize(7);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(0, 0, 0);
+    doc.text("A tick in a box below indicates that on the Inspection Date and at the Inspection Address, the smoke alarms, smoke alarm", 15, y);
+    doc.text("installations and safety switch/s were inspected and tested and met the requirements of the relevant legislation.", 15, y + 4);
+    y += 10;
+    doc.text("A cross in a box below indicates that on the Inspection Date and at the Inspection Address, the smoke alarms, smoke alarm", 15, y);
+    doc.text("installations and safety switch/s were inspected and did not meet the requirements of the relevant legislation.", 15, y + 4);
+
+    // ── Smoke Alarms compliance box (yellow highlight) ──
+    y += 14;
+    doc.setFillColor(255, 255, 0);
+    doc.rect(25, y, 160, 12, 'F');
+    doc.setDrawColor(0, 0, 0);
+    doc.rect(25, y, 160, 12);
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(0, 0, 0);
+    const smokeLabel = smokeTick ? '[  /  ]' : '[  X  ]';
+    doc.text(`${smokeLabel}   On the Inspection Date smoke alarms were present and tested.`, 30, y + 8);
+
+    // ── Safety Switch compliance box ──
+    y += 22;
+    doc.rect(25, y, 160, 12);
+    const safetyLabel = safetyTick ? '[  /  ]' : '[  X  ]';
+    doc.text(`${safetyLabel}   On the Inspection Date a Safety Switch was present and tested.`, 30, y + 8);
+
+    // ── COMMENTS ──
+    y += 22;
+    doc.setTextColor(200, 30, 30);
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.text("COMMENTS", 15, y);
+    y += 4;
+    doc.setDrawColor(0, 0, 0);
+    doc.rect(15, y, 180, 14);
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    const comments1 = job.complianceNotes || job.siteNotes || '';
+    if (comments1) {
+      const cLines = doc.splitTextToSize(comments1, 175);
+      doc.text(cLines.slice(0, 2), 18, y + 5);
+    }
+
+    // ── SMOKE ALARMS section ──
+    y += 22;
+    doc.setTextColor(200, 30, 30);
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.text("SMOKE ALARMS", 15, y);
+    y += 5;
+    doc.setTextColor(100, 100, 100);
+    doc.setFontSize(7);
+    doc.setFont("helvetica", "normal");
+    doc.text("At this inspection, the following alarms were present or installed.", 15, y);
+
+    // ── Alarm Table ──
+    y += 5;
+    // Table header
+    doc.setFillColor(220, 220, 220);
+    doc.rect(15, y, 180, 8, 'F');
+    doc.setDrawColor(0, 0, 0);
+    doc.rect(15, y, 180, 8);
+    doc.setFontSize(7);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(0, 0, 0);
+    const tCols = [17, 42, 67, 92, 127, 145];
+    const tHeaders = ['VOLTAGE', 'TYPE', 'EXPIRES', 'LOCATION', 'LEVEL', 'INSTALL REASON'];
+    tHeaders.forEach((h, i) => doc.text(h, tCols[i], y + 5));
+    y += 8;
+
+    // Table rows
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    const maxRows = 8;
+    for (let r = 0; r < maxRows; r++) {
+      doc.rect(15, y, 180, 8);
+      if (r < alarms.length) {
+        const a = alarms[r];
+        doc.text(a.voltage || '', tCols[0], y + 5);
+        doc.text(a.type || '', tCols[1], y + 5);
+        doc.text(a.expires || '', tCols[2], y + 5);
+        doc.text((a.location || '').substring(0, 18), tCols[3], y + 5);
+        doc.text(a.level || '', tCols[4], y + 5);
+        doc.text((a.installReason || '').substring(0, 22), tCols[5], y + 5);
+      }
+      y += 8;
+    }
+
+    // ── Bottom COMMENTS ──
+    y += 4;
+    doc.setTextColor(200, 30, 30);
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.text("COMMENTS", 15, y);
+    y += 4;
+    doc.setDrawColor(0, 0, 0);
+    doc.rect(15, y, 180, 12);
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    const comments2 = job.complianceNotes2 || '';
+    if (comments2) {
+      const c2Lines = doc.splitTextToSize(comments2, 175);
+      doc.text(c2Lines.slice(0, 2), 18, y + 5);
+    }
+
+    // ── Licence footer ──
+    doc.setFontSize(7);
+    doc.setTextColor(0, 0, 0);
+    doc.text("Electrical Contractor Licence No: 80075", 15, 285);
+
+    // ═══════════════════════════════════════════════════
+    // PAGE 2 — Important Notes & Disclaimers
+    // ═══════════════════════════════════════════════════
+    doc.addPage();
+
+    // Yellow header bar (same as page 1)
+    doc.setFillColor(255, 215, 0);
+    doc.rect(0, 0, 210, 25, 'F');
+    doc.setTextColor(200, 30, 30);
+    doc.setFontSize(26);
+    doc.setFont("helvetica", "bold");
+    doc.text("COMPLIANCE REPORT", 75, 18);
+    doc.setFontSize(10);
+    doc.setTextColor(100, 50, 0);
+    doc.text("WIREZ R US", 15, 12);
+    doc.setFontSize(6);
+    doc.text("ELECTRICAL & SMOKE ALARMS", 15, 17);
+
+    // ── IMPORTANT NOTES ──
+    y = 35;
+    doc.setTextColor(200, 30, 30);
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.text("IMPORTANT NOTES", 15, y);
+    y += 6;
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(6.5);
+    doc.setFont("helvetica", "normal");
+
+    const importantNotes = [
+      'Current Requirements means the legislative requirements stipulated by the Queensland Fire and Emergency Services Act 1990; Building Fire',
+      'Safety Regulation 2008; and the Electrical Safety Act 2002 applicable to existent (pre-2022) smoke alarms and smoke alarm installations and related',
+      'electrical work (if applicable). Considerations around compliance of the smoke alarms at the Inspection Address are the types of smoke alarms and',
+      'smoke alarm installations.',
+      'New Requirements means the legislative requirements stipulated by the Queensland Fire and Emergency Services Act 1990; Building Fire Safety',
+      'Regulation 2008; and the Electrical Safety Act 2002 to be in place by 1st January 2022 for rental properties and related electrical work (if applicable).',
+      'Considerations around compliance of the smoke alarms at the Inspection Address are the types of smoke alarms and smoke alarm installations.',
+    ];
+    importantNotes.forEach(line => {
+      doc.text(line, 15, y);
+      y += 3.5;
+    });
+
+    // ── This is not a building compliance certificate ──
+    y += 6;
+    doc.setTextColor(200, 30, 30);
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.text("This is not a building compliance certificate.", 15, y);
+    y += 6;
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(6.5);
+    doc.setFont("helvetica", "normal");
+
+    const notBuildingLines = [
+      'Wirez R Us is not a building certifier. Building compliance certificates relate to compliance with building plans and approvals granted by local, state',
+      'and federal governments under various Building Acts and related construction and renovation requirements. Building certificates, and other types of',
+      'certificates relating to construction and renovation safety (including automated fire suppression systems), issued by building certifiers, or other',
+      'safety officials, refer to different points in time and different regulations. A building certificate issued at the end of construction, for example, may',
+      'certify compliance with a building approval. The building approval may have been granted prior to a change in standards or regulations for smoke',
+      'alarms and the installation of smoke alarms. The approval or the building certificate, or other such certificates, may have been granted or issued',
+      'during a grace period allowed by legislation to ensure the orderly implementation of a new standard or regulation. A building compliance certificate,',
+      'or other construction or renovation safety certificate, does not necessarily mean that the smoke alarms and smoke alarm installations are compliant',
+      'with the standards and regulations for smoke alarms and smoke alarm installations in force in the State or Territory where the Inspection Address is',
+      'situated. Similarly, a report indicating that the smoke alarms or smoke alarm installations are not compliant does not necessarily mean that a',
+      'building compliance certificate, or other such certificate, is not valid. Please check with your building certifier or other safety officials with regard to',
+      'the compliance requirements for your building or property, and the relevant dates, and exemptions or exceptions you may be entitled to under their',
+      'governing laws and regulations.',
+    ];
+    notBuildingLines.forEach(line => {
+      doc.text(line, 15, y);
+      y += 3.5;
+    });
+
+    // ── Qualified Compliance Report ──
+    y += 6;
+    doc.setTextColor(200, 30, 30);
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.text("Qualified Compliance Report", 15, y);
+    y += 6;
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(6.5);
+    doc.setFont("helvetica", "normal");
+
+    const qualifiedLines = [
+      'In certain instances there may be legislation that is current and in force, but stipulates the introduction of new compliance requirements. These',
+      'requirements may be phased in over time and the legislation may allow a grace period or periods to facilitate the introduction of the new compliance',
+      'requirements. Owing to changes in legislation (including legislation other than the various Building Acts) subsequent to the Build Date certain smoke',
+      'alarms and smoke alarm installations already installed may become not required for compliance, and certain now smoke alarms and smoke alarm',
+      'installations may become required for compliance. If a smoke alarm or smoke alarm installation is not required for compliance the property owner',
+      'may remove the smoke alarm. If you choose to leave a not required for compliance smoke alarm installed you must ensure the smoke alarm is',
+      'functional in accordance with current legislation. Wirez R Us: (i) may service smoke alarms or smoke alarm installations that are not required for',
+      'compliance, if those smoke alarms or smoke alarm installations are not faulty and not expired; (ii) will remove smoke alarms and smoke alarm',
+      'installations that are not required for compliance, if those smoke alarms or smoke alarm installations are faulty or are expired; and (iii) does not',
+      'replace smoke alarms and smoke alarm installations that are not required for compliance, if those smoke alarms or smoke alarm installations are',
+      'faulty or are expired, as part of your package. Replacing an expired or faulty not required for compliance smoke alarm with a new compliant smoke',
+      'alarm does not constitute a so-called "replacement" and separate charges apply.',
+    ];
+    qualifiedLines.forEach(line => {
+      doc.text(line, 15, y);
+      y += 3.5;
+    });
+
+    // ── This is a smoke alarm compliance certificate ──
+    y += 6;
+    doc.setTextColor(200, 30, 30);
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.text("This is a smoke alarm compliance certificate", 15, y);
+    y += 6;
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(6.5);
+    doc.setFont("helvetica", "normal");
+
+    const saCompLines = [
+      'This compliance report or non-compliance of the abovementioned smoke alarms and smoke alarm installations at the abovementioned Inspection',
+      'Address with the abovementioned legislative requirements for smoke alarms and smoke alarm installations for the Building Class building in force on',
+      'the Inspection Date in the State or Territory where the abovementioned Inspection Address is situated. If an electrical contractor license number',
+      'appears on the face hereof, this report also certifies that insofar as the relevant smoke alarm installations and smoke alarms are electrical',
+      'installations or electrical equipment and their installation, removal, repair, inspection or testing are electrical work as defined in the relevant',
+      'legislation, at the Inspection Address and on the Inspection Date: (i) such electrical installation, to the extent that it is affected by the electrical work,',
+      'has been tested to ensure it is electrically safe and is in accordance with the requirements of the wiring rules and any other standard applying to the',
+      'electrical installation under the Current Requirements; and (ii) such electrical equipment, to the extent it is affected by the electrical work, is',
+      'electrically safe in terms of the Current Requirements. Wirez R Us is not a building surveyor and does not know the relevant date that a property',
+      'was built or renovated. Wirez R Us\' trained technicians use reasonable efforts to estimate the Building Class and, if relevant, the Build date and is not',
+      'aware of any substantial, or other, renovation. If applicable, it is the property owner or its agent\'s responsibility to notify Wirez R Us of the date when',
+      'the property was built or substantially renovated and its classification.',
+    ];
+    saCompLines.forEach(line => {
+      doc.text(line, 15, y);
+      y += 3.5;
+    });
+
+    // ── Company footer ──
+    y = 268;
+    doc.setDrawColor(200, 200, 200);
+    doc.line(15, y, 195, y);
+    y += 5;
+    doc.setFontSize(7);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(0, 0, 0);
+    doc.text("12 Richmont Drive, Bouldercombe,", 15, y);
+    doc.text("QLD, 4702", 15, y + 4);
+    doc.text("PO Box 353,", 15, y + 8);
+    doc.text("GRACEMERE, QLD 4012", 15, y + 12);
+
+    doc.text("wirezrus@outlook.com", 80, y);
+    doc.text("N.Cakovan ABN 47 869 614 212", 80, y + 4);
+
+    doc.setFontSize(7);
+    doc.text("Electrical Contractor Licence No: 80075", 15, y + 18);
+
+    doc.setFontSize(16);
+    doc.setFont("helvetica", "bold");
+    doc.text("0493 210 536", 155, y + 4);
+
+    doc.setFontSize(7);
+    doc.setFont("helvetica", "normal");
+    doc.text("WIREZ R US", 160, y + 10);
+    doc.text("Facebook @WirezRUs", 155, y + 14);
+
     doc.save(`Compliance_${job.id}.pdf`);
 
     updateJob(job.id, { 
