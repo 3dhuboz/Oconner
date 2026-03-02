@@ -2740,7 +2740,7 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
                         setDeleteConfirmText('');
                       }
                     }}
-                    disabled={deleteConfirmText !== 'DELETE' || isDeleting}
+                    disabled={deleteConfirmText.trim().toUpperCase() !== 'DELETE' || isDeleting}
                     className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-700 disabled:bg-red-300 disabled:cursor-not-allowed text-white rounded-lg text-sm font-bold transition-colors flex items-center justify-center gap-1.5"
                   >
                     {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
