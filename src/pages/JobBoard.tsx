@@ -186,7 +186,7 @@ export function JobBoard({ jobs }: JobBoardProps) {
 }
 
 // ─── Job Card ──────────────────────────────────────────────────
-function JobCard({ job }: { job: Job }) {
+function JobCard({ job }: { job: Job; key?: string }) {
   const priority = getPriority(job);
   const isUrgent = priority !== 'routine';
   const scheduledDate = job.scheduledDate ? new Date(job.scheduledDate) : null;

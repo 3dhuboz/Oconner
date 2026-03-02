@@ -8,6 +8,7 @@ import { cn } from '../utils';
 import { storage } from '../services/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import jsPDF from 'jspdf';
+import { Html5Qrcode } from 'html5-qrcode';
 
 interface FieldPortalProps {
   jobs: Job[];
@@ -145,6 +146,9 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
   const [barcodePrice, setBarcodePrice] = useState('');
   const [barcodeSupplier, setBarcodeSupplier] = useState('Rexel');
   const [barcodeSaving, setBarcodeSaving] = useState(false);
+  const [scannerActive, setScannerActive] = useState(false);
+  const scannerRef = useRef<Html5Qrcode | null>(null);
+  const scannerContainerId = 'barcode-scanner-region';
 
   // SA Compliance: load alarm data from this job or propagate from previous SA job at same address
   const [saAlarms, setSaAlarms] = useState<SmokeAlarmEntry[]>(() => {
@@ -209,6 +213,69 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
     setShowBarcodeScan(false);
     setBarcodeSaving(false);
   };
+
+  const stopBarcodeScanner = useCallback(async () => {
+    try {
+      if (scannerRef.current) {
+        const state = scannerRef.current.getState();
+        if (state === 2) { // SCANNING
+          await scannerRef.current.stop();
+        }
+        scannerRef.current.clear();
+        scannerRef.current = null;
+      }
+    } catch { /* safe to ignore cleanup errors */ }
+    setScannerActive(false);
+  }, []);
+
+  const startBarcodeScanner = useCallback(async () => {
+    await stopBarcodeScanner();
+    // Small delay to let DOM render the container
+    await new Promise(r => setTimeout(r, 200));
+    const el = document.getElementById(scannerContainerId);
+    if (!el) return;
+
+    try {
+      const scanner = new Html5Qrcode(scannerContainerId);
+      scannerRef.current = scanner;
+      setScannerActive(true);
+
+      await scanner.start(
+        { facingMode: 'environment' },
+        {
+          fps: 10,
+          qrbox: { width: 280, height: 120 },
+          aspectRatio: 2.0,
+          disableFlip: false,
+        },
+        (decodedText) => {
+          // Barcode decoded successfully — populate the field and stop scanner
+          setBarcodeValue(decodedText);
+          scanner.stop().then(() => {
+            scanner.clear();
+            scannerRef.current = null;
+            setScannerActive(false);
+          }).catch(() => { setScannerActive(false); });
+        },
+        () => { /* ignore QR scan errors (no code in frame) */ }
+      );
+    } catch (err) {
+      console.warn('[BarcodeScanner] Failed to start:', err);
+      setScannerActive(false);
+    }
+  }, [stopBarcodeScanner]);
+
+  // Cleanup scanner when barcode panel closes
+  useEffect(() => {
+    if (!showBarcodeScan) {
+      stopBarcodeScanner();
+    }
+  }, [showBarcodeScan, stopBarcodeScanner]);
+
+  // Cleanup scanner on unmount
+  useEffect(() => {
+    return () => { stopBarcodeScanner(); };
+  }, [stopBarcodeScanner]);
 
   const addFromCatalog = (part: CatalogPart) => {
     setMaterials(prev => [...prev, {
@@ -696,14 +763,59 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
                     <div className="space-y-4 bg-emerald-50 border-2 border-emerald-300 rounded-2xl p-5">
                       <div className="flex items-center justify-between">
                         <h4 className="text-sm font-bold text-emerald-800 flex items-center gap-2">
-                          <Search className="w-4 h-4" /> Scan Barcode + Log Price
+                          <Camera className="w-4 h-4" /> Scan Barcode + Log Price
                         </h4>
                         <button onClick={() => setShowBarcodeScan(false)} className="px-3 py-1.5 text-xs font-semibold text-emerald-600 bg-white border border-emerald-200 rounded-lg active:scale-95">Close</button>
                       </div>
+
+                      {/* Camera scanner region */}
+                      <div className="rounded-xl overflow-hidden border-2 border-emerald-300 bg-black relative" style={{ minHeight: 180 }}>
+                        <div id={scannerContainerId} style={{ width: '100%' }} />
+                        {!scannerActive && !barcodeValue && (
+                          <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/80 gap-3">
+                            <Camera className="w-10 h-10 text-white/60" />
+                            <button
+                              onClick={startBarcodeScanner}
+                              className="px-6 py-3 bg-emerald-500 text-white rounded-xl text-sm font-bold active:scale-95 transition-transform shadow-lg"
+                            >
+                              Start Camera Scan
+                            </button>
+                          </div>
+                        )}
+                        {scannerActive && (
+                          <div className="absolute bottom-2 left-0 right-0 text-center">
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-black/60 text-emerald-300 rounded-full text-xs font-semibold">
+                              <Loader2 className="w-3 h-3 animate-spin" /> Point at barcode...
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Scanned value or manual entry */}
                       <div>
                         <label className="block text-xs font-semibold text-emerald-700 mb-1">Barcode / EAN</label>
-                        <input type="text" placeholder="Scan barcode or type manually" value={barcodeValue} onChange={e => setBarcodeValue(e.target.value)}
-                          className="w-full px-4 py-3.5 border-2 border-emerald-200 rounded-xl text-base bg-white focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400" autoFocus />
+                        <div className="flex gap-2">
+                          <input type="text" placeholder="Scanned automatically or type" value={barcodeValue} onChange={e => setBarcodeValue(e.target.value)}
+                            className={cn(
+                              'flex-1 px-4 py-3 border-2 rounded-xl text-base bg-white',
+                              barcodeValue ? 'border-emerald-400 text-emerald-800 font-bold' : 'border-emerald-200'
+                            )} />
+                          {barcodeValue && (
+                            <button onClick={() => { setBarcodeValue(''); startBarcodeScanner(); }}
+                              className="px-3 py-2 bg-white border-2 border-emerald-200 rounded-xl text-xs font-semibold text-emerald-600 active:scale-95"
+                              title="Rescan">Rescan</button>
+                          )}
+                          {!scannerActive && !barcodeValue && (
+                            <button onClick={startBarcodeScanner}
+                              className="px-3 py-2 bg-emerald-500 text-white rounded-xl text-xs font-bold active:scale-95"
+                              title="Scan">Scan</button>
+                          )}
+                          {scannerActive && (
+                            <button onClick={stopBarcodeScanner}
+                              className="px-3 py-2 bg-red-500 text-white rounded-xl text-xs font-bold active:scale-95"
+                              title="Stop camera">Stop</button>
+                          )}
+                        </div>
                       </div>
                       <div>
                         <label className="block text-xs font-semibold text-emerald-700 mb-1">Part Name / Description</label>
