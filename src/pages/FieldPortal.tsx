@@ -7,6 +7,7 @@ import { useGpsTracking } from '../hooks/useGpsTracking';
 import { cn } from '../utils';
 import { storage } from '../services/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import jsPDF from 'jspdf';
 
 interface FieldPortalProps {
   jobs: Job[];
@@ -277,6 +278,133 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
     setShowChecklist(false);
     alert("Job submitted successfully! The office has been notified.");
     navigate('/');
+  };
+
+  // ─── Field Invoice Generator ───
+  const handleGenerateInvoice = () => {
+    const doc = new jsPDF();
+    const rate = job.hourlyRate || 120;
+    const labor = job.laborHours || parseFloat(formatHoursDecimal(calcWorkedMs(timeEntries)));
+    const laborCost = labor * rate;
+    const matsList = job.materials?.length ? job.materials : materials;
+    const matsCost = matsList.reduce((s, m) => s + m.cost * m.quantity, 0);
+    const miscTotal = (job.miscCharges || []).reduce((s, c) => s + c.amount, 0);
+    const total = laborCost + matsCost + miscTotal;
+    const invDate = new Date().toLocaleDateString('en-AU');
+    const invNo = `INV-${job.id.slice(0, 8).toUpperCase()}`;
+
+    // Header
+    doc.setFillColor(23, 37, 84);
+    doc.rect(0, 0, 210, 35, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(22);
+    doc.setFont("helvetica", "bold");
+    doc.text("TAX INVOICE", 20, 22);
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.text("Wirez R Us Electrical Services", 20, 30);
+    doc.setFontSize(8);
+    doc.text(invNo, 170, 14);
+    doc.text(`Date: ${invDate}`, 170, 20);
+
+    // Bill To
+    doc.setTextColor(0, 0, 0);
+    let y = 48;
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.text("Bill To:", 20, y);
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    y += 8;
+    doc.text(job.tenantName || 'Customer', 20, y);
+    y += 6;
+    doc.text(job.propertyAddress || '', 20, y);
+    if (job.tenantEmail) { y += 6; doc.text(job.tenantEmail, 20, y); }
+    if (job.tenantPhone) { y += 6; doc.text(job.tenantPhone, 20, y); }
+
+    // Job ref
+    doc.setFont("helvetica", "bold");
+    doc.text("Job Reference:", 130, 48);
+    doc.setFont("helvetica", "normal");
+    doc.text(job.id, 130, 56);
+    doc.text(job.title || '', 130, 62);
+    doc.text(job.type.replace(/_/g, ' '), 130, 68);
+
+    // Line items table
+    y += 16;
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.text("Service Details", 20, y);
+    doc.setDrawColor(200, 200, 200);
+    doc.line(20, y + 3, 190, y + 3);
+    y += 10;
+
+    // Table header
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "bold");
+    doc.setFillColor(240, 240, 240);
+    doc.rect(20, y - 4, 170, 8, 'F');
+    doc.text("Description", 22, y);
+    doc.text("Qty", 120, y);
+    doc.text("Unit Price", 140, y);
+    doc.text("Total", 170, y);
+    y += 7;
+
+    // Labour line
+    doc.setFont("helvetica", "normal");
+    doc.text(`Labour (${labor.toFixed(1)} hrs @ $${rate}/hr)`, 22, y);
+    doc.text(labor.toFixed(1), 120, y);
+    doc.text(`$${rate.toFixed(2)}`, 140, y);
+    doc.text(`$${laborCost.toFixed(2)}`, 170, y);
+    y += 7;
+
+    // Materials
+    matsList.forEach(m => {
+      if (y > 250) { doc.addPage(); y = 20; }
+      doc.text((m.name || 'Material').substring(0, 40), 22, y);
+      doc.text(m.quantity.toString(), 120, y);
+      doc.text(`$${m.cost.toFixed(2)}`, 140, y);
+      doc.text(`$${(m.cost * m.quantity).toFixed(2)}`, 170, y);
+      y += 7;
+    });
+
+    // Misc charges
+    (job.miscCharges || []).forEach(c => {
+      doc.text(c.description.substring(0, 40), 22, y);
+      doc.text('1', 120, y);
+      doc.text(`$${c.amount.toFixed(2)}`, 140, y);
+      doc.text(`$${c.amount.toFixed(2)}`, 170, y);
+      y += 7;
+    });
+
+    // Total
+    y += 5;
+    doc.line(130, y, 190, y);
+    y += 8;
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    doc.text("TOTAL (inc GST):", 130, y);
+    doc.text(`$${total.toFixed(2)}`, 170, y);
+
+    // Payment info
+    y += 16;
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(100, 100, 100);
+    doc.text("Payment Terms: Due on completion", 20, y);
+    y += 6;
+    if (job.paymentLinkUrl) {
+      doc.text(`Online Payment: ${job.paymentLinkUrl}`, 20, y);
+      y += 6;
+    }
+    doc.text("Bank: Wirez R Us Electrical | BSB: XXX-XXX | Acc: XXXXXXXX", 20, y);
+
+    // Footer
+    doc.setFontSize(7);
+    doc.setTextColor(150, 150, 150);
+    doc.text("Wirez R Us Electrical Services | ABN: XX XXX XXX XXX | Ph: 1300 WIREZ US | jobs@wireznrus.com.au", 105, 285, { align: "center" });
+
+    doc.save(`Invoice_${job.id}.pdf`);
   };
 
   // ─── Clock-on timestamp for display
@@ -896,6 +1024,17 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
                     <CheckCircle2 className="w-4 h-4" />
                     {job.type === 'SMOKE_ALARM' ? 'Compliance Report' : 'Invoice'} sent to {(job as any).finishedJobEmailTo || 'customer'}
                   </div>
+                )}
+
+                {/* ── Download Invoice PDF ── */}
+                {job.type !== 'SMOKE_ALARM' && (
+                  <button
+                    onClick={handleGenerateInvoice}
+                    className="w-full py-3 bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-700 rounded-2xl font-semibold text-sm transition-colors flex items-center justify-center gap-2"
+                  >
+                    <FileText className="w-5 h-5" />
+                    Download Invoice PDF
+                  </button>
                 )}
               </div>
             )}
