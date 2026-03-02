@@ -248,6 +248,120 @@ function parseEmail(subject: string, body: string, from: string, software: strin
   }
 }
 
+// ─── Supplier Invoice Detection ─────────────────────────────────
+interface SupplierDetection {
+  isSupplierInvoice: boolean;
+  supplier: string;
+  confidence: number;
+}
+
+function detectSupplierInvoice(subject: string, body: string, from: string): SupplierDetection {
+  const combined = `${subject}\n${body}\n${from}`.toLowerCase();
+
+  const suppliers: { name: string; signals: RegExp[]; domains: string[] }[] = [
+    {
+      name: 'Rexel',
+      signals: [/rexel/i, /ideal\s*electrical/i, /rexel\s*invoice/i, /rexel\s*order/i],
+      domains: ['rexel.com.au', 'rexel.com', 'idealelectrical.com.au'],
+    },
+    {
+      name: "Middy's",
+      signals: [/middy/i, /middys/i, /middy'?s/i, /middy'?s\s*data/i],
+      domains: ['middys.com.au'],
+    },
+    {
+      name: 'L&H',
+      signals: [/l\s*&\s*h/i, /lawrence\s*&?\s*hanson/i],
+      domains: ['lh.com.au', 'lnh.com.au'],
+    },
+    {
+      name: 'JRT',
+      signals: [/john\s*r\s*turk/i, /\bjrt\b/i],
+      domains: ['jrt.com.au'],
+    },
+    {
+      name: 'Schneider/Clipsal',
+      signals: [/clipsal/i, /schneider\s*electric/i],
+      domains: ['schneider-electric.com', 'clipsal.com'],
+    },
+    {
+      name: 'Beacon Lighting',
+      signals: [/beacon\s*lighting/i],
+      domains: ['beaconlighting.com.au'],
+    },
+  ];
+
+  // Check for invoice keywords
+  const invoiceSignals = /invoice|tax\s*invoice|credit\s*note|statement|order\s*confirm|dispatch\s*note|delivery\s*docket|packing\s*slip/i;
+  const hasInvoiceKeyword = invoiceSignals.test(combined);
+
+  // Check for price/money patterns: $xx.xx, total, subtotal, GST
+  const hasPricing = /\$\d+\.\d{2}|\btotal\b|\bsubtotal\b|\bgst\b|\bex\s*gst\b|\binc\s*gst\b/i.test(combined);
+
+  for (const supplier of suppliers) {
+    let matchCount = 0;
+    // Check sender domain
+    for (const domain of supplier.domains) {
+      if (from.toLowerCase().includes(domain)) matchCount += 2;
+    }
+    // Check signals
+    for (const signal of supplier.signals) {
+      if (signal.test(combined)) matchCount++;
+    }
+
+    if (matchCount >= 2 && (hasInvoiceKeyword || hasPricing)) {
+      return { isSupplierInvoice: true, supplier: supplier.name, confidence: Math.min(1, matchCount * 0.25) };
+    }
+  }
+
+  // Generic supplier invoice detection
+  if (hasInvoiceKeyword && hasPricing && !(/tenant|property\s*manager|maintenance\s*request|work\s*order/i.test(combined))) {
+    return { isSupplierInvoice: true, supplier: 'Unknown Supplier', confidence: 0.4 };
+  }
+
+  return { isSupplierInvoice: false, supplier: '', confidence: 0 };
+}
+
+// ─── Parse supplier invoice items from email body ───────────────
+function parseSupplierItems(body: string): Array<{ partName: string; costPrice: number; qty: number }> {
+  const items: Array<{ partName: string; costPrice: number; qty: number }> = [];
+  const lines = body.split('\n');
+
+  // Pattern: look for lines with a dollar amount e.g. "Clipsal 30M 10A Switch  $12.50  2  $25.00"
+  const priceLinePattern = /^(.{5,60})\s+\$?([\d,]+\.\d{2})\s+(\d+)\s+\$?[\d,]+\.\d{2}/;
+  // Simpler: "Item description    $12.50"
+  const simplePricePattern = /^(.{5,80}?)\s{2,}\$?([\d,]+\.\d{2})\s*$/;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.length < 5) continue;
+
+    let match = trimmed.match(priceLinePattern);
+    if (match) {
+      const partName = match[1].trim();
+      const costPrice = parseFloat(match[2].replace(',', ''));
+      const qty = parseInt(match[3]) || 1;
+      if (partName && costPrice > 0) {
+        items.push({ partName, costPrice, qty });
+      }
+      continue;
+    }
+
+    match = trimmed.match(simplePricePattern);
+    if (match) {
+      const partName = match[1].trim();
+      const costPrice = parseFloat(match[2].replace(',', ''));
+      // Skip totals/subtotals
+      if (/^(total|subtotal|gst|freight|delivery|shipping)/i.test(partName)) continue;
+      if (partName && costPrice > 0) {
+        items.push({ partName, costPrice, qty: 1 });
+      }
+    }
+  }
+
+  return items;
+}
+
 // ─── Job type classification ───────────────────────────────────
 function classifyJobType(text: string): string {
   const lower = text.toLowerCase();
@@ -484,6 +598,52 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       try {
         const { subject, from, body, html } = extractGmailBody(message);
         const combined = `${subject}\n${body}`;
+
+        // ── Check if this is a supplier invoice (Rexel, Middy's, etc.) ──
+        const supplierCheck = detectSupplierInvoice(subject, body, from);
+        if (supplierCheck.isSupplierInvoice) {
+          console.log(`[EmailPoll] Supplier invoice detected: ${supplierCheck.supplier} — "${subject}"`);
+          
+          const supplierItems = parseSupplierItems(body);
+          if (supplierItems.length > 0) {
+            // Forward to pricing API
+            const baseUrl = process.env.VERCEL_URL
+              ? `https://${process.env.VERCEL_URL}`
+              : 'http://localhost:3000';
+            
+            const pricingPayload = {
+              items: supplierItems.map(si => ({
+                partName: si.partName,
+                supplier: supplierCheck.supplier,
+                costPrice: si.costPrice,
+                invoiceRef: subject,
+                source: 'email',
+              })),
+            };
+            
+            try {
+              await fetch(`${baseUrl}/api/xero/pricing`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(pricingPayload),
+              });
+            } catch (pricingErr: any) {
+              console.warn(`[EmailPoll] Pricing API call failed (non-fatal):`, pricingErr.message);
+            }
+          }
+          
+          await markAsRead(accessToken, message.id);
+          results.push({
+            gmailId: message.id,
+            type: 'supplier_invoice',
+            supplier: supplierCheck.supplier,
+            subject,
+            from,
+            itemsParsed: supplierItems.length,
+          });
+          console.log(`[EmailPoll] Supplier invoice processed: ${supplierCheck.supplier} — ${supplierItems.length} items`);
+          continue; // Don't create a job for supplier invoices
+        }
         
         // Detect source software
         const detected = detectRealEstateSoftware(subject, body, from);

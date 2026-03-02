@@ -23,6 +23,7 @@ import { TechProfile } from './pages/TechProfile';
 import { PartsCatalog } from './pages/PartsCatalog';
 import { NewJob } from './pages/NewJob';
 import { PropertyHistory } from './pages/PropertyHistory';
+import { Pricing } from './pages/Pricing';
 
 
 import { Job, Electrician, CatalogPart } from './types';
@@ -358,6 +359,11 @@ function AppContent() {
       <Route path="/properties" element={
         <AdminRoute jobs={jobs}>
           <PropertyHistory jobs={jobs} />
+        </AdminRoute>
+      } />
+      <Route path="/pricing" element={
+        <AdminRoute>
+          <Pricing />
         </AdminRoute>
       } />
       

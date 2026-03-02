@@ -1,124 +1,224 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 /**
- * Xero/Rexel Pricing Capture API
- * 
- * POST /api/xero/pricing
- * - Captures cost prices from supplier invoices (Rexel, Middy's, etc.)
- * - Stores pricing data for parts catalog
- * - Detects price changes and flags for notification
- * 
- * GET /api/xero/pricing?partName=...
- * - Lookup historical pricing for a part
+ * Rexel / Supplier Pricing API — persisted to Firestore
+ *
+ * GET  /api/xero/pricing               — list all parts with latest prices
+ * GET  /api/xero/pricing?partName=...   — lookup single part history
+ * GET  /api/xero/pricing?flagged=1      — show only flagged price changes
+ * POST /api/xero/pricing               — ingest price items (from CSV, email, barcode)
+ *   body: { items: [{ partName, supplier, costPrice, invoiceRef?, barcode?, source? }] }
  */
 
-interface PriceEntry {
-  partName: string;
-  supplier: string;       // e.g. "Rexel", "Middy's", "L&H"
-  costPrice: number;
-  previousPrice?: number;
-  priceChangePercent?: number;
-  invoiceRef?: string;
-  capturedAt: string;
-  flagged: boolean;        // true if price changed significantly
+// ─── Firestore REST helpers ────────────────────────────────────
+function toFV(val: any): any {
+  if (val === null || val === undefined) return { nullValue: null };
+  if (typeof val === 'string') return { stringValue: val };
+  if (typeof val === 'number') return Number.isInteger(val) ? { integerValue: String(val) } : { doubleValue: val };
+  if (typeof val === 'boolean') return { booleanValue: val };
+  if (Array.isArray(val)) return { arrayValue: { values: val.map(toFV) } };
+  if (typeof val === 'object') {
+    const f: any = {};
+    for (const [k, v] of Object.entries(val)) f[k] = toFV(v);
+    return { mapValue: { fields: f } };
+  }
+  return { stringValue: String(val) };
 }
 
-// In-memory price store (would be Firestore in production)
-const priceHistory: Map<string, PriceEntry[]> = new Map();
+function fromFV(fv: any): any {
+  if (!fv) return null;
+  if ('stringValue' in fv) return fv.stringValue;
+  if ('integerValue' in fv) return Number(fv.integerValue);
+  if ('doubleValue' in fv) return fv.doubleValue;
+  if ('booleanValue' in fv) return fv.booleanValue;
+  if ('nullValue' in fv) return null;
+  if ('arrayValue' in fv) return (fv.arrayValue.values || []).map(fromFV);
+  if ('mapValue' in fv) {
+    const obj: any = {};
+    for (const [k, v] of Object.entries(fv.mapValue.fields || {})) obj[k] = fromFV(v);
+    return obj;
+  }
+  return null;
+}
 
-// Price change threshold that triggers a flag (10%)
-const PRICE_CHANGE_THRESHOLD = 0.10;
+async function getFirebaseAuth() {
+  const projectId = process.env.VITE_FIREBASE_PROJECT_ID;
+  const apiKey = process.env.VITE_FIREBASE_API_KEY || process.env.VITE_FB_API_KEY;
+  if (!projectId || !apiKey) throw new Error('Missing Firebase config');
+
+  let idToken = '';
+  const email = process.env.WEBHOOK_AUTH_EMAIL;
+  const password = process.env.WEBHOOK_AUTH_PASSWORD;
+  if (email && password) {
+    const r = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, returnSecureToken: true }),
+    });
+    const d = await r.json();
+    if (d.idToken) idToken = d.idToken;
+  }
+  if (!idToken) {
+    const r = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${apiKey}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ returnSecureToken: true }),
+    });
+    const d = await r.json();
+    if (d.idToken) idToken = d.idToken;
+    else throw new Error('Firebase auth failed');
+  }
+  return { projectId, apiKey, idToken };
+}
+
+const PRICE_CHANGE_THRESHOLD = 10; // percent
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method === 'GET') {
-    const { partName } = req.query;
-    if (partName && typeof partName === 'string') {
-      const key = partName.toLowerCase().trim();
-      const history = priceHistory.get(key) || [];
-      return res.status(200).json({ partName, history });
-    }
-    // Return all tracked parts summary
-    const summary = Array.from(priceHistory.entries()).map(([key, entries]) => {
-      const latest = entries[entries.length - 1];
-      return {
-        partName: latest.partName,
-        supplier: latest.supplier,
-        currentPrice: latest.costPrice,
-        previousPrice: latest.previousPrice,
-        priceChangePercent: latest.priceChangePercent,
-        flagged: latest.flagged,
-        lastUpdated: latest.capturedAt,
-        historyCount: entries.length,
-      };
-    });
-    return res.status(200).json({ parts: summary, total: summary.length });
-  }
+  try {
+    const { projectId, apiKey, idToken } = await getFirebaseAuth();
+    const baseUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents`;
+    const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` };
 
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+    // ──────────────── GET ────────────────
+    if (req.method === 'GET') {
+      // List all parts from the 'parts_catalog' collection
+      const listUrl = `${baseUrl}/parts_catalog?key=${apiKey}&pageSize=500`;
+      const listRes = await fetch(listUrl, { headers });
+      if (!listRes.ok) return res.status(500).json({ error: 'Firestore read failed' });
+      const listData = await listRes.json();
 
-  const { items } = req.body as {
-    items: Array<{
-      partName: string;
-      supplier: string;
-      costPrice: number;
-      invoiceRef?: string;
-    }>;
-  };
+      const parts = (listData.documents || []).map((doc: any) => {
+        const fields = doc.fields || {};
+        const obj: any = {};
+        for (const [k, v] of Object.entries(fields)) obj[k] = fromFV(v);
+        obj._id = doc.name.split('/').pop();
+        return obj;
+      });
 
-  if (!items?.length) {
-    return res.status(400).json({ error: 'Missing items array' });
-  }
+      // Filter
+      const { partName, flagged, barcode } = req.query;
+      let filtered = parts;
+      if (partName && typeof partName === 'string') {
+        const q = partName.toLowerCase();
+        filtered = parts.filter((p: any) => (p.partName || '').toLowerCase().includes(q));
+      }
+      if (barcode && typeof barcode === 'string') {
+        filtered = parts.filter((p: any) => p.barcode === barcode);
+      }
+      if (flagged === '1') {
+        filtered = parts.filter((p: any) => p.flagged === true);
+      }
 
-  const results: PriceEntry[] = [];
-  const flaggedChanges: PriceEntry[] = [];
-
-  for (const item of items) {
-    const key = item.partName.toLowerCase().trim();
-    const existing = priceHistory.get(key) || [];
-    const lastEntry = existing[existing.length - 1];
-    
-    const previousPrice = lastEntry?.costPrice;
-    let priceChangePercent: number | undefined;
-    let flagged = false;
-
-    if (previousPrice && previousPrice !== item.costPrice) {
-      priceChangePercent = ((item.costPrice - previousPrice) / previousPrice) * 100;
-      flagged = Math.abs(priceChangePercent) >= PRICE_CHANGE_THRESHOLD * 100;
+      return res.status(200).json({ parts: filtered, total: filtered.length });
     }
 
-    const entry: PriceEntry = {
-      partName: item.partName,
-      supplier: item.supplier,
-      costPrice: item.costPrice,
-      previousPrice,
-      priceChangePercent: priceChangePercent ? parseFloat(priceChangePercent.toFixed(1)) : undefined,
-      invoiceRef: item.invoiceRef,
-      capturedAt: new Date().toISOString(),
-      flagged,
+    // ──────────────── POST ────────────────
+    if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+
+    const { items } = req.body as {
+      items: Array<{
+        partName: string;
+        supplier: string;
+        costPrice: number;
+        invoiceRef?: string;
+        barcode?: string;
+        source?: string; // 'csv' | 'email' | 'barcode' | 'manual'
+      }>;
     };
 
-    existing.push(entry);
-    priceHistory.set(key, existing);
-    results.push(entry);
+    if (!items?.length) return res.status(400).json({ error: 'Missing items array' });
 
-    if (flagged) {
-      flaggedChanges.push(entry);
+    const results: any[] = [];
+    const flaggedChanges: any[] = [];
+
+    for (const item of items) {
+      const partKey = item.partName.toLowerCase().trim().replace(/[^a-z0-9]/g, '_');
+
+      // Check if part already exists
+      const docUrl = `${baseUrl}/parts_catalog/${partKey}?key=${apiKey}`;
+      const existRes = await fetch(docUrl, { headers });
+      let previousPrice: number | undefined;
+
+      if (existRes.ok) {
+        const existData = await existRes.json();
+        if (existData.fields?.costPrice) {
+          previousPrice = fromFV(existData.fields.costPrice);
+        }
+      }
+
+      // Calculate price change
+      let priceChangePercent: number | undefined;
+      let flagged = false;
+      if (previousPrice !== undefined && previousPrice !== item.costPrice) {
+        priceChangePercent = ((item.costPrice - previousPrice) / previousPrice) * 100;
+        priceChangePercent = parseFloat(priceChangePercent.toFixed(1));
+        flagged = Math.abs(priceChangePercent) >= PRICE_CHANGE_THRESHOLD;
+      }
+
+      const now = new Date().toISOString();
+      const doc: Record<string, any> = {
+        partName: item.partName,
+        partKey,
+        supplier: item.supplier,
+        costPrice: item.costPrice,
+        previousPrice: previousPrice ?? null,
+        priceChangePercent: priceChangePercent ?? null,
+        flagged,
+        invoiceRef: item.invoiceRef || null,
+        barcode: item.barcode || null,
+        source: item.source || 'manual',
+        updatedAt: now,
+      };
+
+      // Build price history entry
+      const historyEntry = {
+        price: item.costPrice,
+        supplier: item.supplier,
+        date: now,
+        invoiceRef: item.invoiceRef || null,
+        source: item.source || 'manual',
+      };
+
+      // Upsert the part document
+      const fields: any = {};
+      for (const [k, v] of Object.entries(doc)) fields[k] = toFV(v);
+
+      // We use PATCH to upsert
+      const patchUrl = `${baseUrl}/parts_catalog/${partKey}?key=${apiKey}`;
+      await fetch(patchUrl, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ fields }),
+      });
+
+      // Append to price_history sub-collection
+      const histFields: any = {};
+      for (const [k, v] of Object.entries(historyEntry)) histFields[k] = toFV(v);
+      const histUrl = `${baseUrl}/parts_catalog/${partKey}/price_history?key=${apiKey}`;
+      await fetch(histUrl, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ fields: histFields }),
+      });
+
+      results.push(doc);
+      if (flagged) flaggedChanges.push(doc);
     }
-  }
 
-  return res.status(200).json({
-    success: true,
-    processed: results.length,
-    flaggedChanges: flaggedChanges.length,
-    flagged: flaggedChanges.map(f => ({
-      partName: f.partName,
-      supplier: f.supplier,
-      oldPrice: f.previousPrice,
-      newPrice: f.costPrice,
-      changePercent: f.priceChangePercent,
-    })),
-    results,
-  });
+    return res.status(200).json({
+      success: true,
+      processed: results.length,
+      flaggedChanges: flaggedChanges.length,
+      flagged: flaggedChanges.map(f => ({
+        partName: f.partName,
+        supplier: f.supplier,
+        oldPrice: f.previousPrice,
+        newPrice: f.costPrice,
+        changePercent: f.priceChangePercent,
+      })),
+      results,
+    });
+
+  } catch (err: any) {
+    console.error('[Pricing API]', err.message);
+    return res.status(500).json({ error: err.message });
+  }
 }

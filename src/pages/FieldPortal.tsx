@@ -139,6 +139,12 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
   const [siteNotes, setSiteNotes] = useState(job?.siteNotes || '');
   const [partSearch, setPartSearch] = useState('');
   const [showPartPicker, setShowPartPicker] = useState(false);
+  const [showBarcodeScan, setShowBarcodeScan] = useState(false);
+  const [barcodeValue, setBarcodeValue] = useState('');
+  const [barcodePartName, setBarcodePartName] = useState('');
+  const [barcodePrice, setBarcodePrice] = useState('');
+  const [barcodeSupplier, setBarcodeSupplier] = useState('Rexel');
+  const [barcodeSaving, setBarcodeSaving] = useState(false);
 
   // SA Compliance: load alarm data from this job or propagate from previous SA job at same address
   const [saAlarms, setSaAlarms] = useState<SmokeAlarmEntry[]>(() => {
@@ -169,6 +175,39 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
 
   const handleAddMaterial = () => {
     setMaterials([...materials, { id: Math.random().toString(36).substr(2, 9), name: '', quantity: 1, cost: 0 }]);
+  };
+
+  const handleBarcodeSave = async () => {
+    if (!barcodePartName.trim() || !barcodePrice) return;
+    setBarcodeSaving(true);
+    const price = parseFloat(barcodePrice);
+    try {
+      await fetch('/api/xero/pricing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: [{
+            partName: barcodePartName.trim(),
+            supplier: barcodeSupplier,
+            costPrice: price,
+            barcode: barcodeValue || undefined,
+            source: 'barcode',
+          }],
+        }),
+      });
+    } catch { /* pricing save is best-effort */ }
+    // Also add to job materials
+    setMaterials(prev => [...prev, {
+      id: Math.random().toString(36).substr(2, 9),
+      name: barcodePartName.trim(),
+      quantity: 1,
+      cost: price,
+    }]);
+    setBarcodeValue('');
+    setBarcodePartName('');
+    setBarcodePrice('');
+    setShowBarcodeScan(false);
+    setBarcodeSaving(false);
   };
 
   const addFromCatalog = (part: CatalogPart) => {
@@ -653,8 +692,35 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
               {/* Add parts section — only during EXECUTION */}
               {job.status === 'EXECUTION' && (
                 <div className="border-t border-slate-100 p-4 space-y-3">
-                  {!showPartPicker ? (
-                    <div className="flex gap-2">
+                  {showBarcodeScan ? (
+                    <div className="space-y-3 bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">Scan Barcode + Log Price</span>
+                        <button onClick={() => setShowBarcodeScan(false)} className="text-xs text-emerald-500 hover:text-emerald-700">Close</button>
+                      </div>
+                      <input type="text" placeholder="Barcode / EAN (scan or type)" value={barcodeValue} onChange={e => setBarcodeValue(e.target.value)}
+                        className="w-full px-3 py-2 border border-emerald-200 rounded-lg text-sm bg-white" autoFocus />
+                      <input type="text" placeholder="Part name / description" value={barcodePartName} onChange={e => setBarcodePartName(e.target.value)}
+                        className="w-full px-3 py-2 border border-emerald-200 rounded-lg text-sm bg-white" />
+                      <div className="flex gap-2">
+                        <input type="number" placeholder="Cost price (ex GST)" value={barcodePrice} onChange={e => setBarcodePrice(e.target.value)} step="0.01"
+                          className="flex-1 px-3 py-2 border border-emerald-200 rounded-lg text-sm bg-white" />
+                        <select title="Supplier" value={barcodeSupplier} onChange={e => setBarcodeSupplier(e.target.value)}
+                          className="px-3 py-2 border border-emerald-200 rounded-lg text-sm bg-white">
+                          <option value="Rexel">Rexel</option>
+                          <option value="Middy's">Middy's</option>
+                          <option value="L&H">L&H</option>
+                          <option value="Other">Other</option>
+                        </select>
+                      </div>
+                      <button onClick={handleBarcodeSave} disabled={!barcodePartName.trim() || !barcodePrice || barcodeSaving}
+                        className="w-full py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-bold disabled:opacity-40 flex items-center justify-center gap-1.5">
+                        {barcodeSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                        {barcodeSaving ? 'Saving...' : 'Add to Job + Price Catalog'}
+                      </button>
+                    </div>
+                  ) : !showPartPicker ? (
+                    <div className="flex gap-2 flex-wrap">
                       {partsCatalog.length > 0 && (
                         <button
                           onClick={() => setShowPartPicker(true)}
@@ -668,6 +734,12 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
                         className="flex-1 py-2.5 bg-slate-50 border border-slate-200 text-slate-600 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 active:scale-[0.98] transition-all"
                       >
                         <Plus className="w-4 h-4" /> Custom Item
+                      </button>
+                      <button
+                        onClick={() => setShowBarcodeScan(true)}
+                        className="flex-1 py-2.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 active:scale-[0.98] transition-all"
+                      >
+                        <Search className="w-4 h-4" /> Scan + Price
                       </button>
                     </div>
                   ) : (
