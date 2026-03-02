@@ -8,6 +8,12 @@
       "includeFiles": "api/form9/Form9-template.pdf"
     }
   },
+  "crons": [
+    {
+      "path": "/api/email/poll-inbox",
+      "schedule": "*/5 * * * *"
+    }
+  ],
   "rewrites": [
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
