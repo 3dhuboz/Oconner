@@ -115,6 +115,12 @@ export interface Job {
   emailProcessedAt?: string;
   hasFollowUpEmail?: boolean;
   lastFollowUpAt?: string;
+
+  // Pause/resume
+  pausedAt?: string;
+  pauseReason?: string;
+  needsReschedule?: boolean;
+  completionOverrideReason?: string;
 }
 
 export interface Electrician {

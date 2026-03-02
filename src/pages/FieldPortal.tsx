@@ -201,7 +201,24 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
     }
   };
 
-  const handleSubmit = () => {
+  // ─── Completion Checklist ───
+  const [showChecklist, setShowChecklist] = useState(false);
+  const [overrideReason, setOverrideReason] = useState('');
+
+  const getChecklistItems = () => {
+    const finalMs = calcWorkedMs(timeEntries);
+    const laborHours = parseFloat(formatHoursDecimal(finalMs));
+    return [
+      { id: 'clocked_off', label: 'Clocked off', passed: clockStatus === 'clocked_off', required: true },
+      { id: 'hours_recorded', label: `Hours recorded (${laborHours > 0 ? laborHours + 'h' : 'none'})`, passed: laborHours > 0, required: true },
+      { id: 'photos_added', label: `Photos added (${photos.length})`, passed: photos.length > 0, required: false },
+      { id: 'materials_listed', label: `Parts/materials listed (${materials.length})`, passed: materials.length > 0, required: false },
+      { id: 'site_notes', label: 'Site notes entered', passed: siteNotes.trim().length > 0, required: false },
+      { id: 'all_working', label: 'Confirmed everything tested & working', passed: true, required: false },
+    ];
+  };
+
+  const handleSubmitAttempt = () => {
     if (clockStatus !== 'clocked_off') {
       alert("⚠️ Please clock off before submitting the job.");
       return;
@@ -212,14 +229,16 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
       alert("⚠️ No time recorded. Please check your clock entries.");
       return;
     }
-    if (photos.length === 0) {
-      alert("⚠️ Required: Please upload at least one clear photo.");
-      return;
-    }
-    if (!siteNotes.trim()) {
-      alert("⚠️ Required: Please enter site notes.");
-      return;
-    }
+    setShowChecklist(true);
+  };
+
+  const handleConfirmSubmit = (force: boolean) => {
+    const finalMs = calcWorkedMs(timeEntries);
+    const laborHours = parseFloat(formatHoursDecimal(finalMs));
+    const items = getChecklistItems();
+    const hasFails = items.some(i => !i.passed);
+
+    if (hasFails && !force) return;
 
     updateJob(job.id, {
       laborHours,
@@ -227,10 +246,12 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
       materials,
       photos,
       siteNotes,
-      status: 'REVIEW'
+      status: 'REVIEW',
+      ...(force && overrideReason ? { completionOverrideReason: overrideReason } as any : {}),
     });
-    
+
     clearTimerState(job.id);
+    setShowChecklist(false);
     alert("Job submitted successfully! The office has been notified.");
     navigate('/');
   };
@@ -611,19 +632,51 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
 
             {/* ════════ SUBMIT ════════ */}
             {job.status === 'EXECUTION' && (
-              <button 
-                onClick={handleSubmit}
-                disabled={clockStatus !== 'clocked_off'}
-                className={cn(
-                  "w-full py-4 rounded-2xl font-bold text-lg shadow-lg transition-all active:scale-[0.98] flex items-center justify-center gap-2",
-                  clockStatus === 'clocked_off'
-                    ? "bg-slate-900 hover:bg-slate-800 text-white shadow-slate-900/20"
-                    : "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none"
+              <>
+                <button 
+                  onClick={handleSubmitAttempt}
+                  disabled={clockStatus !== 'clocked_off'}
+                  className={cn(
+                    "w-full py-4 rounded-2xl font-bold text-lg shadow-lg transition-all active:scale-[0.98] flex items-center justify-center gap-2",
+                    clockStatus === 'clocked_off'
+                      ? "bg-slate-900 hover:bg-slate-800 text-white shadow-slate-900/20"
+                      : "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none"
+                  )}
+                >
+                  <CheckCircle2 className="w-6 h-6" />
+                  {clockStatus === 'clocked_off' ? 'Submit Job to Office' : 'Clock off to submit'}
+                </button>
+
+                {/* Pause / Finished for Today */}
+                {clockStatus === 'clocked_off' && (
+                  <button
+                    onClick={() => {
+                      const reason = prompt('Why are you pausing this job? (e.g. need to come back, waiting for parts)');
+                      if (reason === null) return;
+                      const finalMs = calcWorkedMs(timeEntries);
+                      const laborHours = parseFloat(formatHoursDecimal(finalMs));
+                      updateJob(job.id, {
+                        status: 'SCHEDULING' as any,
+                        materials,
+                        photos,
+                        siteNotes: (siteNotes ? siteNotes + '\n\n' : '') + `⏸️ Paused (${new Date().toLocaleDateString('en-AU')}): ${reason}`,
+                        laborHours,
+                        timeLog: timeEntries,
+                        pausedAt: new Date().toISOString(),
+                        pauseReason: reason,
+                        needsReschedule: true,
+                      } as any);
+                      clearTimerState(job.id);
+                      alert("Job paused — the office will reschedule. Your progress has been saved.");
+                      navigate('/');
+                    }}
+                    className="w-full py-3 bg-amber-50 hover:bg-amber-100 border-2 border-amber-300 text-amber-800 rounded-2xl font-semibold text-sm transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Coffee className="w-5 h-5" />
+                    Finished for Today — Need to Come Back
+                  </button>
                 )}
-              >
-                <CheckCircle2 className="w-6 h-6" />
-                {clockStatus === 'clocked_off' ? 'Submit Job to Office' : 'Clock off to submit'}
-              </button>
+              </>
             )}
             
             {job.status === 'REVIEW' && (
@@ -722,6 +775,130 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
           </div>
         )}
       </div>
+
+      {/* ═══════════ COMPLETION CHECKLIST MODAL ═══════════ */}
+      {showChecklist && (() => {
+        const items = getChecklistItems();
+        const allPassed = items.every(i => i.passed);
+        const failCount = items.filter(i => !i.passed).length;
+        const requiredFails = items.filter(i => i.required && !i.passed).length;
+
+        return (
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+            <div className="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+              {/* Header */}
+              <div className={cn(
+                'px-6 py-5',
+                allPassed ? 'bg-emerald-50' : 'bg-amber-50'
+              )}>
+                <h3 className={cn(
+                  'text-lg font-bold',
+                  allPassed ? 'text-emerald-900' : 'text-amber-900'
+                )}>
+                  {allPassed ? '✅ Ready to Submit' : '⚠️ Completion Checklist'}
+                </h3>
+                <p className={cn(
+                  'text-sm mt-1',
+                  allPassed ? 'text-emerald-700' : 'text-amber-700'
+                )}>
+                  {allPassed
+                    ? 'All checks passed. Ready to submit this job.'
+                    : `${failCount} item${failCount > 1 ? 's' : ''} need attention before submitting.`}
+                </p>
+              </div>
+
+              {/* Checklist items */}
+              <div className="px-6 py-4 space-y-3 overflow-y-auto flex-1">
+                {items.map(item => (
+                  <div
+                    key={item.id}
+                    className={cn(
+                      'flex items-center gap-3 p-3 rounded-xl border transition-colors',
+                      item.passed
+                        ? 'bg-emerald-50 border-emerald-200'
+                        : item.required
+                          ? 'bg-red-50 border-red-200'
+                          : 'bg-amber-50 border-amber-200'
+                    )}
+                  >
+                    <div className={cn(
+                      'w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-sm font-bold',
+                      item.passed
+                        ? 'bg-emerald-500 text-white'
+                        : item.required
+                          ? 'bg-red-500 text-white'
+                          : 'bg-amber-400 text-white'
+                    )}>
+                      {item.passed ? '✓' : item.required ? '✗' : '!'}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <span className={cn(
+                        'text-sm font-semibold',
+                        item.passed ? 'text-emerald-800' : item.required ? 'text-red-800' : 'text-amber-800'
+                      )}>
+                        {item.label}
+                      </span>
+                      {!item.passed && item.required && (
+                        <p className="text-xs text-red-600 mt-0.5">Required — go back and complete this</p>
+                      )}
+                      {!item.passed && !item.required && (
+                        <p className="text-xs text-amber-600 mt-0.5">Recommended — you can override if not needed</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+
+                {/* Override reason — only show if there are non-required fails */}
+                {!allPassed && requiredFails === 0 && (
+                  <div className="mt-4 p-4 bg-slate-50 border border-slate-200 rounded-xl">
+                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wide mb-2">
+                      Override reason (optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={overrideReason}
+                      onChange={e => setOverrideReason(e.target.value)}
+                      placeholder="e.g. No parts required for this job"
+                      className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Action buttons */}
+              <div className="px-6 py-4 border-t border-slate-200 space-y-2 bg-slate-50">
+                {allPassed ? (
+                  <button
+                    onClick={() => handleConfirmSubmit(false)}
+                    className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-base transition-colors flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20"
+                  >
+                    <CheckCircle2 className="w-5 h-5" />
+                    Submit Job
+                  </button>
+                ) : requiredFails > 0 ? (
+                  <div className="text-center text-sm text-red-600 font-medium py-2">
+                    Fix required items before submitting
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => handleConfirmSubmit(true)}
+                    className="w-full py-3.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold text-base transition-colors flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20"
+                  >
+                    <CheckCircle2 className="w-5 h-5" />
+                    Submit Anyway (Override)
+                  </button>
+                )}
+                <button
+                  onClick={() => { setShowChecklist(false); setOverrideReason(''); }}
+                  className="w-full py-3 bg-white border border-slate-200 text-slate-600 rounded-xl font-semibold text-sm transition-colors hover:bg-slate-100"
+                >
+                  Go Back & Fix
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
