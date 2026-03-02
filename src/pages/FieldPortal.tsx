@@ -693,54 +693,71 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
               {job.status === 'EXECUTION' && (
                 <div className="border-t border-slate-100 p-4 space-y-3">
                   {showBarcodeScan ? (
-                    <div className="space-y-3 bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+                    <div className="space-y-4 bg-emerald-50 border-2 border-emerald-300 rounded-2xl p-5">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">Scan Barcode + Log Price</span>
-                        <button onClick={() => setShowBarcodeScan(false)} className="text-xs text-emerald-500 hover:text-emerald-700">Close</button>
+                        <h4 className="text-sm font-bold text-emerald-800 flex items-center gap-2">
+                          <Search className="w-4 h-4" /> Scan Barcode + Log Price
+                        </h4>
+                        <button onClick={() => setShowBarcodeScan(false)} className="px-3 py-1.5 text-xs font-semibold text-emerald-600 bg-white border border-emerald-200 rounded-lg active:scale-95">Close</button>
                       </div>
-                      <input type="text" placeholder="Barcode / EAN (scan or type)" value={barcodeValue} onChange={e => setBarcodeValue(e.target.value)}
-                        className="w-full px-3 py-2 border border-emerald-200 rounded-lg text-sm bg-white" autoFocus />
-                      <input type="text" placeholder="Part name / description" value={barcodePartName} onChange={e => setBarcodePartName(e.target.value)}
-                        className="w-full px-3 py-2 border border-emerald-200 rounded-lg text-sm bg-white" />
-                      <div className="flex gap-2">
-                        <input type="number" placeholder="Cost price (ex GST)" value={barcodePrice} onChange={e => setBarcodePrice(e.target.value)} step="0.01"
-                          className="flex-1 px-3 py-2 border border-emerald-200 rounded-lg text-sm bg-white" />
-                        <select title="Supplier" value={barcodeSupplier} onChange={e => setBarcodeSupplier(e.target.value)}
-                          className="px-3 py-2 border border-emerald-200 rounded-lg text-sm bg-white">
-                          <option value="Rexel">Rexel</option>
-                          <option value="Middy's">Middy's</option>
-                          <option value="L&H">L&H</option>
-                          <option value="Other">Other</option>
-                        </select>
+                      <div>
+                        <label className="block text-xs font-semibold text-emerald-700 mb-1">Barcode / EAN</label>
+                        <input type="text" placeholder="Scan barcode or type manually" value={barcodeValue} onChange={e => setBarcodeValue(e.target.value)}
+                          className="w-full px-4 py-3.5 border-2 border-emerald-200 rounded-xl text-base bg-white focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400" autoFocus />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-emerald-700 mb-1">Part Name / Description</label>
+                        <input type="text" placeholder="e.g. Clipsal 30M 10A Switch" value={barcodePartName} onChange={e => setBarcodePartName(e.target.value)}
+                          className="w-full px-4 py-3.5 border-2 border-emerald-200 rounded-xl text-base bg-white focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400" />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-semibold text-emerald-700 mb-1">Cost Price (ex GST)</label>
+                          <input type="number" placeholder="$0.00" value={barcodePrice} onChange={e => setBarcodePrice(e.target.value)} step="0.01"
+                            className="w-full px-4 py-3.5 border-2 border-emerald-200 rounded-xl text-base bg-white focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400" />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-emerald-700 mb-1">Supplier</label>
+                          <select title="Supplier" value={barcodeSupplier} onChange={e => setBarcodeSupplier(e.target.value)}
+                            className="w-full px-4 py-3.5 border-2 border-emerald-200 rounded-xl text-base bg-white">
+                            <option value="Rexel">Rexel</option>
+                            <option value="Middy's">Middy's</option>
+                            <option value="L&H">L&H</option>
+                            <option value="Other">Other</option>
+                          </select>
+                        </div>
                       </div>
                       <button onClick={handleBarcodeSave} disabled={!barcodePartName.trim() || !barcodePrice || barcodeSaving}
-                        className="w-full py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-bold disabled:opacity-40 flex items-center justify-center gap-1.5">
-                        {barcodeSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                        className="w-full py-4 bg-emerald-600 text-white rounded-2xl text-base font-bold disabled:opacity-40 flex items-center justify-center gap-2 active:scale-[0.98] transition-transform shadow-md">
+                        {barcodeSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />}
                         {barcodeSaving ? 'Saving...' : 'Add to Job + Price Catalog'}
                       </button>
                     </div>
                   ) : !showPartPicker ? (
-                    <div className="flex gap-2 flex-wrap">
-                      {partsCatalog.length > 0 && (
-                        <button
-                          onClick={() => setShowPartPicker(true)}
-                          className="flex-1 py-2.5 bg-amber-50 border border-amber-200 text-amber-700 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 active:scale-[0.98] transition-all"
-                        >
-                          <Package className="w-4 h-4" /> From Catalog
-                        </button>
-                      )}
-                      <button
-                        onClick={handleAddMaterial}
-                        className="flex-1 py-2.5 bg-slate-50 border border-slate-200 text-slate-600 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 active:scale-[0.98] transition-all"
-                      >
-                        <Plus className="w-4 h-4" /> Custom Item
-                      </button>
+                    <div className="space-y-2">
+                      {/* Primary: Scan barcode — biggest button */}
                       <button
                         onClick={() => setShowBarcodeScan(true)}
-                        className="flex-1 py-2.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 active:scale-[0.98] transition-all"
+                        className="w-full py-4 bg-emerald-500 text-white rounded-2xl text-base font-bold flex items-center justify-center gap-2 active:scale-[0.98] transition-all shadow-sm"
                       >
-                        <Search className="w-4 h-4" /> Scan + Price
+                        <Search className="w-5 h-5" /> Scan Barcode + Log Price
                       </button>
+                      <div className="flex gap-2">
+                        {partsCatalog.length > 0 && (
+                          <button
+                            onClick={() => setShowPartPicker(true)}
+                            className="flex-1 py-3.5 bg-amber-50 border-2 border-amber-200 text-amber-700 rounded-xl text-sm font-bold flex items-center justify-center gap-1.5 active:scale-[0.98] transition-all"
+                          >
+                            <Package className="w-4 h-4" /> From Catalog
+                          </button>
+                        )}
+                        <button
+                          onClick={handleAddMaterial}
+                          className="flex-1 py-3.5 bg-slate-50 border-2 border-slate-200 text-slate-600 rounded-xl text-sm font-bold flex items-center justify-center gap-1.5 active:scale-[0.98] transition-all"
+                        >
+                          <Plus className="w-4 h-4" /> Custom Item
+                        </button>
+                      </div>
                     </div>
                   ) : (
                     /* Catalog picker */
