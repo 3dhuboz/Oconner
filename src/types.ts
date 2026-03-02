@@ -109,6 +109,12 @@ export interface Job {
   // Extended contact info from AI
   propertyManagerName?: string;
   agency?: string;
+
+  // Email processing tracking
+  emailProcessed?: boolean;
+  emailProcessedAt?: string;
+  hasFollowUpEmail?: boolean;
+  lastFollowUpAt?: string;
 }
 
 export interface Electrician {

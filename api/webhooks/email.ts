@@ -437,7 +437,109 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    // ── Step 5: Save to Firestore ──
+    // ── Step 5: Duplicate detection — check for active jobs at same address ──
+    let duplicateJobId: string | null = null;
+    let duplicateAction: 'created_new' | 'appended_to_existing' | 'flagged_duplicate' = 'created_new';
+
+    if (propertyAddress) {
+      try {
+        // Query Firestore for jobs at this address that are not CLOSED
+        const queryUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents:runQuery?key=${apiKey}`;
+        const queryRes = await fetch(queryUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${idToken}`,
+          },
+          body: JSON.stringify({
+            structuredQuery: {
+              from: [{ collectionId: 'jobs' }],
+              where: {
+                compositeFilter: {
+                  op: 'AND',
+                  filters: [
+                    {
+                      fieldFilter: {
+                        field: { fieldPath: 'propertyAddress' },
+                        op: 'EQUAL',
+                        value: { stringValue: propertyAddress },
+                      },
+                    },
+                    {
+                      fieldFilter: {
+                        field: { fieldPath: 'source' },
+                        op: 'EQUAL',
+                        value: { stringValue: 'email' },
+                      },
+                    },
+                  ],
+                },
+              },
+              limit: 5,
+            },
+          }),
+        });
+
+        if (queryRes.ok) {
+          const queryData = await queryRes.json();
+          // Filter to active (non-CLOSED) jobs
+          const activeJobs = (queryData || []).filter((doc: any) => {
+            const status = doc.document?.fields?.status?.stringValue;
+            return status && status !== 'CLOSED';
+          });
+
+          if (activeJobs.length > 0) {
+            const existingDoc = activeJobs[0].document;
+            const existingId = existingDoc.name?.split('/').pop();
+            console.log(`[CloudMailin] Duplicate detected: active job ${existingId} at ${propertyAddress}`);
+
+            // Append this email as a follow-up note to the existing job
+            const existingNotes = existingDoc.fields?.siteNotes?.stringValue || '';
+            const followUpNote = `\n\n━━━ Follow-up email (${now.toISOString()}) ━━━\nFrom: ${from}\nSubject: ${subject}\n${issueDescription || emailContent.substring(0, 500)}`;
+            const updatedNotes = existingNotes + followUpNote;
+
+            // Patch the existing job with the follow-up
+            const patchUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/jobs/${existingId}?updateMask.fieldPaths=siteNotes&updateMask.fieldPaths=hasFollowUpEmail&updateMask.fieldPaths=lastFollowUpAt&key=${apiKey}`;
+            await fetch(patchUrl, {
+              method: 'PATCH',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${idToken}`,
+              },
+              body: JSON.stringify({
+                fields: {
+                  siteNotes: { stringValue: updatedNotes },
+                  hasFollowUpEmail: { booleanValue: true },
+                  lastFollowUpAt: { stringValue: now.toISOString() },
+                },
+              }),
+            });
+
+            duplicateJobId = existingId;
+            duplicateAction = 'appended_to_existing';
+            console.log(`[CloudMailin] Follow-up appended to existing job ${existingId}`);
+          }
+        }
+      } catch (dupErr: any) {
+        console.warn('[CloudMailin] Duplicate check failed (non-fatal):', dupErr.message);
+      }
+    }
+
+    // If we appended to an existing job, don't create a new one
+    if (duplicateJobId && duplicateAction === 'appended_to_existing') {
+      return res.status(200).json({
+        success: true,
+        action: 'appended_to_existing',
+        existingJobId: duplicateJobId,
+        message: `Follow-up email appended to existing active job ${duplicateJobId} at ${propertyAddress}`,
+        extraction: extractionMethod,
+      });
+    }
+
+    // ── Step 6: Save new job to Firestore ──
+    newJob.emailProcessed = true;
+    newJob.emailProcessedAt = now.toISOString();
+
     const fields: any = {};
     for (const [key, value] of Object.entries(newJob)) {
       fields[key] = toFirestoreValue(value);
@@ -463,7 +565,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const docId = result.name?.split('/').pop() || 'unknown';
     console.log(`[CloudMailin] Job saved: ${docId} | Type: ${jobType} | Urgency: ${urgency} | Method: ${extractionMethod}`);
 
-    return res.status(200).json({ success: true, jobId: docId, extraction: extractionMethod });
+    return res.status(200).json({ success: true, jobId: docId, action: 'created_new', extraction: extractionMethod });
 
   } catch (err: any) {
     console.error('[CloudMailin] Unhandled error:', err.message, err.stack);

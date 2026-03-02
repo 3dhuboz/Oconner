@@ -197,6 +197,16 @@ export function JobBoard({ jobs }: JobBoardProps) {
                               $ PENDING
                             </span>
                           )}
+                          {job.aiNeedsReview && (
+                            <span className="bg-amber-100 text-amber-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                              ⚠ REVIEW
+                            </span>
+                          )}
+                          {job.hasFollowUpEmail && (
+                            <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                              📩 FOLLOW-UP
+                            </span>
+                          )}
                           <span className={cn(
                             "text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full",
                             job.type === 'SMOKE_ALARM' ? "bg-rose-100 text-rose-700" : "bg-slate-100 text-slate-700"
