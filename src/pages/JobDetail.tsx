@@ -223,88 +223,175 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
 
   const handleGenerateCompliance = () => {
     const doc = new jsPDF();
+    const alarms = job.smokeAlarms || [];
+    const allPassed = alarms.length > 0 && alarms.every(a => a.tested && a.passed);
+    const inspDate = format(new Date(), 'dd/MM/yyyy');
+    const techName = job.complianceInspectorName || (job.assignedElectricianId
+      ? electricians.find(e => e.id === job.assignedElectricianId)?.name || 'Wirez R Us Technician'
+      : 'Wirez R Us Technician');
+    const licNo = job.complianceLicenceNo || 'QLD Lic: 999999';
     
     // Header
-    doc.setFillColor(23, 37, 84); // slate-900
+    doc.setFillColor(23, 37, 84);
     doc.rect(0, 0, 210, 40, 'F');
     doc.setTextColor(255, 255, 255);
-    doc.setFontSize(22);
+    doc.setFontSize(20);
     doc.setFont("helvetica", "bold");
-    doc.text("SMOKE ALARM COMPLIANCE CERTIFICATE", 20, 25);
-    
-    // Certificate Details
-    doc.setTextColor(0, 0, 0);
+    doc.text("SMOKE ALARM COMPLIANCE CERTIFICATE", 20, 22);
     doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
-    doc.text(`Certificate No: COMP-${job.id}`, 150, 20);
-    doc.text(`Date: ${new Date().toLocaleDateString()}`, 150, 28);
+    doc.text("In accordance with the Fire and Emergency Services Act 1990 (Qld)", 20, 32);
+    
+    // Certificate ref
+    doc.setTextColor(200, 200, 200);
+    doc.setFontSize(8);
+    doc.text(`Ref: COMP-${job.id}`, 170, 12);
+    doc.text(`Date: ${inspDate}`, 170, 18);
 
     // Property Details
-    doc.setFontSize(14);
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(13);
     doc.setFont("helvetica", "bold");
-    doc.text("Property Details", 20, 60);
-    doc.line(20, 63, 190, 63);
+    doc.text("Property Details", 20, 55);
+    doc.setDrawColor(200, 200, 200);
+    doc.line(20, 58, 190, 58);
     
-    doc.setFontSize(11);
+    doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
-    doc.text(`Address:`, 20, 75);
-    doc.setFont("helvetica", "bold");
-    doc.text(job.propertyAddress, 50, 75);
-    
-    doc.setFont("helvetica", "normal");
-    doc.text(`Tenant:`, 20, 85);
-    doc.text(job.tenantName, 50, 85);
-
-    // Inspection Results
-    doc.setFontSize(14);
-    doc.setFont("helvetica", "bold");
-    doc.text("Inspection Results", 20, 105);
-    doc.line(20, 108, 190, 108);
-
-    const items = [
-      "Smoke alarms installed in all required locations",
-      "Alarms are less than 10 years old",
-      "Alarms interconnected where required",
-      "Alarms tested and functioning correctly",
-      "Batteries replaced (if applicable)",
-      "Decibel level test passed (>85dB)"
+    const details = [
+      ['Address:', job.propertyAddress],
+      ['Tenant:', job.tenantName],
+      ['Owner/Agent:', job.propertyManagerEmail || job.agency || '—'],
+      ['Inspection Date:', inspDate],
     ];
-
-    let y = 120;
-    doc.setFontSize(11);
-    doc.setFont("helvetica", "normal");
-    
-    items.forEach(item => {
-      doc.text(`[ X ]  ${item}`, 20, y);
-      y += 10;
+    let y = 66;
+    details.forEach(([label, val]) => {
+      doc.setFont("helvetica", "bold");
+      doc.text(label, 20, y);
+      doc.setFont("helvetica", "normal");
+      doc.text(val || '—', 65, y);
+      y += 8;
     });
 
-    // Technician Declaration
+    // Alarm Detail Table
+    y += 5;
+    doc.setFontSize(13);
+    doc.setFont("helvetica", "bold");
+    doc.text("Smoke Alarm Details", 20, y);
+    doc.line(20, y + 3, 190, y + 3);
     y += 10;
-    doc.setFontSize(14);
+
+    if (alarms.length > 0) {
+      // Table header
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "bold");
+      doc.setFillColor(240, 240, 240);
+      doc.rect(20, y - 4, 170, 8, 'F');
+      const cols = [20, 55, 85, 110, 135, 155, 170];
+      const headers = ['Location', 'Type', 'Power', 'Tested', 'Passed', 'Replaced', 'Notes'];
+      headers.forEach((h, i) => doc.text(h, cols[i], y));
+      y += 6;
+
+      // Table rows
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      alarms.forEach(alarm => {
+        if (y > 250) { doc.addPage(); y = 20; }
+        doc.text(alarm.location || '—', cols[0], y);
+        doc.text(alarm.type.replace('_', ' '), cols[1], y);
+        doc.text(alarm.power.replace('_', ' '), cols[2], y);
+        doc.text(alarm.tested ? '✓' : '✗', cols[3] + 5, y);
+        doc.text(alarm.passed ? '✓' : '✗', cols[4] + 5, y);
+        doc.text(alarm.replaced ? 'Yes' : 'No', cols[5], y);
+        doc.text((alarm.notes || '').substring(0, 20), cols[6], y);
+        y += 7;
+      });
+    } else {
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "italic");
+      doc.setTextColor(150, 150, 150);
+      doc.text("No individual alarm data recorded — generic checklist applied.", 20, y);
+      doc.setTextColor(0, 0, 0);
+      y += 10;
+      
+      const items = [
+        "Smoke alarms installed in all required locations",
+        "Alarms are less than 10 years old",
+        "Alarms interconnected where required",
+        "Alarms tested and functioning correctly",
+        "Batteries replaced (if applicable)",
+        "Decibel level test passed (>85dB)"
+      ];
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      items.forEach(item => {
+        doc.text(`[X]  ${item}`, 25, y);
+        y += 8;
+      });
+    }
+
+    // Compliance summary
+    y += 10;
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "bold");
+    if (allPassed) {
+      doc.setTextColor(16, 120, 16);
+      doc.text("RESULT: COMPLIANT", 20, y);
+    } else if (alarms.length > 0) {
+      doc.setTextColor(200, 50, 50);
+      doc.text("RESULT: NON-COMPLIANT — ACTION REQUIRED", 20, y);
+    } else {
+      doc.setTextColor(0, 0, 0);
+      doc.text("RESULT: COMPLIANT (GENERAL INSPECTION)", 20, y);
+    }
+    doc.setTextColor(0, 0, 0);
+
+    // Notes
+    if (job.complianceNotes || job.siteNotes) {
+      y += 12;
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "bold");
+      doc.text("Inspector Notes:", 20, y);
+      y += 7;
+      doc.setFont("helvetica", "normal");
+      const notes = job.complianceNotes || job.siteNotes || '';
+      const lines = doc.splitTextToSize(notes, 170);
+      doc.text(lines, 20, y);
+      y += lines.length * 5;
+    }
+
+    // Technician Declaration
+    y += 12;
+    doc.setFontSize(11);
     doc.setFont("helvetica", "bold");
     doc.text("Technician Declaration", 20, y);
-    doc.line(20, y+3, 190, y+3);
+    doc.line(20, y + 3, 190, y + 3);
     
-    y += 15;
-    doc.setFontSize(11);
+    y += 12;
+    doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
-    doc.text("I certify that the smoke alarms at the above address have been tested", 20, y);
-    doc.text("and comply with the relevant state legislation and Australian Standards (AS 3786:2014).", 20, y+7);
+    doc.text("I certify that the smoke alarms at the above address have been inspected, tested,", 20, y);
+    doc.text("and comply with the relevant state legislation and Australian Standards (AS 3786:2014).", 20, y + 5);
 
-    y += 25;
+    y += 18;
     doc.setFont("helvetica", "bold");
-    doc.text(`Technician: ${job.assignedElectricianId ? 'John Spark (Lic: 123456)' : 'Wirez R Us Technician'}`, 20, y);
-    doc.text(`Signature: __________________________`, 120, y);
+    doc.text(`Inspector: ${techName}`, 20, y);
+    doc.text(`Licence: ${licNo}`, 20, y + 7);
+    doc.text(`Signature: __________________________`, 110, y);
+    doc.text(`Date: ${inspDate}`, 110, y + 7);
 
     // Footer
-    doc.setFontSize(8);
+    doc.setFontSize(7);
     doc.setTextColor(150, 150, 150);
-    doc.text("Wirez R Us Electrical Services | Lic No. 999999 | Ph: 1300 WIREZ US", 105, 280, { align: "center" });
+    doc.text("Wirez R Us Electrical Services | ABN: XX XXX XXX XXX | Ph: 1300 WIREZ US | jobs@wireznrus.com.au", 105, 285, { align: "center" });
     
     doc.save(`Compliance_${job.id}.pdf`);
 
-    updateJob(job.id, { complianceReportGenerated: true });
+    updateJob(job.id, { 
+      complianceReportGenerated: true,
+      complianceDate: new Date().toISOString(),
+      complianceInspectorName: techName,
+    });
     toast.success(`Compliance certificate generated — Compliance_${job.id}.pdf`);
   };
 

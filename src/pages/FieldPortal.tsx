@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Job, Material, TimeEntry, CatalogPart } from '../types';
+import { Job, Material, TimeEntry, CatalogPart, SmokeAlarmEntry } from '../types';
 import { MapPin, Clock, Camera, Plus, Trash2, CheckCircle2, FileText, ArrowLeft, Navigation, Play, Square, Coffee, Package, Search, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useGpsTracking } from '../hooks/useGpsTracking';
@@ -138,6 +138,28 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
   const [siteNotes, setSiteNotes] = useState(job?.siteNotes || '');
   const [partSearch, setPartSearch] = useState('');
   const [showPartPicker, setShowPartPicker] = useState(false);
+
+  // SA Compliance: load alarm data from this job or propagate from previous SA job at same address
+  const [saAlarms, setSaAlarms] = useState<SmokeAlarmEntry[]>(() => {
+    if (job?.smokeAlarms?.length) return job.smokeAlarms;
+    // Propagate from most recent closed SA job at same address
+    if (job?.type === 'SMOKE_ALARM' && job?.propertyAddress) {
+      const prev = jobs
+        .filter(j => j.id !== job.id && j.type === 'SMOKE_ALARM' && j.propertyAddress === job.propertyAddress && j.smokeAlarms?.length)
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+      if (prev?.smokeAlarms) {
+        return prev.smokeAlarms.map(a => ({
+          ...a,
+          id: Math.random().toString(36).substr(2, 9),
+          tested: false,
+          passed: false,
+          replaced: false,
+          notes: '',
+        }));
+      }
+    }
+    return [];
+  });
 
   if (!job) {
     return <div className="p-8 text-center text-slate-500">Job not found.</div>;
@@ -615,6 +637,126 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
                 )}
               </div>
             </div>
+
+            {/* ════════ SA COMPLIANCE FORM (Smoke Alarm jobs only) ════════ */}
+            {job.type === 'SMOKE_ALARM' && job.status === 'EXECUTION' && (
+              <div className="bg-white rounded-2xl p-5 border-2 border-rose-200 shadow-sm">
+                <label className="block text-sm font-bold text-rose-700 mb-1">
+                  🔥 Smoke Alarm Inspection
+                </label>
+                <p className="text-xs text-slate-500 mb-3">Record each alarm location, type, and test result.</p>
+
+                {/* Alarm entries */}
+                <div className="space-y-3 mb-3">
+                  {saAlarms.map((alarm, idx) => (
+                    <div key={alarm.id} className="bg-rose-50 border border-rose-200 rounded-xl p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-rose-700">Alarm #{idx + 1}</span>
+                        <button
+                          onClick={() => setSaAlarms(prev => prev.filter(a => a.id !== alarm.id))}
+                          className="text-slate-400 hover:text-red-500 transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Location (e.g. Master Bedroom, Hallway)"
+                        value={alarm.location}
+                        onChange={e => setSaAlarms(prev => prev.map(a => a.id === alarm.id ? { ...a, location: e.target.value } : a))}
+                        className="w-full px-3 py-2 border border-rose-200 rounded-lg text-sm bg-white"
+                      />
+                      <div className="grid grid-cols-2 gap-2">
+                        <select
+                          value={alarm.type}
+                          onChange={e => setSaAlarms(prev => prev.map(a => a.id === alarm.id ? { ...a, type: e.target.value as any } : a))}
+                          className="px-2 py-1.5 border border-rose-200 rounded-lg text-xs bg-white"
+                        >
+                          <option value="photoelectric">Photoelectric</option>
+                          <option value="ionisation">Ionisation</option>
+                          <option value="dual_sensor">Dual Sensor</option>
+                          <option value="heat">Heat</option>
+                          <option value="unknown">Unknown</option>
+                        </select>
+                        <select
+                          value={alarm.power}
+                          onChange={e => setSaAlarms(prev => prev.map(a => a.id === alarm.id ? { ...a, power: e.target.value as any } : a))}
+                          className="px-2 py-1.5 border border-rose-200 rounded-lg text-xs bg-white"
+                        >
+                          <option value="hardwired">Hardwired (240V)</option>
+                          <option value="battery">Battery Only</option>
+                          <option value="240v_battery_backup">240V + Battery</option>
+                          <option value="unknown">Unknown</option>
+                        </select>
+                      </div>
+                      <div className="flex gap-3">
+                        <label className="flex items-center gap-1.5 text-xs">
+                          <input
+                            type="checkbox"
+                            checked={alarm.tested}
+                            onChange={e => setSaAlarms(prev => prev.map(a => a.id === alarm.id ? { ...a, tested: e.target.checked } : a))}
+                            className="rounded border-rose-300"
+                          />
+                          Tested
+                        </label>
+                        <label className="flex items-center gap-1.5 text-xs">
+                          <input
+                            type="checkbox"
+                            checked={alarm.passed}
+                            onChange={e => setSaAlarms(prev => prev.map(a => a.id === alarm.id ? { ...a, passed: e.target.checked } : a))}
+                            className="rounded border-rose-300"
+                          />
+                          Passed
+                        </label>
+                        <label className="flex items-center gap-1.5 text-xs">
+                          <input
+                            type="checkbox"
+                            checked={alarm.replaced}
+                            onChange={e => setSaAlarms(prev => prev.map(a => a.id === alarm.id ? { ...a, replaced: e.target.checked } : a))}
+                            className="rounded border-rose-300"
+                          />
+                          Replaced
+                        </label>
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Notes (optional)"
+                        value={alarm.notes || ''}
+                        onChange={e => setSaAlarms(prev => prev.map(a => a.id === alarm.id ? { ...a, notes: e.target.value } : a))}
+                        className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs bg-white"
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                <button
+                  onClick={() => setSaAlarms(prev => [...prev, {
+                    id: Math.random().toString(36).substr(2, 9),
+                    location: '',
+                    type: 'photoelectric',
+                    power: 'hardwired',
+                    tested: false,
+                    passed: false,
+                    replaced: false,
+                  }])}
+                  className="w-full py-2.5 border-2 border-dashed border-rose-300 text-rose-600 rounded-xl text-sm font-medium hover:bg-rose-50 transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <Plus className="w-4 h-4" /> Add Alarm
+                </button>
+
+                {saAlarms.length > 0 && (
+                  <button
+                    onClick={() => {
+                      updateJob(job.id, { smokeAlarms: saAlarms } as any);
+                      alert(`✅ ${saAlarms.length} alarm${saAlarms.length > 1 ? 's' : ''} saved to job`);
+                    }}
+                    className="w-full mt-3 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-sm font-bold transition-colors"
+                  >
+                    Save Alarm Data ({saAlarms.length} alarm{saAlarms.length > 1 ? 's' : ''})
+                  </button>
+                )}
+              </div>
+            )}
 
             {/* ════════ NOTES ════════ */}
             <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm">

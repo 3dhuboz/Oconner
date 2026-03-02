@@ -131,6 +131,29 @@ export interface Job {
   // Tenant notification tracking
   tenantNotifiedAt?: string;
   tenantNotificationType?: string;
+
+  // SA Compliance Report fields
+  smokeAlarms?: SmokeAlarmEntry[];
+  complianceNotes?: string;
+  complianceInspectorName?: string;
+  complianceLicenceNo?: string;
+  complianceDate?: string;
+  complianceEmailSentTo?: string;
+  complianceEmailSentAt?: string;
+}
+
+export interface SmokeAlarmEntry {
+  id: string;
+  location: string;       // e.g. "Master Bedroom", "Hallway", "Kitchen"
+  type: 'photoelectric' | 'ionisation' | 'dual_sensor' | 'heat' | 'unknown';
+  power: 'hardwired' | 'battery' | '240v_battery_backup' | 'unknown';
+  brand?: string;
+  model?: string;
+  expiryDate?: string;    // manufacture + 10 years
+  tested: boolean;
+  passed: boolean;
+  replaced: boolean;
+  notes?: string;
 }
 
 export interface Electrician {
