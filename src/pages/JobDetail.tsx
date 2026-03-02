@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Job, JobStatus, ContactAttempt, Electrician } from '../types';
 import { format } from 'date-fns';
 import jsPDF from 'jspdf';
@@ -508,6 +508,65 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
             )}
           </div>
         </div>
+
+        {/* ─── Duplicate / Follow-up Banner ────────────────────────── */}
+        {isAdmin && job.propertyAddress && (() => {
+          const otherJobsAtAddress = jobs.filter(
+            j => j.id !== job.id
+              && j.propertyAddress === job.propertyAddress
+              && j.status !== 'CLOSED'
+          );
+          if (otherJobsAtAddress.length === 0 && !job.hasFollowUpEmail) return null;
+          return (
+            <div className="border-b border-purple-200 bg-purple-50 px-6 py-4">
+              {job.hasFollowUpEmail && (
+                <div className="flex items-center gap-2 text-purple-800 mb-2">
+                  <span className="text-lg">📩</span>
+                  <span className="text-sm font-semibold">Follow-up email received</span>
+                  {job.lastFollowUpAt && (
+                    <span className="text-xs text-purple-600 ml-1">
+                      ({format(new Date(job.lastFollowUpAt), 'MMM d, h:mm a')})
+                    </span>
+                  )}
+                </div>
+              )}
+              {otherJobsAtAddress.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 text-purple-800 mb-2">
+                    <span className="text-lg">⚠️</span>
+                    <span className="text-sm font-semibold">
+                      {otherJobsAtAddress.length} other active job{otherJobsAtAddress.length > 1 ? 's' : ''} at this address
+                    </span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {otherJobsAtAddress.map(oj => (
+                      <Link
+                        key={oj.id}
+                        to={`/jobs/${oj.id}`}
+                        className="flex items-center justify-between gap-2 px-3 py-2 bg-white border border-purple-200 rounded-lg hover:bg-purple-50 transition-colors"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className={cn(
+                            "text-[10px] font-bold px-1.5 py-0.5 rounded-full",
+                            oj.status === 'EXECUTION' ? 'bg-orange-100 text-orange-700' :
+                            oj.status === 'DISPATCHED' ? 'bg-amber-100 text-amber-700' :
+                            'bg-slate-100 text-slate-600'
+                          )}>{oj.status}</span>
+                          <span className="text-sm font-medium text-slate-700 truncate">{oj.title}</span>
+                          <span className="text-xs text-slate-400">{oj.id.slice(0, 8)}</span>
+                        </div>
+                        <span className="text-xs text-purple-600 font-medium shrink-0">View →</span>
+                      </Link>
+                    ))}
+                  </div>
+                  <p className="text-xs text-purple-600 mt-2">
+                    Consider merging these jobs if they relate to the same issue.
+                  </p>
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* ─── AI Parse Review Panel ─────────────────────────────── */}
         {job.source === 'email' && job.aiNeedsReview && isAdmin && (() => {
