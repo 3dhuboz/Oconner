@@ -37,6 +37,7 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [isDeleting, setIsDeleting] = useState(false);
   const [resendingSms, setResendingSms] = useState(false);
+  const [sendingTenantNotif, setSendingTenantNotif] = useState(false);
   const [editingTenant, setEditingTenant] = useState(false);
   const [showAvailability, setShowAvailability] = useState(false);
   const [generatingPaymentLink, setGeneratingPaymentLink] = useState(false);
@@ -1352,6 +1353,106 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
                   disabled={job.status !== 'SCHEDULING'}
                 />
               </div>
+
+              {/* ── Tenant Notifications ── */}
+              {isAdmin && job.status === 'SCHEDULING' && job.scheduledDate && (
+                <div className="space-y-2">
+                  <button
+                    disabled={sendingTenantNotif}
+                    onClick={async () => {
+                      if (!job.tenantPhone && !job.tenantEmail) {
+                        toast.error('No tenant phone or email — add contact details first');
+                        return;
+                      }
+                      setSendingTenantNotif(true);
+                      try {
+                        const schedDate = new Date(job.scheduledDate!);
+                        const endTime = new Date(schedDate.getTime() + 2 * 60 * 60 * 1000);
+                        const res = await fetch('/api/notifications/send-tenant', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            type: 'schedule_confirmation',
+                            tenantPhone: job.tenantPhone || '',
+                            tenantEmail: job.tenantEmail || '',
+                            tenantName: job.tenantName || '',
+                            propertyAddress: job.propertyAddress || '',
+                            scheduledDate: format(schedDate, 'EEEE d MMMM yyyy'),
+                            scheduledTime: `${format(schedDate, 'h:mm a')} – ${format(endTime, 'h:mm a')}`,
+                            jobId: job.id,
+                          }),
+                        });
+                        const data = await res.json();
+                        updateJob(job.id, { 
+                          status: 'DISPATCHED' as any,
+                          tenantNotifiedAt: new Date().toISOString(),
+                          tenantNotificationType: 'schedule_confirmation',
+                        } as any);
+                        toast.success(`Tenant notified${data.sms?.simulated || data.email?.simulated ? ' (simulated)' : ''} — job moved to Dispatched`);
+                      } catch (err) {
+                        console.error(err);
+                        toast.error('Failed to send tenant notification');
+                      } finally {
+                        setSendingTenantNotif(false);
+                      }
+                    }}
+                    className="w-full px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg shadow-emerald-600/20"
+                  >
+                    {sendingTenantNotif ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                    Schedule & Notify Tenant (SMS + Email)
+                  </button>
+                  <p className="text-xs text-slate-500 text-center">
+                    Sends booking confirmation to tenant, moves job to Dispatched. Reminders auto-sent day-before and 1hr-before.
+                  </p>
+                </div>
+              )}
+
+              {/* Send reminder manually */}
+              {isAdmin && ['DISPATCHED', 'EXECUTION'].includes(job.status) && (job.tenantPhone || job.tenantEmail) && (
+                <div className="flex gap-2">
+                  {(['reminder_day_before', 'reminder_1hr_before', 'running_late'] as const).map(type => (
+                    <button
+                      key={type}
+                      disabled={sendingTenantNotif}
+                      onClick={async () => {
+                        setSendingTenantNotif(true);
+                        try {
+                          const schedDate = job.scheduledDate ? new Date(job.scheduledDate) : new Date();
+                          const endTime = new Date(schedDate.getTime() + 2 * 60 * 60 * 1000);
+                          await fetch('/api/notifications/send-tenant', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              type,
+                              tenantPhone: job.tenantPhone || '',
+                              tenantEmail: job.tenantEmail || '',
+                              tenantName: job.tenantName || '',
+                              propertyAddress: job.propertyAddress || '',
+                              scheduledDate: format(schedDate, 'EEEE d MMMM yyyy'),
+                              scheduledTime: `${format(schedDate, 'h:mm a')} – ${format(endTime, 'h:mm a')}`,
+                              jobId: job.id,
+                              ...(type === 'running_late' ? { newEta: 'approximately 30 minutes later than scheduled' } : {}),
+                            }),
+                          });
+                          toast.success(`${type.replace(/_/g, ' ')} sent to tenant`);
+                        } catch (err) {
+                          toast.error('Failed to send');
+                        } finally {
+                          setSendingTenantNotif(false);
+                        }
+                      }}
+                      className={cn(
+                        "flex-1 px-2 py-2 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-1 disabled:opacity-50",
+                        type === 'running_late'
+                          ? 'bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-700'
+                          : 'bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700'
+                      )}
+                    >
+                      {type === 'reminder_day_before' ? '📅 Day Before' : type === 'reminder_1hr_before' ? '⏰ 1hr Before' : '🏃 Running Late'}
+                    </button>
+                  ))}
+                </div>
+              )}
 
               {/* Resend Job Text */}
               {isAdmin && job.assignedElectricianId && ['DISPATCHED', 'EXECUTION'].includes(job.status) && (() => {
