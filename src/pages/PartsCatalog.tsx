@@ -1,9 +1,10 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { CatalogPart } from '../types';
-import { Plus, Trash2, Package, Search, Edit2, Check, X, ScanBarcode, Upload, Image } from 'lucide-react';
+import { Plus, Trash2, Package, Search, Edit2, Check, X, ScanBarcode, Upload, Image, Camera, StopCircle } from 'lucide-react';
 import { cn } from '../utils';
 import { storage } from '../services/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { Html5Qrcode } from 'html5-qrcode';
 
 interface PartsCatalogProps {
   parts: CatalogPart[];
@@ -33,6 +34,47 @@ export function PartsCatalog({ parts, setParts }: PartsCatalogProps) {
   const [uploadingBarcode, setUploadingBarcode] = useState(false);
   const barcodeFileRef = useRef<HTMLInputElement>(null);
 
+  // Camera barcode scanner
+  const [scannerActive, setScannerActive] = useState<'add' | 'edit' | null>(null);
+  const scannerRef = useRef<Html5Qrcode | null>(null);
+  const ADD_SCANNER_ID = 'barcode-scanner-add';
+  const EDIT_SCANNER_ID = 'barcode-scanner-edit';
+
+  const stopScanner = useCallback(async () => {
+    try {
+      if (scannerRef.current) {
+        await scannerRef.current.stop();
+        scannerRef.current.clear();
+      }
+    } catch { /* ignore */ }
+    scannerRef.current = null;
+    setScannerActive(null);
+  }, []);
+
+  const startScanner = useCallback((target: 'add' | 'edit') => {
+    // Stop any existing scanner first
+    if (scannerRef.current) { stopScanner(); return; }
+    setScannerActive(target);
+    // Small delay to let the DOM render the container
+    setTimeout(() => {
+      const elementId = target === 'add' ? ADD_SCANNER_ID : EDIT_SCANNER_ID;
+      const el = document.getElementById(elementId);
+      if (!el) { setScannerActive(null); return; }
+      const scanner = new Html5Qrcode(elementId);
+      scannerRef.current = scanner;
+      scanner.start(
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: { width: 250, height: 100 } },
+        (decoded) => {
+          if (target === 'add') setNewBarcode(decoded);
+          else setEditBarcode(decoded);
+          stopScanner();
+        },
+        () => {}
+      ).catch(() => { setScannerActive(null); scannerRef.current = null; });
+    }, 200);
+  }, [stopScanner]);
+
   const filteredParts = parts.filter(p => {
     const q = search.toLowerCase();
     return p.name.toLowerCase().includes(q) ||
@@ -45,6 +87,7 @@ export function PartsCatalog({ parts, setParts }: PartsCatalogProps) {
 
   const handleAdd = () => {
     if (!newName.trim()) return;
+    if (scannerActive) stopScanner();
     const part: CatalogPart = {
       id: Math.random().toString(36).substr(2, 9),
       name: newName.trim(),
@@ -108,6 +151,7 @@ export function PartsCatalog({ parts, setParts }: PartsCatalogProps) {
   };
 
   const cancelEdit = () => {
+    if (scannerActive) stopScanner();
     setEditingId(null);
   };
 
@@ -186,13 +230,28 @@ export function PartsCatalog({ parts, setParts }: PartsCatalogProps) {
               <label className="block text-xs font-medium text-slate-500 mb-1 flex items-center gap-1">
                 <ScanBarcode className="w-3 h-3" /> Barcode
               </label>
-              <input
-                type="text"
-                value={newBarcode}
-                onChange={e => setNewBarcode(e.target.value)}
-                placeholder="Scan or enter manually"
-                className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
-              />
+              <div className="flex gap-1.5">
+                <input
+                  type="text"
+                  value={newBarcode}
+                  onChange={e => setNewBarcode(e.target.value)}
+                  placeholder="Scan or enter manually"
+                  className="flex-1 px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                />
+                <button
+                  type="button"
+                  onClick={() => scannerActive === 'add' ? stopScanner() : startScanner('add')}
+                  className={cn("px-2.5 py-2 rounded-lg text-sm font-medium flex items-center gap-1 border transition-colors",
+                    scannerActive === 'add' ? 'bg-rose-50 text-rose-600 border-rose-200' : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+                  )}
+                  title={scannerActive === 'add' ? 'Stop scanner' : 'Scan with camera'}
+                >
+                  {scannerActive === 'add' ? <StopCircle className="w-4 h-4" /> : <Camera className="w-4 h-4" />}
+                </button>
+              </div>
+              {scannerActive === 'add' && (
+                <div id={ADD_SCANNER_ID} className="mt-2 rounded-lg overflow-hidden border border-amber-200" style={{ minHeight: 200 }} />
+              )}
             </div>
           </div>
           <div className="flex gap-2">
@@ -303,14 +362,29 @@ export function PartsCatalog({ parts, setParts }: PartsCatalogProps) {
                               <label className="block text-[10px] font-medium text-slate-400 mb-0.5 flex items-center gap-1">
                                 <ScanBarcode className="w-3 h-3" /> Barcode
                               </label>
-                              <input
-                                type="text"
-                                value={editBarcode.startsWith('photo:') ? '(Photo uploaded)' : editBarcode}
-                                onChange={e => setEditBarcode(e.target.value)}
-                                placeholder="Enter barcode"
-                                className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-sm"
-                                readOnly={editBarcode.startsWith('photo:')}
-                              />
+                              <div className="flex gap-1.5">
+                                <input
+                                  type="text"
+                                  value={editBarcode.startsWith('photo:') ? '(Photo uploaded)' : editBarcode}
+                                  onChange={e => setEditBarcode(e.target.value)}
+                                  placeholder="Enter barcode"
+                                  className="flex-1 px-2.5 py-1.5 border border-slate-200 rounded-lg text-sm"
+                                  readOnly={editBarcode.startsWith('photo:')}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => scannerActive === 'edit' ? stopScanner() : startScanner('edit')}
+                                  className={cn("px-2 py-1 rounded-lg text-xs font-medium flex items-center gap-1 border transition-colors",
+                                    scannerActive === 'edit' ? 'bg-rose-50 text-rose-600 border-rose-200' : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+                                  )}
+                                  title={scannerActive === 'edit' ? 'Stop scanner' : 'Scan with camera'}
+                                >
+                                  {scannerActive === 'edit' ? <StopCircle className="w-3.5 h-3.5" /> : <Camera className="w-3.5 h-3.5" />}
+                                </button>
+                              </div>
+                              {scannerActive === 'edit' && (
+                                <div id={EDIT_SCANNER_ID} className="mt-2 rounded-lg overflow-hidden border border-amber-200" style={{ minHeight: 200 }} />
+                              )}
                             </div>
                           </div>
                           {/* Barcode photo upload + preview */}
