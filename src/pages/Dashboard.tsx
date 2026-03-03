@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../utils';
 import { useSyncStatus } from '../hooks/useOfflineSync';
+import { getDailyQuote } from '../quotes';
 
 interface DashboardProps {
   jobs: Job[];
@@ -27,6 +28,7 @@ const PIPELINE = [
 
 export function Dashboard({ jobs, electricians }: DashboardProps) {
   const syncStatus = useSyncStatus();
+  const dailyQuote = getDailyQuote();
 
   // ─── Computed stats ──────────────────────────────────────────
   const totalActive = jobs.filter(j => j.status !== 'CLOSED').length;
@@ -128,6 +130,9 @@ export function Dashboard({ jobs, electricians }: DashboardProps) {
           <p className="text-sm text-slate-500 mt-1">
             {format(new Date(), 'EEEE, d MMMM yyyy')}
             {!syncStatus.isOnline && <span className="ml-2 text-rose-500 font-medium">• Offline Mode</span>}
+          </p>
+          <p className="text-xs text-slate-400 mt-2 italic max-w-md">
+            "{dailyQuote.text}" <span className="not-italic font-medium text-slate-500">— {dailyQuote.author}</span>
           </p>
         </div>
         <div className="flex gap-2">

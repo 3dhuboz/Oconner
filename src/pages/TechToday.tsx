@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { format, isToday } from 'date-fns';
 import { MapPin, Clock, Navigation, ChevronRight, Calendar, CheckCircle2 } from 'lucide-react';
 import { cn } from '../utils';
+import { getDailyQuote } from '../quotes';
 
 interface TechTodayProps {
   jobs: Job[];
@@ -33,6 +34,7 @@ export function TechToday({ jobs, electricians }: TechTodayProps) {
 
   const completed = todayJobs.filter(j => j.status === 'CLOSED' || j.status === 'REVIEW');
   const remaining = todayJobs.filter(j => j.status !== 'CLOSED' && j.status !== 'REVIEW');
+  const dailyQuote = getDailyQuote();
 
   return (
     <div className="px-4 py-5 max-w-lg mx-auto space-y-5">
@@ -44,6 +46,14 @@ export function TechToday({ jobs, electricians }: TechTodayProps) {
         <p className="text-sm text-slate-500 mt-0.5">
           {format(new Date(), 'EEEE, d MMMM yyyy')}
         </p>
+        <div className="mt-2 p-2.5 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-100 rounded-lg">
+          <p className="text-xs text-amber-800 italic leading-relaxed">
+            "{dailyQuote.text}"
+          </p>
+          <p className="text-[10px] text-amber-600 font-medium mt-1">
+            — {dailyQuote.author}
+          </p>
+        </div>
       </div>
 
       {/* Summary strip */}

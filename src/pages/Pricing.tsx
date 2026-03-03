@@ -81,6 +81,36 @@ export function Pricing() {
 
   useEffect(() => { fetchParts(); }, []);
 
+  // Auto-sync pricing items to Parts Catalog whenever parts load/change
+  useEffect(() => {
+    if (parts.length === 0) return;
+    const syncToCatalog = async () => {
+      try {
+        const { doc, setDoc } = await import('firebase/firestore');
+        const { db } = await import('../services/firebase');
+        if (!db) return;
+        for (const part of parts) {
+          const sell = part.sellPrice ?? part.costPrice * (1 + globalMarkup / 100);
+          await setDoc(doc(db, 'partsCatalog', part.partKey), {
+            id: part.partKey,
+            name: part.partName,
+            defaultCost: sell,
+            category: categoriseFromName(part.partName),
+            supplier: part.supplier,
+            costPrice: part.costPrice,
+            sellPrice: sell,
+            barcode: part.barcode || null,
+            syncedFromPricing: true,
+          }, { merge: true });
+        }
+        console.log(`[AutoSync] ${parts.length} parts synced to catalog with sell prices`);
+      } catch (err) {
+        console.warn('[AutoSync] Failed to sync pricing to catalog:', err);
+      }
+    };
+    syncToCatalog();
+  }, [parts, globalMarkup]);
+
   const suppliers = useMemo(() => {
     const set = new Set(parts.map(p => p.supplier).filter(Boolean));
     return ['ALL', ...Array.from(set).sort()];
