@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Upload, AlertTriangle, TrendingUp, TrendingDown, Package, RefreshCw, DollarSign, BarChart3 } from 'lucide-react';
+import { Search, Upload, AlertTriangle, TrendingUp, TrendingDown, Package, RefreshCw, DollarSign, BarChart3, CheckCircle2, XCircle, ArrowRight, Check } from 'lucide-react';
 import { cn } from '../utils';
 
 interface PartEntry {
@@ -29,6 +29,25 @@ export function Pricing() {
   const [csvInvoiceRef, setCsvInvoiceRef] = useState('');
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<any>(null);
+
+  // Preview / review state for smart import
+  const [previewItems, setPreviewItems] = useState<Array<{
+    partName: string;
+    partKey: string;
+    newPrice: number;
+    oldPrice: number | null;
+    changePercent: number | null;
+    status: 'new' | 'unchanged' | 'price_change';
+    supplier: string;
+    quantity: number;
+    barcode: string | null;
+    itemCode: string | null;
+    selected: boolean;
+  }>>([]);
+  const [previewSummary, setPreviewSummary] = useState<{ new: number; priceChanges: number; unchanged: number } | null>(null);
+  const [previewSupplier, setPreviewSupplier] = useState('');
+  const [importStep, setImportStep] = useState<'upload' | 'preview' | 'done'>('upload');
+  const [analyzing, setAnalyzing] = useState(false);
 
   // Manual add
   const [showManual, setShowManual] = useState(false);
@@ -84,9 +103,10 @@ export function Pricing() {
     avgPrice: parts.length > 0 ? (parts.reduce((s, p) => s + (p.costPrice || 0), 0) / parts.length) : 0,
   }), [parts]);
 
-  const handleCSVUpload = async () => {
+  // Step 1: Analyze CSV — dry run to compare against existing catalog
+  const handleAnalyzeCSV = async () => {
     if (!csvText.trim()) return;
-    setUploading(true);
+    setAnalyzing(true);
     setUploadResult(null);
     try {
       const res = await fetch('/api/xero/import-csv', {
@@ -96,20 +116,74 @@ export function Pricing() {
           csvData: csvText,
           supplier: csvSupplier || undefined,
           invoiceRef: csvInvoiceRef || undefined,
+          dryRun: true,
         }),
       });
       const data = await res.json();
-      setUploadResult(data);
-      if (data.success) {
-        setCsvText('');
-        setCsvSupplier('');
-        setCsvInvoiceRef('');
-        fetchParts();
+      if (data.dryRun && data.items) {
+        setPreviewItems(data.items.map((it: any) => ({ ...it, selected: it.status !== 'unchanged' })));
+        setPreviewSummary(data.summary);
+        setPreviewSupplier(data.supplier || '');
+        setImportStep('preview');
+      } else if (data.error) {
+        setUploadResult({ error: data.error });
       }
     } catch (err: any) {
       setUploadResult({ error: err.message });
     }
+    setAnalyzing(false);
+  };
+
+  // Step 2: Import only selected items
+  const handleConfirmImport = async () => {
+    const selected = previewItems.filter(it => it.selected);
+    if (selected.length === 0) return;
+    setUploading(true);
+    setUploadResult(null);
+    try {
+      const res = await fetch('/api/xero/pricing', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: selected.map(it => ({
+            partName: it.partName,
+            supplier: it.supplier,
+            costPrice: it.newPrice,
+            invoiceRef: csvInvoiceRef || null,
+            barcode: it.barcode || null,
+            source: 'csv',
+          })),
+        }),
+      });
+      const data = await res.json();
+      setUploadResult({
+        success: true,
+        imported: selected.length,
+        skipped: previewItems.length - selected.length,
+        newParts: selected.filter(it => it.status === 'new').length,
+        priceUpdates: selected.filter(it => it.status === 'price_change').length,
+        flaggedChanges: data.flaggedChanges || 0,
+      });
+      setImportStep('done');
+      setCsvText('');
+      setCsvSupplier('');
+      setCsvInvoiceRef('');
+      fetchParts();
+    } catch (err: any) {
+      setUploadResult({ error: err.message });
+    }
     setUploading(false);
+  };
+
+  const handleResetImport = () => {
+    setImportStep('upload');
+    setPreviewItems([]);
+    setPreviewSummary(null);
+    setPreviewSupplier('');
+    setUploadResult(null);
+    setCsvText('');
+    setCsvSupplier('');
+    setCsvInvoiceRef('');
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -231,117 +305,347 @@ export function Pricing() {
         </div>
       )}
 
-      {/* ── CSV Upload ── */}
+      {/* ── CSV Smart Import ── */}
       {showUpload && (
         <div className="bg-amber-50 rounded-xl border-2 border-amber-300 p-5 space-y-4">
-          <h3 className="text-base font-bold text-amber-900">Import Supplier Invoice CSV</h3>
-          <p className="text-sm text-amber-700">
-            Upload a <strong>.csv</strong> file or paste CSV text. Auto-detects Rexel, Middy's, L&H column layouts.
-          </p>
 
-          {/* ── Drag & drop / file picker zone ── */}
-          <div
-            className={cn(
-              'relative border-2 border-dashed rounded-2xl p-8 text-center transition-colors cursor-pointer',
-              csvText ? 'border-emerald-400 bg-emerald-50' : 'border-amber-300 bg-white hover:bg-amber-100/50 hover:border-amber-400'
-            )}
-            onDragOver={e => { e.preventDefault(); e.stopPropagation(); }}
-            onDrop={e => {
-              e.preventDefault(); e.stopPropagation();
-              const file = e.dataTransfer.files?.[0];
-              if (file) {
-                const reader = new FileReader();
-                reader.onload = ev => setCsvText((ev.target?.result as string) || '');
-                reader.readAsText(file);
-              }
-            }}
-            onClick={() => document.getElementById('csv-file-input')?.click()}
-          >
-            <input
-              id="csv-file-input"
-              type="file"
-              accept=".csv,.txt"
-              onChange={handleFileUpload}
-              className="hidden"
-            />
-            {csvText ? (
-              <div className="space-y-2">
-                <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center mx-auto">
-                  <Upload className="w-6 h-6 text-emerald-600" />
-                </div>
-                <p className="text-sm font-bold text-emerald-800">CSV loaded — {csvText.trim().split('\n').length} rows</p>
-                <p className="text-xs text-emerald-600">Click to replace with a different file</p>
+          {/* ── Step indicator ── */}
+          <div className="flex items-center gap-2 text-xs font-bold">
+            <span className={cn('px-2.5 py-1 rounded-full', importStep === 'upload' ? 'bg-amber-500 text-white' : 'bg-amber-200 text-amber-700')}>1. Upload</span>
+            <ArrowRight className="w-3.5 h-3.5 text-amber-400" />
+            <span className={cn('px-2.5 py-1 rounded-full', importStep === 'preview' ? 'bg-amber-500 text-white' : 'bg-amber-200 text-amber-700')}>2. Review</span>
+            <ArrowRight className="w-3.5 h-3.5 text-amber-400" />
+            <span className={cn('px-2.5 py-1 rounded-full', importStep === 'done' ? 'bg-emerald-500 text-white' : 'bg-amber-200 text-amber-700')}>3. Done</span>
+          </div>
+
+          {/* ════════════════════ STEP 1: UPLOAD ════════════════════ */}
+          {importStep === 'upload' && (
+            <>
+              <h3 className="text-base font-bold text-amber-900">Import Supplier Price List / Invoice CSV</h3>
+              <p className="text-sm text-amber-700">
+                Upload a <strong>.csv</strong> file or paste text. We'll compare every item against your existing catalog
+                and show you what's <strong>new</strong>, what <strong>changed price</strong>, and what's <strong>unchanged</strong> before importing.
+              </p>
+
+              {/* ── Drag & drop / file picker zone ── */}
+              <div
+                className={cn(
+                  'relative border-2 border-dashed rounded-2xl p-8 text-center transition-colors cursor-pointer',
+                  csvText ? 'border-emerald-400 bg-emerald-50' : 'border-amber-300 bg-white hover:bg-amber-100/50 hover:border-amber-400'
+                )}
+                onDragOver={e => { e.preventDefault(); e.stopPropagation(); }}
+                onDrop={e => {
+                  e.preventDefault(); e.stopPropagation();
+                  const file = e.dataTransfer.files?.[0];
+                  if (file) {
+                    const reader = new FileReader();
+                    reader.onload = ev => setCsvText((ev.target?.result as string) || '');
+                    reader.readAsText(file);
+                  }
+                }}
+                onClick={() => document.getElementById('csv-file-input')?.click()}
+              >
+                <input id="csv-file-input" type="file" accept=".csv,.txt" onChange={handleFileUpload} className="hidden" />
+                {csvText ? (
+                  <div className="space-y-2">
+                    <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center mx-auto">
+                      <CheckCircle2 className="w-6 h-6 text-emerald-600" />
+                    </div>
+                    <p className="text-sm font-bold text-emerald-800">CSV loaded — {csvText.trim().split('\n').length} rows</p>
+                    <p className="text-xs text-emerald-600">Click to replace with a different file</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center mx-auto">
+                      <Upload className="w-6 h-6 text-amber-600" />
+                    </div>
+                    <p className="text-sm font-bold text-amber-800">Click to choose a CSV file, or drag & drop here</p>
+                    <p className="text-xs text-amber-600">Accepts .csv and .txt files from Rexel, Middy's, L&H, or generic format</p>
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="space-y-2">
-                <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center mx-auto">
-                  <Upload className="w-6 h-6 text-amber-600" />
-                </div>
-                <p className="text-sm font-bold text-amber-800">Click to choose a CSV file, or drag & drop here</p>
-                <p className="text-xs text-amber-600">Accepts .csv and .txt files</p>
+
+              {/* ── Or paste manually ── */}
+              <details className="group">
+                <summary className="text-xs font-semibold text-amber-700 cursor-pointer hover:text-amber-900 select-none">
+                  Or paste CSV text manually ▸
+                </summary>
+                <textarea
+                  value={csvText}
+                  onChange={e => setCsvText(e.target.value)}
+                  placeholder="Paste CSV content here..."
+                  className="w-full mt-2 px-3 py-2 border border-amber-200 rounded-lg text-xs font-mono bg-white min-h-[120px] placeholder:text-amber-300"
+                />
+              </details>
+
+              {/* ── Supplier & invoice ref ── */}
+              <div className="flex gap-2">
+                <input type="text" placeholder="Supplier (auto-detected if blank)" value={csvSupplier} onChange={e => setCsvSupplier(e.target.value)}
+                  className="flex-1 px-3 py-2.5 border border-amber-200 rounded-xl text-sm bg-white" />
+                <input type="text" placeholder="Invoice ref (optional)" value={csvInvoiceRef} onChange={e => setCsvInvoiceRef(e.target.value)}
+                  className="flex-1 px-3 py-2.5 border border-amber-200 rounded-xl text-sm bg-white" />
               </div>
-            )}
-          </div>
 
-          {/* ── Or paste manually ── */}
-          <details className="group">
-            <summary className="text-xs font-semibold text-amber-700 cursor-pointer hover:text-amber-900 select-none">
-              Or paste CSV text manually ▸
-            </summary>
-            <textarea
-              value={csvText}
-              onChange={e => setCsvText(e.target.value)}
-              placeholder="Paste CSV content here..."
-              className="w-full mt-2 px-3 py-2 border border-amber-200 rounded-lg text-xs font-mono bg-white min-h-[120px] placeholder:text-amber-300"
-            />
-          </details>
+              {/* ── Buttons ── */}
+              <div className="flex gap-2">
+                <button onClick={handleAnalyzeCSV} disabled={!csvText.trim() || analyzing}
+                  className={cn(
+                    'px-6 py-3 rounded-xl text-sm font-bold flex items-center gap-2 transition-colors',
+                    csvText.trim()
+                      ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-sm'
+                      : 'bg-amber-200 text-amber-400 cursor-not-allowed'
+                  )}>
+                  {analyzing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                  {analyzing ? 'Analyzing...' : 'Analyze & Compare'}
+                </button>
+                <button onClick={() => { setShowUpload(false); handleResetImport(); }}
+                  className="px-4 py-3 bg-white border border-amber-200 rounded-xl text-sm text-amber-700 font-medium hover:bg-amber-50">
+                  Cancel
+                </button>
+              </div>
 
-          {/* ── Supplier & invoice ref ── */}
-          <div className="flex gap-2">
-            <input type="text" placeholder="Supplier (auto-detected if blank)" value={csvSupplier} onChange={e => setCsvSupplier(e.target.value)}
-              className="flex-1 px-3 py-2.5 border border-amber-200 rounded-xl text-sm bg-white" />
-            <input type="text" placeholder="Invoice ref (optional)" value={csvInvoiceRef} onChange={e => setCsvInvoiceRef(e.target.value)}
-              className="flex-1 px-3 py-2.5 border border-amber-200 rounded-xl text-sm bg-white" />
-          </div>
-
-          {/* ── Action buttons ── */}
-          <div className="flex gap-2">
-            <button onClick={handleCSVUpload} disabled={!csvText.trim() || uploading}
-              className={cn(
-                'px-6 py-3 rounded-xl text-sm font-bold flex items-center gap-2 transition-colors',
-                csvText.trim()
-                  ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-sm'
-                  : 'bg-amber-200 text-amber-400 cursor-not-allowed'
-              )}>
-              {uploading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-              {uploading ? 'Importing...' : 'Import CSV'}
-            </button>
-            <button onClick={() => { setShowUpload(false); setUploadResult(null); setCsvText(''); }}
-              className="px-4 py-3 bg-white border border-amber-200 rounded-xl text-sm text-amber-700 font-medium hover:bg-amber-50">
-              Cancel
-            </button>
-          </div>
-
-          {/* ── Upload result ── */}
-          {uploadResult && (
-            <div className={cn(
-              'p-4 rounded-xl text-sm font-medium',
-              uploadResult.success ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-800 border border-red-200'
-            )}>
-              {uploadResult.success ? (
-                <>
-                  ✅ Imported <strong>{uploadResult.rowsParsed}</strong> items from <strong>{uploadResult.supplier}</strong>.
-                  {uploadResult.pricing?.flaggedChanges > 0 && (
-                    <span className="ml-2 text-red-600 font-bold">
-                      ⚠️ {uploadResult.pricing.flaggedChanges} price change alert{uploadResult.pricing.flaggedChanges > 1 ? 's' : ''}!
-                    </span>
-                  )}
-                </>
-              ) : (
-                <>❌ {uploadResult.error || 'Import failed'}</>
+              {uploadResult?.error && (
+                <div className="p-3 rounded-xl text-sm font-medium bg-red-50 text-red-800 border border-red-200">
+                  ❌ {uploadResult.error}
+                </div>
               )}
-            </div>
+            </>
           )}
+
+          {/* ════════════════════ STEP 2: PREVIEW / REVIEW ════════════════════ */}
+          {importStep === 'preview' && (
+            <>
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div>
+                  <h3 className="text-base font-bold text-amber-900">Review Price Import — {previewSupplier}</h3>
+                  <p className="text-sm text-amber-700">Check each item below. Uncheck items you don't want to import or overwrite.</p>
+                </div>
+              </div>
+
+              {/* ── Summary badges ── */}
+              {previewSummary && (
+                <div className="flex flex-wrap gap-2">
+                  <span className="px-3 py-1.5 rounded-full text-xs font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                    {previewSummary.new} new part{previewSummary.new !== 1 ? 's' : ''}
+                  </span>
+                  <span className={cn(
+                    'px-3 py-1.5 rounded-full text-xs font-bold border',
+                    previewSummary.priceChanges > 0
+                      ? 'bg-orange-100 text-orange-800 border-orange-200'
+                      : 'bg-slate-100 text-slate-600 border-slate-200'
+                  )}>
+                    {previewSummary.priceChanges} price change{previewSummary.priceChanges !== 1 ? 's' : ''}
+                  </span>
+                  <span className="px-3 py-1.5 rounded-full text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                    {previewSummary.unchanged} unchanged
+                  </span>
+                  <span className="px-3 py-1.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                    {previewItems.filter(it => it.selected).length} selected for import
+                  </span>
+                </div>
+              )}
+
+              {/* ── Select/Deselect helpers ── */}
+              <div className="flex gap-2 text-xs">
+                <button onClick={() => setPreviewItems(items => items.map(it => ({ ...it, selected: true })))}
+                  className="px-2 py-1 bg-white border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 font-medium">
+                  Select All
+                </button>
+                <button onClick={() => setPreviewItems(items => items.map(it => ({ ...it, selected: false })))}
+                  className="px-2 py-1 bg-white border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 font-medium">
+                  Deselect All
+                </button>
+                <button onClick={() => setPreviewItems(items => items.map(it => ({ ...it, selected: it.status === 'new' })))}
+                  className="px-2 py-1 bg-blue-50 border border-blue-200 rounded-lg text-blue-700 hover:bg-blue-100 font-medium">
+                  New Only
+                </button>
+                <button onClick={() => setPreviewItems(items => items.map(it => ({ ...it, selected: it.status !== 'unchanged' })))}
+                  className="px-2 py-1 bg-orange-50 border border-orange-200 rounded-lg text-orange-700 hover:bg-orange-100 font-medium">
+                  New + Changed
+                </button>
+              </div>
+
+              {/* ── Preview table ── */}
+              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden max-h-[500px] overflow-y-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 sticky top-0 z-10">
+                    <tr className="text-left text-xs font-bold text-slate-500 uppercase tracking-wider">
+                      <th className="px-3 py-2.5 w-10">
+                        <input
+                          type="checkbox"
+                          title="Toggle all"
+                          checked={previewItems.every(it => it.selected)}
+                          onChange={e => setPreviewItems(items => items.map(it => ({ ...it, selected: e.target.checked })))}
+                          className="rounded"
+                        />
+                      </th>
+                      <th className="px-3 py-2.5">Part Name</th>
+                      <th className="px-3 py-2.5 text-right">Old Price</th>
+                      <th className="px-3 py-2.5 text-center w-8"></th>
+                      <th className="px-3 py-2.5 text-right">New Price</th>
+                      <th className="px-3 py-2.5 text-right">Change</th>
+                      <th className="px-3 py-2.5 text-center">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {previewItems.map((item, idx) => {
+                      const isUp = item.changePercent !== null && item.changePercent > 0;
+                      const isDown = item.changePercent !== null && item.changePercent < 0;
+                      const bigChange = item.changePercent !== null && Math.abs(item.changePercent) >= 10;
+                      return (
+                        <tr
+                          key={item.partKey + idx}
+                          className={cn(
+                            'transition-colors',
+                            !item.selected && 'opacity-40',
+                            item.status === 'price_change' && bigChange && item.selected && 'bg-red-50/50',
+                            item.status === 'new' && item.selected && 'bg-blue-50/30',
+                          )}
+                        >
+                          <td className="px-3 py-2.5">
+                            <input
+                              type="checkbox"
+                              title={`Select ${item.partName}`}
+                              checked={item.selected}
+                              onChange={() => setPreviewItems(items =>
+                                items.map((it, i) => i === idx ? { ...it, selected: !it.selected } : it)
+                              )}
+                              className="rounded"
+                            />
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <span className="font-medium text-slate-900">{item.partName}</span>
+                            {item.barcode && <span className="ml-2 text-[10px] text-slate-400">{item.barcode}</span>}
+                          </td>
+                          <td className="px-3 py-2.5 text-right font-mono text-slate-500">
+                            {item.oldPrice !== null ? `$${item.oldPrice.toFixed(2)}` : <span className="text-slate-300">—</span>}
+                          </td>
+                          <td className="px-3 py-2.5 text-center">
+                            {item.status === 'price_change' && <ArrowRight className="w-3.5 h-3.5 text-slate-400 mx-auto" />}
+                          </td>
+                          <td className={cn('px-3 py-2.5 text-right font-mono font-bold',
+                            item.status === 'new' ? 'text-blue-700' :
+                            item.status === 'price_change' ? (isUp ? 'text-red-600' : 'text-emerald-600') :
+                            'text-slate-500'
+                          )}>
+                            ${item.newPrice.toFixed(2)}
+                          </td>
+                          <td className={cn('px-3 py-2.5 text-right text-xs font-bold',
+                            isUp ? 'text-red-600' : isDown ? 'text-emerald-600' : 'text-slate-400'
+                          )}>
+                            {item.changePercent !== null ? (
+                              <span className="inline-flex items-center gap-0.5">
+                                {isUp ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                                {isUp ? '+' : ''}{item.changePercent}%
+                              </span>
+                            ) : '—'}
+                          </td>
+                          <td className="px-3 py-2.5 text-center">
+                            {item.status === 'new' && (
+                              <span className="inline-block px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full text-[10px] font-bold">NEW</span>
+                            )}
+                            {item.status === 'price_change' && (
+                              <span className={cn(
+                                'inline-block px-2 py-0.5 rounded-full text-[10px] font-bold',
+                                bigChange ? 'bg-red-100 text-red-800' : 'bg-orange-100 text-orange-800'
+                              )}>
+                                {bigChange ? 'BIG CHANGE' : 'CHANGED'}
+                              </span>
+                            )}
+                            {item.status === 'unchanged' && (
+                              <span className="inline-block px-2 py-0.5 bg-slate-100 text-slate-500 rounded-full text-[10px] font-bold">SAME</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* ── Confirm / Back buttons ── */}
+              <div className="flex items-center justify-between gap-3 flex-wrap pt-2">
+                <button onClick={() => { setImportStep('upload'); setPreviewItems([]); setPreviewSummary(null); }}
+                  className="px-4 py-2.5 bg-white border border-amber-200 rounded-xl text-sm text-amber-700 font-medium hover:bg-amber-50">
+                  ← Back to Upload
+                </button>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-slate-500">
+                    {previewItems.filter(it => it.selected).length} of {previewItems.length} items selected
+                  </span>
+                  <button
+                    onClick={handleConfirmImport}
+                    disabled={previewItems.filter(it => it.selected).length === 0 || uploading}
+                    className={cn(
+                      'px-6 py-3 rounded-xl text-sm font-bold flex items-center gap-2 transition-colors shadow-sm',
+                      previewItems.some(it => it.selected)
+                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                        : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                    )}
+                  >
+                    {uploading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                    {uploading ? 'Importing...' : `Confirm Import (${previewItems.filter(it => it.selected).length})`}
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* ════════════════════ STEP 3: DONE ════════════════════ */}
+          {importStep === 'done' && uploadResult && (
+            <>
+              <div className="text-center space-y-4 py-4">
+                <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto">
+                  <CheckCircle2 className="w-8 h-8 text-emerald-600" />
+                </div>
+                <h3 className="text-lg font-bold text-emerald-900">Import Complete</h3>
+                {uploadResult.success && (
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap justify-center gap-2">
+                      <span className="px-3 py-1.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                        {uploadResult.imported} imported
+                      </span>
+                      {uploadResult.newParts > 0 && (
+                        <span className="px-3 py-1.5 rounded-full text-xs font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                          {uploadResult.newParts} new
+                        </span>
+                      )}
+                      {uploadResult.priceUpdates > 0 && (
+                        <span className="px-3 py-1.5 rounded-full text-xs font-bold bg-orange-100 text-orange-800 border border-orange-200">
+                          {uploadResult.priceUpdates} price updates
+                        </span>
+                      )}
+                      {uploadResult.skipped > 0 && (
+                        <span className="px-3 py-1.5 rounded-full text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                          {uploadResult.skipped} skipped
+                        </span>
+                      )}
+                      {uploadResult.flaggedChanges > 0 && (
+                        <span className="px-3 py-1.5 rounded-full text-xs font-bold bg-red-100 text-red-800 border border-red-200">
+                          {uploadResult.flaggedChanges} flagged (&gt;10%)
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-slate-500">Your parts catalog has been updated. Check the table below for details.</p>
+                  </div>
+                )}
+                {uploadResult.error && (
+                  <p className="text-sm text-red-600 font-medium">❌ {uploadResult.error}</p>
+                )}
+                <div className="flex justify-center gap-2 pt-2">
+                  <button onClick={handleResetImport}
+                    className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-sm font-bold flex items-center gap-1.5">
+                    <Upload className="w-4 h-4" /> Import Another
+                  </button>
+                  <button onClick={() => { setShowUpload(false); handleResetImport(); }}
+                    className="px-5 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-700 font-medium hover:bg-slate-50">
+                    Close
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+
         </div>
       )}
 

@@ -102,18 +102,66 @@ function detectSupplier(csvText: string): string {
   return 'Unknown';
 }
 
+// ─── Firestore helpers (duplicated from pricing.ts for dry-run lookups) ──
+function fromFV(fv: any): any {
+  if (!fv) return null;
+  if ('stringValue' in fv) return fv.stringValue;
+  if ('integerValue' in fv) return Number(fv.integerValue);
+  if ('doubleValue' in fv) return fv.doubleValue;
+  if ('booleanValue' in fv) return fv.booleanValue;
+  if ('nullValue' in fv) return null;
+  if ('arrayValue' in fv) return (fv.arrayValue.values || []).map(fromFV);
+  if ('mapValue' in fv) {
+    const obj: any = {};
+    for (const [k, v] of Object.entries(fv.mapValue.fields || {})) obj[k] = fromFV(v);
+    return obj;
+  }
+  return null;
+}
+
+async function getFirebaseAuth() {
+  const projectId = process.env.VITE_FIREBASE_PROJECT_ID;
+  const apiKey = process.env.VITE_FIREBASE_API_KEY || process.env.VITE_FB_API_KEY;
+  if (!projectId || !apiKey) return null;
+
+  let idToken = '';
+  const email = process.env.WEBHOOK_AUTH_EMAIL;
+  const password = process.env.WEBHOOK_AUTH_PASSWORD;
+  if (email && password) {
+    try {
+      const r = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, returnSecureToken: true }),
+      });
+      const d = await r.json();
+      if (d.idToken) idToken = d.idToken;
+    } catch { /* fallback to anon */ }
+  }
+  if (!idToken) {
+    try {
+      const r = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${apiKey}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ returnSecureToken: true }),
+      });
+      const d = await r.json();
+      if (d.idToken) idToken = d.idToken;
+    } catch { return null; }
+  }
+  return idToken ? { projectId, apiKey, idToken } : null;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'GET') {
     return res.status(200).json({
       endpoint: '/api/xero/import-csv',
-      usage: 'POST with { csvData: "raw CSV text", supplier?: "Rexel", invoiceRef?: "INV-123" }',
+      usage: 'POST with { csvData: "raw CSV text", supplier?: "Rexel", invoiceRef?: "INV-123", dryRun?: true }',
       supportedFormats: [
         'Rexel invoice CSV',
         "Middy's invoice CSV",
         'L&H invoice CSV',
         'Generic CSV with headers: Description/Product, Price/Unit Price, Qty',
       ],
-      note: 'Auto-detects supplier from CSV content if not provided. Auto-detects column layout from headers.',
+      note: 'Set dryRun=true to preview items and compare against existing catalog without writing.',
     });
   }
 
@@ -122,10 +170,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { csvData, supplier: supplierOverride, invoiceRef } = req.body as {
+    const { csvData, supplier: supplierOverride, invoiceRef, dryRun } = req.body as {
       csvData: string;
       supplier?: string;
       invoiceRef?: string;
+      dryRun?: boolean;
     };
 
     if (!csvData?.trim()) {
@@ -158,7 +207,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const qty = parseInt(qtyStr) || 1;
 
         if (!name || isNaN(price) || price <= 0) {
-          // Skip empty/header-like rows silently
           if (name) errors.push(`Row ${i + 1}: invalid price for "${name}"`);
           continue;
         }
@@ -186,17 +234,112 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // Forward to pricing API for Firestore persistence
+    // Build items list
     const pricingItems = parsed.map(p => ({
       partName: p.itemCode ? `${p.itemCode} - ${p.partName}` : p.partName,
       supplier,
       costPrice: p.costPrice,
+      quantity: p.quantity,
       invoiceRef: invoiceRef || null,
       barcode: p.barcode || null,
+      itemCode: p.itemCode || null,
       source: 'csv',
     }));
 
-    // Call our own pricing endpoint internally
+    // ═══════════════════════════════════════════════════════════════
+    // DRY RUN — parse + compare against existing catalog, no writes
+    // ═══════════════════════════════════════════════════════════════
+    if (dryRun) {
+      const auth = await getFirebaseAuth();
+      const preview: Array<{
+        partName: string;
+        partKey: string;
+        newPrice: number;
+        oldPrice: number | null;
+        changePercent: number | null;
+        status: 'new' | 'unchanged' | 'price_change';
+        supplier: string;
+        quantity: number;
+        barcode: string | null;
+        itemCode: string | null;
+      }> = [];
+
+      for (const item of pricingItems) {
+        const partKey = item.partName.toLowerCase().trim().replace(/[^a-z0-9]/g, '_');
+        let oldPrice: number | null = null;
+        let status: 'new' | 'unchanged' | 'price_change' = 'new';
+
+        if (auth) {
+          try {
+            const docUrl = `https://firestore.googleapis.com/v1/projects/${auth.projectId}/databases/(default)/documents/parts_catalog/${partKey}?key=${auth.apiKey}`;
+            const existRes = await fetch(docUrl, {
+              headers: { Authorization: `Bearer ${auth.idToken}` },
+            });
+            if (existRes.ok) {
+              const existData = await existRes.json();
+              if (existData.fields?.costPrice) {
+                oldPrice = fromFV(existData.fields.costPrice);
+                if (oldPrice !== null) {
+                  if (Math.abs(oldPrice - item.costPrice) < 0.005) {
+                    status = 'unchanged';
+                  } else {
+                    status = 'price_change';
+                  }
+                }
+              }
+            }
+          } catch { /* part not found = new */ }
+        }
+
+        let changePercent: number | null = null;
+        if (oldPrice !== null && status === 'price_change') {
+          changePercent = oldPrice !== 0
+            ? parseFloat((((item.costPrice - oldPrice) / oldPrice) * 100).toFixed(1))
+            : null;
+        }
+
+        preview.push({
+          partName: item.partName,
+          partKey,
+          newPrice: item.costPrice,
+          oldPrice,
+          changePercent,
+          status,
+          supplier: item.supplier,
+          quantity: item.quantity,
+          barcode: item.barcode,
+          itemCode: item.itemCode,
+        });
+      }
+
+      const newCount = preview.filter(p => p.status === 'new').length;
+      const changedCount = preview.filter(p => p.status === 'price_change').length;
+      const unchangedCount = preview.filter(p => p.status === 'unchanged').length;
+
+      return res.status(200).json({
+        dryRun: true,
+        supplier,
+        invoiceRef: invoiceRef || null,
+        rowsParsed: parsed.length,
+        summary: { new: newCount, priceChanges: changedCount, unchanged: unchangedCount },
+        detectedColumns: {
+          headers,
+          mapping: {
+            name: headers[cols.name] || `col ${cols.name}`,
+            price: headers[cols.price] || `col ${cols.price}`,
+            qty: headers[cols.qty] || `col ${cols.qty}`,
+            barcode: cols.barcode >= 0 ? headers[cols.barcode] : 'not found',
+            itemCode: cols.itemCode >= 0 ? headers[cols.itemCode] : 'not found',
+          },
+        },
+        items: preview,
+        errors: errors.length > 0 ? errors : undefined,
+      });
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // REAL IMPORT — forward selected items to pricing API
+    // ═══════════════════════════════════════════════════════════════
     const baseUrl = process.env.VERCEL_URL
       ? `https://${process.env.VERCEL_URL}`
       : 'http://localhost:3000';
