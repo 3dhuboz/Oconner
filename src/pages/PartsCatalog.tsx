@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { CatalogPart } from '../types';
-import { Plus, Trash2, Package, Search, Edit2, Check, X, ScanBarcode, Upload, Image, Camera, StopCircle } from 'lucide-react';
+import { Plus, Trash2, Package, Search, Edit2, Check, X, ScanBarcode, Upload, Image, Camera, StopCircle, Loader2 } from 'lucide-react';
 import { cn } from '../utils';
 import { storage } from '../services/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -241,16 +241,29 @@ export function PartsCatalog({ parts, setParts }: PartsCatalogProps) {
                 <button
                   type="button"
                   onClick={() => scannerActive === 'add' ? stopScanner() : startScanner('add')}
-                  className={cn("px-2.5 py-2 rounded-lg text-sm font-medium flex items-center gap-1 border transition-colors",
-                    scannerActive === 'add' ? 'bg-rose-50 text-rose-600 border-rose-200' : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+                  className={cn("px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-1.5 border transition-colors whitespace-nowrap",
+                    scannerActive === 'add' ? 'bg-rose-100 text-rose-700 border-rose-300 hover:bg-rose-200' : 'bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200'
                   )}
                   title={scannerActive === 'add' ? 'Stop scanner' : 'Scan with camera'}
                 >
-                  {scannerActive === 'add' ? <StopCircle className="w-4 h-4" /> : <Camera className="w-4 h-4" />}
+                  {scannerActive === 'add' ? <><StopCircle className="w-4 h-4" /> Stop</> : <><Camera className="w-4 h-4" /> Scan</>}
                 </button>
               </div>
               {scannerActive === 'add' && (
-                <div id={ADD_SCANNER_ID} className="mt-2 rounded-lg overflow-hidden border border-amber-200" style={{ minHeight: 200 }} />
+                <div className="mt-3 rounded-xl border-2 border-amber-400 bg-amber-50 overflow-hidden shadow-lg">
+                  <div className="px-3 py-2 bg-amber-500 flex items-center justify-between">
+                    <span className="text-white text-xs font-bold flex items-center gap-1.5">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Scanning for barcode…
+                    </span>
+                    <button onClick={stopScanner} className="text-white/80 hover:text-white text-xs font-medium flex items-center gap-1" title="Close scanner">
+                      <X className="w-3.5 h-3.5" /> Close
+                    </button>
+                  </div>
+                  <div id={ADD_SCANNER_ID} style={{ minHeight: 220 }} />
+                  <div className="px-3 py-2 bg-amber-50 border-t border-amber-200 text-center">
+                    <p className="text-[11px] text-amber-700 font-medium">Point your camera at the barcode on the product</p>
+                  </div>
+                </div>
               )}
             </div>
           </div>
@@ -374,16 +387,29 @@ export function PartsCatalog({ parts, setParts }: PartsCatalogProps) {
                                 <button
                                   type="button"
                                   onClick={() => scannerActive === 'edit' ? stopScanner() : startScanner('edit')}
-                                  className={cn("px-2 py-1 rounded-lg text-xs font-medium flex items-center gap-1 border transition-colors",
-                                    scannerActive === 'edit' ? 'bg-rose-50 text-rose-600 border-rose-200' : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+                                  className={cn("px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 border transition-colors whitespace-nowrap",
+                                    scannerActive === 'edit' ? 'bg-rose-100 text-rose-700 border-rose-300 hover:bg-rose-200' : 'bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200'
                                   )}
                                   title={scannerActive === 'edit' ? 'Stop scanner' : 'Scan with camera'}
                                 >
-                                  {scannerActive === 'edit' ? <StopCircle className="w-3.5 h-3.5" /> : <Camera className="w-3.5 h-3.5" />}
+                                  {scannerActive === 'edit' ? <><StopCircle className="w-3.5 h-3.5" /> Stop</> : <><Camera className="w-3.5 h-3.5" /> Scan</>}
                                 </button>
                               </div>
                               {scannerActive === 'edit' && (
-                                <div id={EDIT_SCANNER_ID} className="mt-2 rounded-lg overflow-hidden border border-amber-200" style={{ minHeight: 200 }} />
+                                <div className="mt-3 rounded-xl border-2 border-amber-400 bg-amber-50 overflow-hidden shadow-lg">
+                                  <div className="px-3 py-2 bg-amber-500 flex items-center justify-between">
+                                    <span className="text-white text-xs font-bold flex items-center gap-1.5">
+                                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Scanning for barcode…
+                                    </span>
+                                    <button onClick={stopScanner} className="text-white/80 hover:text-white text-xs font-medium flex items-center gap-1" title="Close scanner">
+                                      <X className="w-3.5 h-3.5" /> Close
+                                    </button>
+                                  </div>
+                                  <div id={EDIT_SCANNER_ID} style={{ minHeight: 220 }} />
+                                  <div className="px-3 py-2 bg-amber-50 border-t border-amber-200 text-center">
+                                    <p className="text-[11px] text-amber-700 font-medium">Point your camera at the barcode on the product</p>
+                                  </div>
+                                </div>
                               )}
                             </div>
                           </div>
