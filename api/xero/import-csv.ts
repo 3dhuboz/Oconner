@@ -51,48 +51,88 @@ interface ColumnMap {
   qty: number;
   barcode: number;
   itemCode: number;
+  sku: number;       // e.g. PurchasesDescription "SKU: CLI2015WE"
 }
 
 function detectColumns(headers: string[]): ColumnMap {
+  // Strip non-alphanumeric (except spaces) for matching, but keep originals for Rexel exact match
   const lower = headers.map(h => h.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim());
-  
-  const nameIdx = lower.findIndex(h =>
-    h.includes('description') || h.includes('product') || h.includes('item name') ||
-    h.includes('part name') || h.includes('material') || h === 'name'
-  );
-  
-  const priceIdx = lower.findIndex(h =>
-    h.includes('unit price') || h.includes('price ex') || h.includes('cost') ||
-    h.includes('unit cost') || h.includes('price') || h.includes('each') ||
-    h.includes('rate')
-  );
-  
+  const raw = headers.map(h => h.trim());
+
+  // ── Rexel-specific: *ItemCode, ItemName, PurchasesDescription, PurchasesUnitPrice ──
+  const isRexel = raw.some(h => h === '*ItemCode' || h === 'ItemName' || h === 'PurchasesUnitPrice');
+
+  let nameIdx: number;
+  let priceIdx: number;
+  let itemCodeIdx: number;
+  let skuIdx: number;
+
+  if (isRexel) {
+    // Rexel exact match
+    nameIdx = raw.findIndex(h => h === 'ItemName');
+    priceIdx = raw.findIndex(h => h === 'PurchasesUnitPrice');
+    itemCodeIdx = raw.findIndex(h => h === '*ItemCode' || h === 'ItemCode');
+    skuIdx = raw.findIndex(h => h === 'PurchasesDescription');
+  } else {
+    // Generic: prioritise "item name" / "product" over "description" to avoid SKU columns
+    nameIdx = lower.findIndex(h =>
+      h === 'itemname' || h === 'item name' || h === 'product' || h === 'part name' ||
+      h === 'material' || h === 'name'
+    );
+    // Fallback to description only if no better match
+    if (nameIdx < 0) {
+      nameIdx = lower.findIndex(h => h.includes('description') && !h.includes('purchases'));
+    }
+    if (nameIdx < 0) {
+      nameIdx = lower.findIndex(h => h.includes('description'));
+    }
+
+    priceIdx = lower.findIndex(h =>
+      h === 'purchasesunitprice' || h.includes('unit price') || h.includes('price ex') ||
+      h.includes('unit cost') || h.includes('cost price')
+    );
+    if (priceIdx < 0) {
+      priceIdx = lower.findIndex(h =>
+        (h.includes('price') || h.includes('cost') || h.includes('each') || h.includes('rate')) &&
+        !h.includes('tax')
+      );
+    }
+
+    itemCodeIdx = lower.findIndex(h =>
+      h === 'itemcode' || h.includes('item code') || h.includes('part number') ||
+      h.includes('product code') || h.includes('cat no') || h.includes('catalogue')
+    );
+
+    skuIdx = lower.findIndex(h =>
+      h === 'purchasesdescription' || h === 'sku' ||
+      (h.includes('sku') && !h.includes('description'))
+    );
+  }
+
   const qtyIdx = lower.findIndex(h =>
-    h.includes('qty') || h.includes('quantity') || h.includes('units') || h === 'qty'
+    h.includes('qty') || h.includes('quantity') || h.includes('units')
   );
-  
+
   const barcodeIdx = lower.findIndex(h =>
     h.includes('barcode') || h.includes('ean') || h.includes('upc') || h.includes('gtin')
   );
-  
-  const itemCodeIdx = lower.findIndex(h =>
-    h.includes('item code') || h.includes('part number') || h.includes('sku') ||
-    h.includes('product code') || h.includes('cat no') || h.includes('catalogue')
-  );
 
   return {
-    name: nameIdx >= 0 ? nameIdx : 1,     // default: column B
-    price: priceIdx >= 0 ? priceIdx : 3,   // default: column D
-    qty: qtyIdx >= 0 ? qtyIdx : 2,         // default: column C
+    name: nameIdx >= 0 ? nameIdx : 1,        // default: column B
+    price: priceIdx >= 0 ? priceIdx : 3,      // default: column D
+    qty: qtyIdx >= 0 ? qtyIdx : -1,           // -1 = not found (Rexel doesn't have qty)
     barcode: barcodeIdx,
-    itemCode: itemCodeIdx >= 0 ? itemCodeIdx : 0, // default: column A
+    itemCode: itemCodeIdx >= 0 ? itemCodeIdx : 0,  // default: column A
+    sku: skuIdx,
   };
 }
 
 // ─── Supplier auto-detection from CSV content ──────────────────
 function detectSupplier(csvText: string): string {
   const upper = csvText.toUpperCase();
+  // Rexel: detect from column headers or content
   if (upper.includes('REXEL') || upper.includes('IDEAL ELECTRICAL')) return 'Rexel';
+  if (csvText.includes('*ItemCode') || csvText.includes('PurchasesUnitPrice')) return 'Rexel';
   if (upper.includes('MIDDY') || upper.includes("MIDDY'S")) return "Middy's";
   if (upper.includes('L&H') || upper.includes('L & H')) return 'L&H';
   if (upper.includes('LAWRENCE & HANSON')) return 'L&H';
@@ -202,9 +242,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const fields = parseCSVLine(lines[i]);
         const name = fields[cols.name]?.trim();
         const priceStr = fields[cols.price]?.replace(/[^0-9.\-]/g, '') || '';
-        const qtyStr = fields[cols.qty]?.replace(/[^0-9.\-]/g, '') || '';
+        const qtyStr = cols.qty >= 0 ? (fields[cols.qty]?.replace(/[^0-9.\-]/g, '') || '') : '';
         const price = parseFloat(priceStr);
-        const qty = parseInt(qtyStr) || 1;
+        const qty = qtyStr ? (parseInt(qtyStr) || 1) : 1;
 
         if (!name || isNaN(price) || price <= 0) {
           if (name) errors.push(`Row ${i + 1}: invalid price for "${name}"`);
@@ -218,6 +258,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
         if (cols.itemCode >= 0 && fields[cols.itemCode]) {
           item.itemCode = fields[cols.itemCode].trim();
+        }
+        // Extract SKU from PurchasesDescription (e.g. "SKU: CLI2015WE")
+        if (cols.sku >= 0 && fields[cols.sku]) {
+          const skuVal = fields[cols.sku].trim();
+          const skuMatch = skuVal.match(/^SKU:\s*(.+)/i);
+          if (skuMatch) {
+            // Use SKU as itemCode if not already set
+            if (!item.itemCode) item.itemCode = skuMatch[1].trim();
+          }
         }
 
         parsed.push(item);
@@ -327,9 +376,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           mapping: {
             name: headers[cols.name] || `col ${cols.name}`,
             price: headers[cols.price] || `col ${cols.price}`,
-            qty: headers[cols.qty] || `col ${cols.qty}`,
+            qty: cols.qty >= 0 ? (headers[cols.qty] || `col ${cols.qty}`) : 'not found',
             barcode: cols.barcode >= 0 ? headers[cols.barcode] : 'not found',
             itemCode: cols.itemCode >= 0 ? headers[cols.itemCode] : 'not found',
+            sku: cols.sku >= 0 ? headers[cols.sku] : 'not found',
           },
         },
         items: preview,
@@ -362,9 +412,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         mapping: {
           name: headers[cols.name] || `col ${cols.name}`,
           price: headers[cols.price] || `col ${cols.price}`,
-          qty: headers[cols.qty] || `col ${cols.qty}`,
+          qty: cols.qty >= 0 ? (headers[cols.qty] || `col ${cols.qty}`) : 'not found',
           barcode: cols.barcode >= 0 ? headers[cols.barcode] : 'not found',
           itemCode: cols.itemCode >= 0 ? headers[cols.itemCode] : 'not found',
+          sku: cols.sku >= 0 ? headers[cols.sku] : 'not found',
         },
       },
       pricing: pricingResult,
