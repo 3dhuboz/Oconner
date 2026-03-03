@@ -1,6 +1,6 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef } from 'react';
 import { CatalogPart } from '../types';
-import { Plus, Trash2, Package, Search, Edit2, Check, X, ScanBarcode, Upload, Image, Camera, StopCircle, Loader2 } from 'lucide-react';
+import { Plus, Trash2, Package, Search, Edit2, Check, X, ScanBarcode, Upload, Image, Camera, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { cn } from '../utils';
 import { storage } from '../services/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -34,46 +34,30 @@ export function PartsCatalog({ parts, setParts }: PartsCatalogProps) {
   const [uploadingBarcode, setUploadingBarcode] = useState(false);
   const barcodeFileRef = useRef<HTMLInputElement>(null);
 
-  // Camera barcode scanner
-  const [scannerActive, setScannerActive] = useState<'add' | 'edit' | null>(null);
-  const scannerRef = useRef<Html5Qrcode | null>(null);
-  const ADD_SCANNER_ID = 'barcode-scanner-add';
-  const EDIT_SCANNER_ID = 'barcode-scanner-edit';
+  // Camera barcode scan via photo capture
+  const scanCameraRefAdd = useRef<HTMLInputElement>(null);
+  const scanCameraRefEdit = useRef<HTMLInputElement>(null);
+  const [scanStatus, setScanStatus] = useState<{ target: 'add' | 'edit'; state: 'scanning' | 'success' | 'error'; message?: string } | null>(null);
 
-  const stopScanner = useCallback(async () => {
+  const handleBarcodeScanPhoto = async (e: React.ChangeEvent<HTMLInputElement>, target: 'add' | 'edit') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setScanStatus({ target, state: 'scanning' });
     try {
-      if (scannerRef.current) {
-        await scannerRef.current.stop();
-        scannerRef.current.clear();
-      }
-    } catch { /* ignore */ }
-    scannerRef.current = null;
-    setScannerActive(null);
-  }, []);
-
-  const startScanner = useCallback((target: 'add' | 'edit') => {
-    // Stop any existing scanner first
-    if (scannerRef.current) { stopScanner(); return; }
-    setScannerActive(target);
-    // Small delay to let the DOM render the container
-    setTimeout(() => {
-      const elementId = target === 'add' ? ADD_SCANNER_ID : EDIT_SCANNER_ID;
-      const el = document.getElementById(elementId);
-      if (!el) { setScannerActive(null); return; }
-      const scanner = new Html5Qrcode(elementId);
-      scannerRef.current = scanner;
-      scanner.start(
-        { facingMode: 'environment' },
-        { fps: 10, qrbox: { width: 250, height: 100 } },
-        (decoded) => {
-          if (target === 'add') setNewBarcode(decoded);
-          else setEditBarcode(decoded);
-          stopScanner();
-        },
-        () => {}
-      ).catch(() => { setScannerActive(null); scannerRef.current = null; });
-    }, 200);
-  }, [stopScanner]);
+      const html5Qr = new Html5Qrcode('barcode-scan-temp-' + target);
+      const result = await html5Qr.scanFile(file, true);
+      if (target === 'add') setNewBarcode(result);
+      else setEditBarcode(result);
+      setScanStatus({ target, state: 'success', message: result });
+      html5Qr.clear();
+      setTimeout(() => setScanStatus(null), 3000);
+    } catch {
+      setScanStatus({ target, state: 'error', message: 'No barcode found in photo. Try again with better lighting or hold closer.' });
+      setTimeout(() => setScanStatus(null), 4000);
+    }
+    // Reset file input so the same file can be re-selected
+    e.target.value = '';
+  };
 
   const filteredParts = parts.filter(p => {
     const q = search.toLowerCase();
@@ -87,7 +71,6 @@ export function PartsCatalog({ parts, setParts }: PartsCatalogProps) {
 
   const handleAdd = () => {
     if (!newName.trim()) return;
-    if (scannerActive) stopScanner();
     const part: CatalogPart = {
       id: Math.random().toString(36).substr(2, 9),
       name: newName.trim(),
@@ -151,7 +134,7 @@ export function PartsCatalog({ parts, setParts }: PartsCatalogProps) {
   };
 
   const cancelEdit = () => {
-    if (scannerActive) stopScanner();
+    setScanStatus(null);
     setEditingId(null);
   };
 
@@ -230,39 +213,34 @@ export function PartsCatalog({ parts, setParts }: PartsCatalogProps) {
               <label className="block text-xs font-medium text-slate-500 mb-1 flex items-center gap-1">
                 <ScanBarcode className="w-3 h-3" /> Barcode
               </label>
-              <div className="flex gap-1.5">
-                <input
-                  type="text"
-                  value={newBarcode}
-                  onChange={e => setNewBarcode(e.target.value)}
-                  placeholder="Scan or enter manually"
-                  className="flex-1 px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
-                />
-                <button
-                  type="button"
-                  onClick={() => scannerActive === 'add' ? stopScanner() : startScanner('add')}
-                  className={cn("px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-1.5 border transition-colors whitespace-nowrap",
-                    scannerActive === 'add' ? 'bg-rose-100 text-rose-700 border-rose-300 hover:bg-rose-200' : 'bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200'
-                  )}
-                  title={scannerActive === 'add' ? 'Stop scanner' : 'Scan with camera'}
-                >
-                  {scannerActive === 'add' ? <><StopCircle className="w-4 h-4" /> Stop</> : <><Camera className="w-4 h-4" /> Scan</>}
-                </button>
-              </div>
-              {scannerActive === 'add' && (
-                <div className="mt-3 rounded-xl border-2 border-amber-400 bg-amber-50 overflow-hidden shadow-lg">
-                  <div className="px-3 py-2 bg-amber-500 flex items-center justify-between">
-                    <span className="text-white text-xs font-bold flex items-center gap-1.5">
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Scanning for barcode…
-                    </span>
-                    <button onClick={stopScanner} className="text-white/80 hover:text-white text-xs font-medium flex items-center gap-1" title="Close scanner">
-                      <X className="w-3.5 h-3.5" /> Close
-                    </button>
-                  </div>
-                  <div id={ADD_SCANNER_ID} style={{ minHeight: 220 }} />
-                  <div className="px-3 py-2 bg-amber-50 border-t border-amber-200 text-center">
-                    <p className="text-[11px] text-amber-700 font-medium">Point your camera at the barcode on the product</p>
-                  </div>
+              <input
+                type="text"
+                value={newBarcode}
+                onChange={e => setNewBarcode(e.target.value)}
+                placeholder="Scan or type barcode"
+                className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+              />
+              {/* Hidden file input for camera capture */}
+              <input ref={scanCameraRefAdd} type="file" accept="image/*" capture="environment" onChange={e => handleBarcodeScanPhoto(e, 'add')} className="hidden" />
+              <div id="barcode-scan-temp-add" className="hidden" />
+              <button
+                type="button"
+                onClick={() => scanCameraRefAdd.current?.click()}
+                className="mt-1.5 w-full px-3 py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 bg-amber-500 text-white hover:bg-amber-600 active:bg-amber-700 transition-colors shadow-sm"
+                title="Take a photo of the barcode to scan it"
+              >
+                <Camera className="w-4.5 h-4.5" />
+                Scan Barcode with Camera
+              </button>
+              {scanStatus?.target === 'add' && (
+                <div className={cn("mt-2 px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2",
+                  scanStatus.state === 'scanning' && 'bg-amber-50 text-amber-700 border border-amber-200',
+                  scanStatus.state === 'success' && 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+                  scanStatus.state === 'error' && 'bg-rose-50 text-rose-700 border border-rose-200'
+                )}>
+                  {scanStatus.state === 'scanning' && <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Reading barcode from photo…</>}
+                  {scanStatus.state === 'success' && <><CheckCircle2 className="w-3.5 h-3.5" /> Barcode found: <span className="font-mono">{scanStatus.message}</span></>}
+                  {scanStatus.state === 'error' && <><AlertCircle className="w-3.5 h-3.5 shrink-0" /> {scanStatus.message}</>}
                 </div>
               )}
             </div>
@@ -375,40 +353,35 @@ export function PartsCatalog({ parts, setParts }: PartsCatalogProps) {
                               <label className="block text-[10px] font-medium text-slate-400 mb-0.5 flex items-center gap-1">
                                 <ScanBarcode className="w-3 h-3" /> Barcode
                               </label>
-                              <div className="flex gap-1.5">
-                                <input
-                                  type="text"
-                                  value={editBarcode.startsWith('photo:') ? '(Photo uploaded)' : editBarcode}
-                                  onChange={e => setEditBarcode(e.target.value)}
-                                  placeholder="Enter barcode"
-                                  className="flex-1 px-2.5 py-1.5 border border-slate-200 rounded-lg text-sm"
-                                  readOnly={editBarcode.startsWith('photo:')}
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => scannerActive === 'edit' ? stopScanner() : startScanner('edit')}
-                                  className={cn("px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 border transition-colors whitespace-nowrap",
-                                    scannerActive === 'edit' ? 'bg-rose-100 text-rose-700 border-rose-300 hover:bg-rose-200' : 'bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200'
-                                  )}
-                                  title={scannerActive === 'edit' ? 'Stop scanner' : 'Scan with camera'}
-                                >
-                                  {scannerActive === 'edit' ? <><StopCircle className="w-3.5 h-3.5" /> Stop</> : <><Camera className="w-3.5 h-3.5" /> Scan</>}
-                                </button>
-                              </div>
-                              {scannerActive === 'edit' && (
-                                <div className="mt-3 rounded-xl border-2 border-amber-400 bg-amber-50 overflow-hidden shadow-lg">
-                                  <div className="px-3 py-2 bg-amber-500 flex items-center justify-between">
-                                    <span className="text-white text-xs font-bold flex items-center gap-1.5">
-                                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Scanning for barcode…
-                                    </span>
-                                    <button onClick={stopScanner} className="text-white/80 hover:text-white text-xs font-medium flex items-center gap-1" title="Close scanner">
-                                      <X className="w-3.5 h-3.5" /> Close
-                                    </button>
-                                  </div>
-                                  <div id={EDIT_SCANNER_ID} style={{ minHeight: 220 }} />
-                                  <div className="px-3 py-2 bg-amber-50 border-t border-amber-200 text-center">
-                                    <p className="text-[11px] text-amber-700 font-medium">Point your camera at the barcode on the product</p>
-                                  </div>
+                              <input
+                                type="text"
+                                value={editBarcode.startsWith('photo:') ? '(Photo uploaded)' : editBarcode}
+                                onChange={e => setEditBarcode(e.target.value)}
+                                placeholder="Enter barcode"
+                                className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-sm"
+                                readOnly={editBarcode.startsWith('photo:')}
+                              />
+                              {/* Hidden file input for camera capture */}
+                              <input ref={scanCameraRefEdit} type="file" accept="image/*" capture="environment" onChange={e => handleBarcodeScanPhoto(e, 'edit')} className="hidden" />
+                              <div id="barcode-scan-temp-edit" className="hidden" />
+                              <button
+                                type="button"
+                                onClick={() => scanCameraRefEdit.current?.click()}
+                                className="mt-1 w-full px-2.5 py-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 bg-amber-500 text-white hover:bg-amber-600 active:bg-amber-700 transition-colors shadow-sm"
+                                title="Take a photo of the barcode to scan it"
+                              >
+                                <Camera className="w-3.5 h-3.5" />
+                                Scan Barcode with Camera
+                              </button>
+                              {scanStatus?.target === 'edit' && (
+                                <div className={cn("mt-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium flex items-center gap-1.5",
+                                  scanStatus.state === 'scanning' && 'bg-amber-50 text-amber-700 border border-amber-200',
+                                  scanStatus.state === 'success' && 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+                                  scanStatus.state === 'error' && 'bg-rose-50 text-rose-700 border border-rose-200'
+                                )}>
+                                  {scanStatus.state === 'scanning' && <><Loader2 className="w-3 h-3 animate-spin" /> Reading barcode…</>}
+                                  {scanStatus.state === 'success' && <><CheckCircle2 className="w-3 h-3" /> Found: <span className="font-mono">{scanStatus.message}</span></>}
+                                  {scanStatus.state === 'error' && <><AlertCircle className="w-3 h-3 shrink-0" /> {scanStatus.message}</>}
                                 </div>
                               )}
                             </div>
