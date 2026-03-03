@@ -358,7 +358,7 @@ function AppContent() {
       } />
       <Route path="/properties" element={
         <AdminRoute jobs={jobs}>
-          <PropertyHistory jobs={jobs} />
+          <PropertyHistory jobs={jobs} updateJob={updateJob} />
         </AdminRoute>
       } />
       <Route path="/pricing" element={

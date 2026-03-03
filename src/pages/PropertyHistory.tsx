@@ -1,12 +1,13 @@
 import React, { useState, useMemo } from 'react';
 import { Job } from '../types';
 import { format } from 'date-fns';
-import { Search, MapPin, Clock, Camera, FileText, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
+import { Search, MapPin, Clock, Camera, FileText, ChevronDown, ChevronUp, ExternalLink, Pencil, Check, X, Loader2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { cn } from '../utils';
 
 interface PropertyHistoryProps {
   jobs: Job[];
+  updateJob: (id: string, updates: Partial<Job>) => Promise<void>;
 }
 
 interface PropertyGroup {
@@ -35,9 +36,30 @@ function normaliseAddress(addr: string): string {
     .trim();
 }
 
-export function PropertyHistory({ jobs }: PropertyHistoryProps) {
+export function PropertyHistory({ jobs, updateJob }: PropertyHistoryProps) {
   const [search, setSearch] = useState('');
   const [expandedAddress, setExpandedAddress] = useState<string | null>(null);
+  const [editingAddress, setEditingAddress] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const handleSaveAddress = async (property: PropertyGroup) => {
+    const newAddress = editValue.trim();
+    if (!newAddress || newAddress === property.address) {
+      setEditingAddress(null);
+      return;
+    }
+    setSaving(true);
+    try {
+      await Promise.all(
+        property.jobs.map(job => updateJob(job.id, { propertyAddress: newAddress }))
+      );
+    } catch (err) {
+      console.error('Failed to update address:', err);
+    }
+    setSaving(false);
+    setEditingAddress(null);
+  };
 
   const properties = useMemo(() => {
     const grouped = new Map<string, PropertyGroup>();
@@ -137,13 +159,59 @@ export function PropertyHistory({ jobs }: PropertyHistoryProps) {
           return (
             <div key={property.normalised} className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
               {/* Property header */}
-              <button
-                onClick={() => setExpandedAddress(isExpanded ? null : property.normalised)}
-                className="w-full px-4 sm:px-5 py-4 flex items-center gap-3 hover:bg-slate-50 transition-colors text-left"
-              >
+              <div className="w-full px-4 sm:px-5 py-4 flex items-center gap-3 hover:bg-slate-50 transition-colors text-left">
                 <MapPin className="w-5 h-5 text-amber-500 shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-slate-900 truncate">{property.address}</h3>
+                  {editingAddress === property.normalised ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={editValue}
+                        onChange={e => setEditValue(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') handleSaveAddress(property);
+                          if (e.key === 'Escape') setEditingAddress(null);
+                        }}
+                        className="flex-1 px-3 py-1.5 border-2 border-blue-300 rounded-lg text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 outline-none"
+                        placeholder="Enter correct address..."
+                        autoFocus
+                        disabled={saving}
+                      />
+                      <button
+                        onClick={() => handleSaveAddress(property)}
+                        disabled={saving}
+                        className="p-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-lg transition-colors"
+                        title="Save address"
+                      >
+                        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                      </button>
+                      <button
+                        onClick={() => setEditingAddress(null)}
+                        className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-lg transition-colors"
+                        title="Cancel"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                      <span className="text-[10px] text-blue-600 font-medium whitespace-nowrap">
+                        Updates {property.totalJobs} job{property.totalJobs > 1 ? 's' : ''}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-semibold text-slate-900 truncate">{property.address}</h3>
+                      <button
+                        onClick={e => {
+                          e.stopPropagation();
+                          setEditingAddress(property.normalised);
+                          setEditValue(property.address);
+                        }}
+                        className="p-1 hover:bg-blue-50 text-slate-400 hover:text-blue-600 rounded transition-colors shrink-0"
+                        title="Edit address"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
                   <div className="flex items-center gap-3 mt-0.5 text-xs text-slate-500">
                     <span>{property.totalJobs} job{property.totalJobs > 1 ? 's' : ''}</span>
                     <span>Last: {format(new Date(property.lastVisit), 'MMM d, yyyy')}</span>
@@ -151,13 +219,16 @@ export function PropertyHistory({ jobs }: PropertyHistoryProps) {
                     {property.hasPhotos && <span className="text-blue-600 font-medium">📷</span>}
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setExpandedAddress(isExpanded ? null : property.normalised)}
+                  className="flex items-center gap-2 shrink-0"
+                >
                   <span className="bg-slate-100 text-slate-600 text-xs font-bold px-2 py-1 rounded-full">
                     {property.totalJobs}
                   </span>
                   {isExpanded ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
-                </div>
-              </button>
+                </button>
+              </div>
 
               {/* Expanded job list */}
               {isExpanded && (
