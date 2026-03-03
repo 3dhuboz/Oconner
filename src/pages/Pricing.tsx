@@ -233,56 +233,112 @@ export function Pricing() {
 
       {/* ── CSV Upload ── */}
       {showUpload && (
-        <div className="bg-amber-50 rounded-xl border border-amber-200 p-4 space-y-3">
-          <h3 className="text-sm font-bold text-amber-800">Import Supplier Invoice CSV</h3>
-          <p className="text-xs text-amber-700">
-            Paste CSV text below or upload a .csv file. Auto-detects Rexel, Middy's, L&H column layouts.
+        <div className="bg-amber-50 rounded-xl border-2 border-amber-300 p-5 space-y-4">
+          <h3 className="text-base font-bold text-amber-900">Import Supplier Invoice CSV</h3>
+          <p className="text-sm text-amber-700">
+            Upload a <strong>.csv</strong> file or paste CSV text. Auto-detects Rexel, Middy's, L&H column layouts.
           </p>
+
+          {/* ── Drag & drop / file picker zone ── */}
+          <div
+            className={cn(
+              'relative border-2 border-dashed rounded-2xl p-8 text-center transition-colors cursor-pointer',
+              csvText ? 'border-emerald-400 bg-emerald-50' : 'border-amber-300 bg-white hover:bg-amber-100/50 hover:border-amber-400'
+            )}
+            onDragOver={e => { e.preventDefault(); e.stopPropagation(); }}
+            onDrop={e => {
+              e.preventDefault(); e.stopPropagation();
+              const file = e.dataTransfer.files?.[0];
+              if (file) {
+                const reader = new FileReader();
+                reader.onload = ev => setCsvText((ev.target?.result as string) || '');
+                reader.readAsText(file);
+              }
+            }}
+            onClick={() => document.getElementById('csv-file-input')?.click()}
+          >
+            <input
+              id="csv-file-input"
+              type="file"
+              accept=".csv,.txt"
+              onChange={handleFileUpload}
+              className="hidden"
+            />
+            {csvText ? (
+              <div className="space-y-2">
+                <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center mx-auto">
+                  <Upload className="w-6 h-6 text-emerald-600" />
+                </div>
+                <p className="text-sm font-bold text-emerald-800">CSV loaded — {csvText.trim().split('\n').length} rows</p>
+                <p className="text-xs text-emerald-600">Click to replace with a different file</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center mx-auto">
+                  <Upload className="w-6 h-6 text-amber-600" />
+                </div>
+                <p className="text-sm font-bold text-amber-800">Click to choose a CSV file, or drag & drop here</p>
+                <p className="text-xs text-amber-600">Accepts .csv and .txt files</p>
+              </div>
+            )}
+          </div>
+
+          {/* ── Or paste manually ── */}
+          <details className="group">
+            <summary className="text-xs font-semibold text-amber-700 cursor-pointer hover:text-amber-900 select-none">
+              Or paste CSV text manually ▸
+            </summary>
+            <textarea
+              value={csvText}
+              onChange={e => setCsvText(e.target.value)}
+              placeholder="Paste CSV content here..."
+              className="w-full mt-2 px-3 py-2 border border-amber-200 rounded-lg text-xs font-mono bg-white min-h-[120px] placeholder:text-amber-300"
+            />
+          </details>
+
+          {/* ── Supplier & invoice ref ── */}
           <div className="flex gap-2">
             <input type="text" placeholder="Supplier (auto-detected if blank)" value={csvSupplier} onChange={e => setCsvSupplier(e.target.value)}
-              className="flex-1 px-3 py-2 border border-amber-200 rounded-lg text-sm bg-white" />
+              className="flex-1 px-3 py-2.5 border border-amber-200 rounded-xl text-sm bg-white" />
             <input type="text" placeholder="Invoice ref (optional)" value={csvInvoiceRef} onChange={e => setCsvInvoiceRef(e.target.value)}
-              className="flex-1 px-3 py-2 border border-amber-200 rounded-lg text-sm bg-white" />
+              className="flex-1 px-3 py-2.5 border border-amber-200 rounded-xl text-sm bg-white" />
           </div>
-          <div>
-            <label className="block mb-1">
-              <span className="text-xs font-medium text-amber-700">Upload CSV file:</span>
-              <input type="file" accept=".csv,.txt" onChange={handleFileUpload} className="block mt-1 text-sm" />
-            </label>
-          </div>
-          <textarea
-            value={csvText}
-            onChange={e => setCsvText(e.target.value)}
-            placeholder={'Paste CSV here...\n\n"Item Code","Description","Qty","Unit Price","Total"\n"ABC123","Clipsal 30M Switch",2,12.50,25.00'}
-            className="w-full px-3 py-2 border border-amber-200 rounded-lg text-xs font-mono bg-white min-h-[120px]"
-          />
+
+          {/* ── Action buttons ── */}
           <div className="flex gap-2">
             <button onClick={handleCSVUpload} disabled={!csvText.trim() || uploading}
-              className="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-bold disabled:opacity-40 flex items-center gap-1.5">
-              {uploading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-              {uploading ? 'Importing...' : 'Import'}
+              className={cn(
+                'px-6 py-3 rounded-xl text-sm font-bold flex items-center gap-2 transition-colors',
+                csvText.trim()
+                  ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-sm'
+                  : 'bg-amber-200 text-amber-400 cursor-not-allowed'
+              )}>
+              {uploading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+              {uploading ? 'Importing...' : 'Import CSV'}
             </button>
-            <button onClick={() => { setShowUpload(false); setUploadResult(null); }}
-              className="px-4 py-2 bg-white border border-amber-200 rounded-lg text-sm text-amber-700">
+            <button onClick={() => { setShowUpload(false); setUploadResult(null); setCsvText(''); }}
+              className="px-4 py-3 bg-white border border-amber-200 rounded-xl text-sm text-amber-700 font-medium hover:bg-amber-50">
               Cancel
             </button>
           </div>
+
+          {/* ── Upload result ── */}
           {uploadResult && (
             <div className={cn(
-              'p-3 rounded-lg text-sm',
+              'p-4 rounded-xl text-sm font-medium',
               uploadResult.success ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-800 border border-red-200'
             )}>
               {uploadResult.success ? (
                 <>
-                  Imported <strong>{uploadResult.rowsParsed}</strong> items from <strong>{uploadResult.supplier}</strong>.
+                  ✅ Imported <strong>{uploadResult.rowsParsed}</strong> items from <strong>{uploadResult.supplier}</strong>.
                   {uploadResult.pricing?.flaggedChanges > 0 && (
                     <span className="ml-2 text-red-600 font-bold">
-                      {uploadResult.pricing.flaggedChanges} price change alert{uploadResult.pricing.flaggedChanges > 1 ? 's' : ''}!
+                      ⚠️ {uploadResult.pricing.flaggedChanges} price change alert{uploadResult.pricing.flaggedChanges > 1 ? 's' : ''}!
                     </span>
                   )}
                 </>
               ) : (
-                <>{uploadResult.error || 'Import failed'}</>
+                <>❌ {uploadResult.error || 'Import failed'}</>
               )}
             </div>
           )}
