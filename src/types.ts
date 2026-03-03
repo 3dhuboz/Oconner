@@ -33,6 +33,37 @@ export interface CatalogPart {
   name: string;
   defaultCost: number;
   category?: string;
+  barcode?: string;
+  supplier?: string;
+  costPrice?: number;
+  sellPrice?: number;
+  syncedFromPricing?: boolean;
+}
+
+export interface StockEntry {
+  id: string;
+  partId: string;          // CatalogPart.id
+  partName: string;
+  barcode?: string;
+  technicianId: string;
+  technicianName: string;
+  quantity: number;
+  sellPrice: number;
+  costPrice: number;
+  lastUpdated: string;     // ISO string
+}
+
+export interface StockMovement {
+  id: string;
+  partId: string;
+  partName: string;
+  barcode?: string;
+  technicianId: string;
+  type: 'stock_in' | 'stock_out' | 'adjust';
+  quantity: number;
+  jobId?: string;           // linked job when used on site
+  reason?: string;
+  timestamp: string;        // ISO string
 }
 
 

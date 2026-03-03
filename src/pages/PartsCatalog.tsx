@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { CatalogPart } from '../types';
-import { Plus, Trash2, Package, Search, Edit2, Check, X } from 'lucide-react';
+import { Plus, Trash2, Package, Search, Edit2, Check, X, ScanBarcode, Upload, Image } from 'lucide-react';
 import { cn } from '../utils';
+import { storage } from '../services/firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 interface PartsCatalogProps {
   parts: CatalogPart[];
@@ -19,16 +21,25 @@ export function PartsCatalog({ parts, setParts }: PartsCatalogProps) {
   const [newName, setNewName] = useState('');
   const [newCost, setNewCost] = useState<number | ''>('');
   const [newCategory, setNewCategory] = useState('General');
+  const [newBarcode, setNewBarcode] = useState('');
+  const [newSupplier, setNewSupplier] = useState('');
 
   // Edit form
   const [editName, setEditName] = useState('');
   const [editCost, setEditCost] = useState<number | ''>('');
   const [editCategory, setEditCategory] = useState('');
+  const [editBarcode, setEditBarcode] = useState('');
+  const [editSupplier, setEditSupplier] = useState('');
+  const [uploadingBarcode, setUploadingBarcode] = useState(false);
+  const barcodeFileRef = useRef<HTMLInputElement>(null);
 
-  const filteredParts = parts.filter(p =>
-    p.name.toLowerCase().includes(search.toLowerCase()) ||
-    (p.category || '').toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredParts = parts.filter(p => {
+    const q = search.toLowerCase();
+    return p.name.toLowerCase().includes(q) ||
+      (p.category || '').toLowerCase().includes(q) ||
+      (p.barcode || '').toLowerCase().includes(q) ||
+      (p.supplier || '').toLowerCase().includes(q);
+  });
 
   const categories = [...new Set(parts.map(p => p.category || 'General'))].sort();
 
@@ -39,11 +50,15 @@ export function PartsCatalog({ parts, setParts }: PartsCatalogProps) {
       name: newName.trim(),
       defaultCost: Number(newCost) || 0,
       category: newCategory,
+      barcode: newBarcode.trim() || undefined,
+      supplier: newSupplier.trim() || undefined,
     };
     setParts(prev => [...prev, part]);
     setNewName('');
     setNewCost('');
     setNewCategory('General');
+    setNewBarcode('');
+    setNewSupplier('');
     setShowAdd(false);
   };
 
@@ -58,6 +73,8 @@ export function PartsCatalog({ parts, setParts }: PartsCatalogProps) {
     setEditName(part.name);
     setEditCost(part.defaultCost);
     setEditCategory(part.category || 'General');
+    setEditBarcode(part.barcode || '');
+    setEditSupplier(part.supplier || '');
   };
 
   const saveEdit = () => {
@@ -67,8 +84,27 @@ export function PartsCatalog({ parts, setParts }: PartsCatalogProps) {
       name: editName.trim(),
       defaultCost: Number(editCost) || 0,
       category: editCategory,
+      barcode: editBarcode.trim() || undefined,
+      supplier: editSupplier.trim() || undefined,
     } : p));
     setEditingId(null);
+  };
+
+  const handleBarcodePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !editingId) return;
+    setUploadingBarcode(true);
+    try {
+      const storageRef = ref(storage!, `barcodes/${editingId}_${Date.now()}`);
+      await uploadBytes(storageRef, file);
+      const url = await getDownloadURL(storageRef);
+      // Store the photo URL as the barcode value (prefixed to distinguish)
+      setEditBarcode(`photo:${url}`);
+    } catch (err) {
+      console.error('Barcode photo upload failed:', err);
+    }
+    setUploadingBarcode(false);
+    if (barcodeFileRef.current) barcodeFileRef.current.value = '';
   };
 
   const cancelEdit = () => {
@@ -112,7 +148,7 @@ export function PartsCatalog({ parts, setParts }: PartsCatalogProps) {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-slate-500 mb-1">Default Cost ($)</label>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Sell Price ($)</label>
               <input
                 type="number"
                 min="0"
@@ -124,15 +160,40 @@ export function PartsCatalog({ parts, setParts }: PartsCatalogProps) {
               />
             </div>
           </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1">Category</label>
-            <select
-              value={newCategory}
-              onChange={e => setNewCategory(e.target.value)}
-              className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
-            >
-              {DEFAULT_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Category</label>
+              <select
+                title="Category"
+                value={newCategory}
+                onChange={e => setNewCategory(e.target.value)}
+                className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+              >
+                {DEFAULT_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">Supplier</label>
+              <input
+                type="text"
+                value={newSupplier}
+                onChange={e => setNewSupplier(e.target.value)}
+                placeholder="e.g. Rexel"
+                className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1 flex items-center gap-1">
+                <ScanBarcode className="w-3 h-3" /> Barcode
+              </label>
+              <input
+                type="text"
+                value={newBarcode}
+                onChange={e => setNewBarcode(e.target.value)}
+                placeholder="Scan or enter manually"
+                className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+              />
+            </div>
           </div>
           <div className="flex gap-2">
             <button
@@ -188,67 +249,145 @@ export function PartsCatalog({ parts, setParts }: PartsCatalogProps) {
                 )}
                 <div className="bg-white rounded-xl border border-slate-200 shadow-sm divide-y divide-slate-100 overflow-hidden">
                   {catParts.map(part => (
-                    <div key={part.id} className="px-4 py-3 flex items-center gap-3">
+                    <div key={part.id} className="px-4 py-3">
                       {editingId === part.id ? (
                         /* Edit mode */
-                        <div className="flex-1 space-y-2">
-                          <div className="flex gap-2">
-                            <input
-                              type="text"
-                              value={editName}
-                              onChange={e => setEditName(e.target.value)}
-                              className="flex-1 px-2.5 py-1.5 border border-slate-200 rounded-lg text-sm"
-                            />
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={editCost}
-                              onChange={e => setEditCost(e.target.value ? Number(e.target.value) : '')}
-                              className="w-24 px-2.5 py-1.5 border border-slate-200 rounded-lg text-sm"
-                            />
+                        <div className="space-y-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                            <div className="sm:col-span-2">
+                              <label className="block text-[10px] font-medium text-slate-400 mb-0.5">Name</label>
+                              <input
+                                type="text"
+                                value={editName}
+                                onChange={e => setEditName(e.target.value)}
+                                placeholder="Part name"
+                                className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-sm"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-medium text-slate-400 mb-0.5">Sell Price ($)</label>
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={editCost}
+                                onChange={e => setEditCost(e.target.value ? Number(e.target.value) : '')}
+                                placeholder="0.00"
+                                className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-sm"
+                              />
+                            </div>
                           </div>
-                          <select
-                            value={editCategory}
-                            onChange={e => setEditCategory(e.target.value)}
-                            className="px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-white"
-                          >
-                            {DEFAULT_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                          </select>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                            <div>
+                              <label className="block text-[10px] font-medium text-slate-400 mb-0.5">Category</label>
+                              <select
+                                title="Category"
+                                value={editCategory}
+                                onChange={e => setEditCategory(e.target.value)}
+                                className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-white"
+                              >
+                                {DEFAULT_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-medium text-slate-400 mb-0.5">Supplier</label>
+                              <input
+                                type="text"
+                                value={editSupplier}
+                                onChange={e => setEditSupplier(e.target.value)}
+                                placeholder="e.g. Rexel"
+                                className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-sm"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-medium text-slate-400 mb-0.5 flex items-center gap-1">
+                                <ScanBarcode className="w-3 h-3" /> Barcode
+                              </label>
+                              <input
+                                type="text"
+                                value={editBarcode.startsWith('photo:') ? '(Photo uploaded)' : editBarcode}
+                                onChange={e => setEditBarcode(e.target.value)}
+                                placeholder="Enter barcode"
+                                className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-sm"
+                                readOnly={editBarcode.startsWith('photo:')}
+                              />
+                            </div>
+                          </div>
+                          {/* Barcode photo upload + preview */}
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <input
+                              ref={barcodeFileRef}
+                              type="file"
+                              accept="image/*"
+                              onChange={handleBarcodePhotoUpload}
+                              className="hidden"
+                              id="barcode-upload"
+                            />
+                            <button
+                              onClick={() => barcodeFileRef.current?.click()}
+                              disabled={uploadingBarcode}
+                              className="px-3 py-1.5 text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100 flex items-center gap-1.5 disabled:opacity-50"
+                              title="Upload barcode photo"
+                            >
+                              {uploadingBarcode ? <span className="w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" /> : <Upload className="w-3 h-3" />}
+                              Upload Barcode Photo
+                            </button>
+                            {editBarcode.startsWith('photo:') && (
+                              <a href={editBarcode.replace('photo:', '')} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-[10px] text-blue-600 hover:underline">
+                                <Image className="w-3 h-3" /> View photo
+                              </a>
+                            )}
+                            {editBarcode && (
+                              <button onClick={() => setEditBarcode('')} className="text-[10px] text-rose-500 hover:underline">Clear barcode</button>
+                            )}
+                          </div>
                           <div className="flex gap-1.5">
-                            <button onClick={saveEdit} className="p-1.5 bg-emerald-100 text-emerald-700 rounded-lg hover:bg-emerald-200">
+                            <button onClick={saveEdit} title="Save" className="p-1.5 bg-emerald-100 text-emerald-700 rounded-lg hover:bg-emerald-200">
                               <Check className="w-3.5 h-3.5" />
                             </button>
-                            <button onClick={cancelEdit} className="p-1.5 bg-slate-100 text-slate-500 rounded-lg hover:bg-slate-200">
+                            <button onClick={cancelEdit} title="Cancel" className="p-1.5 bg-slate-100 text-slate-500 rounded-lg hover:bg-slate-200">
                               <X className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         </div>
                       ) : (
                         /* Display mode */
-                        <>
+                        <div className="flex items-center gap-3">
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium text-slate-800 truncate">{part.name}</p>
-                            {part.category && (
-                              <p className="text-[10px] text-slate-400">{part.category}</p>
-                            )}
+                            <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                              {part.category && (
+                                <span className="text-[10px] text-slate-400">{part.category}</span>
+                              )}
+                              {part.supplier && (
+                                <span className="text-[10px] text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded font-medium">{part.supplier}</span>
+                              )}
+                              {part.barcode && (
+                                <span className="text-[10px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded font-mono flex items-center gap-0.5">
+                                  <ScanBarcode className="w-2.5 h-2.5" />
+                                  {part.barcode.startsWith('photo:') ? 'Photo' : part.barcode}
+                                </span>
+                              )}
+                            </div>
                           </div>
                           <span className="text-sm font-bold text-slate-700 shrink-0">
                             ${part.defaultCost.toFixed(2)}
                           </span>
                           <button
                             onClick={() => startEdit(part)}
+                            title="Edit part"
                             className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={() => handleDelete(part.id)}
+                            title="Delete part"
                             className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
-                        </>
+                        </div>
                       )}
                     </div>
                   ))}

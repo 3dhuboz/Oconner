@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, ClipboardList, Calendar, Settings, Zap, Users, Shield, CreditCard, LogOut, Headphones, ExternalLink, MapPin, Menu, X, Package, Download, Building2, DollarSign } from 'lucide-react';
+import { LayoutDashboard, ClipboardList, Calendar, Settings, Zap, Users, Shield, CreditCard, LogOut, Headphones, ExternalLink, MapPin, Menu, X, Package, Download, Building2, DollarSign, Truck } from 'lucide-react';
 import { cn } from '../utils';
 import { useAuth } from '../context/AuthContext';
 import type { Job } from '../types';
@@ -37,6 +37,7 @@ export function Layout({ children, jobs = [] }: LayoutProps) {
     { name: 'Live Map', path: '/map', icon: MapPin, roles: ['dev', 'admin'] },
     { name: 'Team', path: '/team', icon: Users, roles: ['dev', 'admin'] },
     { name: 'Parts Catalog', path: '/parts', icon: Package, roles: ['dev', 'admin'] },
+    { name: 'Stocktake', path: '/stocktake', icon: Truck, roles: ['dev', 'admin'] },
     { name: 'Pricing', path: '/pricing', icon: DollarSign, roles: ['dev', 'admin'] },
     { name: 'Properties', path: '/properties', icon: Building2, roles: ['dev', 'admin'] },
     { name: 'Integrations', path: '/integrations', icon: Settings, roles: ['dev', 'admin'] },

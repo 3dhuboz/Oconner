@@ -5,8 +5,9 @@ import { MapPin, Clock, Camera, Plus, Trash2, CheckCircle2, FileText, ArrowLeft,
 import { useAuth } from '../context/AuthContext';
 import { useGpsTracking } from '../hooks/useGpsTracking';
 import { cn } from '../utils';
-import { storage } from '../services/firebase';
+import { storage, db } from '../services/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { doc, setDoc, getDoc, collection, addDoc, increment, updateDoc } from 'firebase/firestore';
 import jsPDF from 'jspdf';
 import { Html5Qrcode } from 'html5-qrcode';
 
@@ -181,11 +182,27 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
     setMaterials([...materials, { id: Math.random().toString(36).substr(2, 9), name: '', quantity: 1, cost: 0 }]);
   };
 
+  // Look up catalog part by barcode and auto-fill fields with sell price
+  useEffect(() => {
+    if (!barcodeValue || !partsCatalog.length) return;
+    const match = partsCatalog.find(p => p.barcode === barcodeValue);
+    if (match) {
+      setBarcodePartName(match.name);
+      setBarcodePrice(String(match.sellPrice ?? match.defaultCost));
+      setBarcodeSupplier(match.supplier || 'Rexel');
+    }
+  }, [barcodeValue, partsCatalog]);
+
   const handleBarcodeSave = async () => {
     if (!barcodePartName.trim() || !barcodePrice) return;
     setBarcodeSaving(true);
-    const price = parseFloat(barcodePrice);
+    // Use sell price from catalog if matched, otherwise use entered price
+    const catalogMatch = partsCatalog.find(p => p.barcode === barcodeValue);
+    const sellPrice = catalogMatch ? (catalogMatch.sellPrice ?? catalogMatch.defaultCost) : parseFloat(barcodePrice);
+    const costPrice = catalogMatch?.costPrice ?? parseFloat(barcodePrice);
+
     try {
+      // Save to pricing catalog (best-effort)
       await fetch('/api/xero/pricing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -193,19 +210,63 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
           items: [{
             partName: barcodePartName.trim(),
             supplier: barcodeSupplier,
-            costPrice: price,
+            costPrice: costPrice,
             barcode: barcodeValue || undefined,
             source: 'barcode',
           }],
         }),
       });
     } catch { /* pricing save is best-effort */ }
-    // Also add to job materials
+
+    // Log stock movement (deduct from tech's stock)
+    const techId = user?.uid || '';
+    if (db && techId && job) {
+      try {
+        // Record stock_out movement
+        await addDoc(collection(db, 'stockMovements'), {
+          partId: catalogMatch?.id || barcodePartName.trim(),
+          partName: barcodePartName.trim(),
+          barcode: barcodeValue || null,
+          technicianId: techId,
+          type: 'stock_out',
+          quantity: 1,
+          jobId: job.id,
+          reason: `Used on job: ${job.propertyAddress || job.title}`,
+          timestamp: new Date().toISOString(),
+        });
+        // Update tech stock entry (decrement quantity)
+        const stockKey = `${techId}_${catalogMatch?.id || barcodePartName.trim()}`;
+        const stockRef = doc(db, 'techStock', stockKey);
+        const stockSnap = await getDoc(stockRef);
+        if (stockSnap.exists()) {
+          const current = stockSnap.data().quantity || 0;
+          await updateDoc(stockRef, { quantity: Math.max(0, current - 1), lastUpdated: new Date().toISOString() });
+        } else {
+          // Create entry with 0 (just used last one or wasn't tracked yet)
+          await setDoc(stockRef, {
+            id: stockKey,
+            partId: catalogMatch?.id || barcodePartName.trim(),
+            partName: barcodePartName.trim(),
+            barcode: barcodeValue || null,
+            technicianId: techId,
+            technicianName: user?.email || '',
+            quantity: 0,
+            sellPrice: sellPrice,
+            costPrice: costPrice,
+            lastUpdated: new Date().toISOString(),
+          });
+        }
+      } catch (err) {
+        console.warn('[Stock] Failed to log stock movement:', err);
+      }
+    }
+
+    // Add to job materials using SELL price (retail)
     setMaterials(prev => [...prev, {
       id: Math.random().toString(36).substr(2, 9),
       name: barcodePartName.trim(),
       quantity: 1,
-      cost: price,
+      cost: sellPrice,
     }]);
     setBarcodeValue('');
     setBarcodePartName('');

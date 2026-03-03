@@ -21,6 +21,7 @@ import { TechDashboard } from './pages/TechDashboard';
 import { TechToday } from './pages/TechToday';
 import { TechProfile } from './pages/TechProfile';
 import { PartsCatalog } from './pages/PartsCatalog';
+import { Stocktake } from './pages/Stocktake';
 import { NewJob } from './pages/NewJob';
 import { PropertyHistory } from './pages/PropertyHistory';
 import { Pricing } from './pages/Pricing';
@@ -302,6 +303,11 @@ function AppContent() {
       <Route path="/parts" element={
         <AdminRoute>
           <PartsCatalog parts={partsCatalog} setParts={setPartsCatalogWithSync} />
+        </AdminRoute>
+      } />
+      <Route path="/stocktake" element={
+        <AdminRoute>
+          <Stocktake electricians={electricians} partsCatalog={partsCatalog} />
         </AdminRoute>
       } />
 
