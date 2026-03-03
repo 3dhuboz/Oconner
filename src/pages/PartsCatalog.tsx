@@ -1,6 +1,6 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { CatalogPart } from '../types';
-import { Plus, Trash2, Package, Search, Edit2, Check, X, ScanBarcode, Upload, Image, Camera, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Plus, Trash2, Package, Search, Edit2, Check, X, ScanBarcode, Upload, Image, Camera, Loader2, CheckCircle2, AlertCircle, StopCircle } from 'lucide-react';
 import { cn } from '../utils';
 import { storage } from '../services/firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -34,7 +34,10 @@ export function PartsCatalog({ parts, setParts }: PartsCatalogProps) {
   const [uploadingBarcode, setUploadingBarcode] = useState(false);
   const barcodeFileRef = useRef<HTMLInputElement>(null);
 
-  // Camera barcode scan via photo capture
+  // Detect mobile vs desktop
+  const isMobile = /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+  // ── Mobile: photo-capture approach ──
   const scanCameraRefAdd = useRef<HTMLInputElement>(null);
   const scanCameraRefEdit = useRef<HTMLInputElement>(null);
   const [scanStatus, setScanStatus] = useState<{ target: 'add' | 'edit'; state: 'scanning' | 'success' | 'error'; message?: string } | null>(null);
@@ -55,9 +58,48 @@ export function PartsCatalog({ parts, setParts }: PartsCatalogProps) {
       setScanStatus({ target, state: 'error', message: 'No barcode found in photo. Try again with better lighting or hold closer.' });
       setTimeout(() => setScanStatus(null), 4000);
     }
-    // Reset file input so the same file can be re-selected
     e.target.value = '';
   };
+
+  // ── Desktop: live camera scanner (getUserMedia) ──
+  const [liveScanner, setLiveScanner] = useState<'add' | 'edit' | null>(null);
+  const liveScannerRef = useRef<Html5Qrcode | null>(null);
+  const LIVE_ADD_ID = 'live-scanner-add';
+  const LIVE_EDIT_ID = 'live-scanner-edit';
+
+  const stopLiveScanner = useCallback(async () => {
+    try {
+      if (liveScannerRef.current) {
+        await liveScannerRef.current.stop();
+        liveScannerRef.current.clear();
+      }
+    } catch { /* ignore */ }
+    liveScannerRef.current = null;
+    setLiveScanner(null);
+  }, []);
+
+  const startLiveScanner = useCallback((target: 'add' | 'edit') => {
+    if (liveScannerRef.current) { stopLiveScanner(); return; }
+    setLiveScanner(target);
+    setTimeout(() => {
+      const elementId = target === 'add' ? LIVE_ADD_ID : LIVE_EDIT_ID;
+      if (!document.getElementById(elementId)) { setLiveScanner(null); return; }
+      const scanner = new Html5Qrcode(elementId);
+      liveScannerRef.current = scanner;
+      scanner.start(
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: { width: 280, height: 120 }, aspectRatio: 1.5 },
+        (decoded) => {
+          if (target === 'add') setNewBarcode(decoded);
+          else setEditBarcode(decoded);
+          setScanStatus({ target, state: 'success', message: decoded });
+          stopLiveScanner();
+          setTimeout(() => setScanStatus(null), 3000);
+        },
+        () => {}
+      ).catch(() => { setLiveScanner(null); liveScannerRef.current = null; });
+    }, 250);
+  }, [stopLiveScanner]);
 
   const filteredParts = parts.filter(p => {
     const q = search.toLowerCase();
@@ -71,6 +113,7 @@ export function PartsCatalog({ parts, setParts }: PartsCatalogProps) {
 
   const handleAdd = () => {
     if (!newName.trim()) return;
+    if (liveScanner) stopLiveScanner();
     const part: CatalogPart = {
       id: Math.random().toString(36).substr(2, 9),
       name: newName.trim(),
@@ -134,6 +177,7 @@ export function PartsCatalog({ parts, setParts }: PartsCatalogProps) {
   };
 
   const cancelEdit = () => {
+    if (liveScanner) stopLiveScanner();
     setScanStatus(null);
     setEditingId(null);
   };
@@ -220,18 +264,41 @@ export function PartsCatalog({ parts, setParts }: PartsCatalogProps) {
                 placeholder="Scan or type barcode"
                 className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
               />
-              {/* Hidden file input for camera capture */}
-              <input ref={scanCameraRefAdd} type="file" accept="image/*" capture="environment" onChange={e => handleBarcodeScanPhoto(e, 'add')} className="hidden" />
-              <div id="barcode-scan-temp-add" className="hidden" />
-              <button
-                type="button"
-                onClick={() => scanCameraRefAdd.current?.click()}
-                className="mt-1.5 w-full px-3 py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 bg-amber-500 text-white hover:bg-amber-600 active:bg-amber-700 transition-colors shadow-sm"
-                title="Take a photo of the barcode to scan it"
-              >
-                <Camera className="w-4.5 h-4.5" />
-                Scan Barcode with Camera
-              </button>
+              {isMobile ? (
+                <>
+                  <input ref={scanCameraRefAdd} type="file" accept="image/*" capture="environment" onChange={e => handleBarcodeScanPhoto(e, 'add')} className="hidden" />
+                  <div id="barcode-scan-temp-add" className="hidden" />
+                  <button type="button" onClick={() => scanCameraRefAdd.current?.click()}
+                    className="mt-1.5 w-full px-3 py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 bg-amber-500 text-white hover:bg-amber-600 active:bg-amber-700 transition-colors shadow-sm"
+                    title="Take a photo of the barcode">
+                    <Camera className="w-4 h-4" /> Snap Barcode Photo
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button type="button"
+                    onClick={() => liveScanner === 'add' ? stopLiveScanner() : startLiveScanner('add')}
+                    className={cn("mt-1.5 w-full px-3 py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-colors shadow-sm",
+                      liveScanner === 'add' ? 'bg-rose-500 text-white hover:bg-rose-600' : 'bg-amber-500 text-white hover:bg-amber-600'
+                    )}
+                    title={liveScanner === 'add' ? 'Stop camera' : 'Open camera to scan barcode'}>
+                    {liveScanner === 'add' ? <><StopCircle className="w-4 h-4" /> Stop Camera</> : <><Camera className="w-4 h-4" /> Scan Barcode with Camera</>}
+                  </button>
+                  {liveScanner === 'add' && (
+                    <div className="mt-2 rounded-xl border-2 border-amber-400 bg-black overflow-hidden shadow-lg">
+                      <div className="px-3 py-2 bg-amber-500 flex items-center justify-between">
+                        <span className="text-white text-xs font-bold flex items-center gap-1.5">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" /> Point camera at barcode…
+                        </span>
+                        <button onClick={stopLiveScanner} className="text-white/80 hover:text-white text-xs font-medium flex items-center gap-1" title="Close">
+                          <X className="w-3.5 h-3.5" /> Close
+                        </button>
+                      </div>
+                      <div id={LIVE_ADD_ID} />
+                    </div>
+                  )}
+                </>
+              )}
               {scanStatus?.target === 'add' && (
                 <div className={cn("mt-2 px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2",
                   scanStatus.state === 'scanning' && 'bg-amber-50 text-amber-700 border border-amber-200',
@@ -361,18 +428,41 @@ export function PartsCatalog({ parts, setParts }: PartsCatalogProps) {
                                 className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-sm"
                                 readOnly={editBarcode.startsWith('photo:')}
                               />
-                              {/* Hidden file input for camera capture */}
-                              <input ref={scanCameraRefEdit} type="file" accept="image/*" capture="environment" onChange={e => handleBarcodeScanPhoto(e, 'edit')} className="hidden" />
-                              <div id="barcode-scan-temp-edit" className="hidden" />
-                              <button
-                                type="button"
-                                onClick={() => scanCameraRefEdit.current?.click()}
-                                className="mt-1 w-full px-2.5 py-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 bg-amber-500 text-white hover:bg-amber-600 active:bg-amber-700 transition-colors shadow-sm"
-                                title="Take a photo of the barcode to scan it"
-                              >
-                                <Camera className="w-3.5 h-3.5" />
-                                Scan Barcode with Camera
-                              </button>
+                              {isMobile ? (
+                                <>
+                                  <input ref={scanCameraRefEdit} type="file" accept="image/*" capture="environment" onChange={e => handleBarcodeScanPhoto(e, 'edit')} className="hidden" />
+                                  <div id="barcode-scan-temp-edit" className="hidden" />
+                                  <button type="button" onClick={() => scanCameraRefEdit.current?.click()}
+                                    className="mt-1 w-full px-2.5 py-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 bg-amber-500 text-white hover:bg-amber-600 active:bg-amber-700 transition-colors shadow-sm"
+                                    title="Take a photo of the barcode">
+                                    <Camera className="w-3.5 h-3.5" /> Snap Barcode Photo
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <button type="button"
+                                    onClick={() => liveScanner === 'edit' ? stopLiveScanner() : startLiveScanner('edit')}
+                                    className={cn("mt-1 w-full px-2.5 py-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors shadow-sm",
+                                      liveScanner === 'edit' ? 'bg-rose-500 text-white hover:bg-rose-600' : 'bg-amber-500 text-white hover:bg-amber-600'
+                                    )}
+                                    title={liveScanner === 'edit' ? 'Stop camera' : 'Open camera to scan barcode'}>
+                                    {liveScanner === 'edit' ? <><StopCircle className="w-3.5 h-3.5" /> Stop Camera</> : <><Camera className="w-3.5 h-3.5" /> Scan Barcode with Camera</>}
+                                  </button>
+                                  {liveScanner === 'edit' && (
+                                    <div className="mt-2 rounded-xl border-2 border-amber-400 bg-black overflow-hidden shadow-lg">
+                                      <div className="px-3 py-1.5 bg-amber-500 flex items-center justify-between">
+                                        <span className="text-white text-[11px] font-bold flex items-center gap-1.5">
+                                          <Loader2 className="w-3 h-3 animate-spin" /> Point camera at barcode…
+                                        </span>
+                                        <button onClick={stopLiveScanner} className="text-white/80 hover:text-white text-[11px] font-medium flex items-center gap-1" title="Close">
+                                          <X className="w-3 h-3" /> Close
+                                        </button>
+                                      </div>
+                                      <div id={LIVE_EDIT_ID} />
+                                    </div>
+                                  )}
+                                </>
+                              )}
                               {scanStatus?.target === 'edit' && (
                                 <div className={cn("mt-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium flex items-center gap-1.5",
                                   scanStatus.state === 'scanning' && 'bg-amber-50 text-amber-700 border border-amber-200',
