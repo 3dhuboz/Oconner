@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Database, DollarSign, CheckCircle2, AlertCircle, Loader2, Mail, MessageSquare, ExternalLink, Copy, PlayCircle, Phone, Send, Eye, EyeOff, Save, TestTube2 } from 'lucide-react';
+import { Database, DollarSign, CheckCircle2, AlertCircle, Loader2, Mail, MessageSquare, ExternalLink, Copy, PlayCircle, Phone, Send, Eye, EyeOff, Save, TestTube2, Inbox, RefreshCw, Clock, Zap } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { cn } from '../utils';
 import { db } from '../services/firebase';
@@ -121,8 +121,26 @@ export function Integrations() {
   const [smsTesting, setSmsTesting] = useState(false);
   const [smsTestNumber, setSmsTestNumber] = useState('');
 
+  // ─── Gmail Catch-All State ───────────────────────────────────
+  const [gmailConfig, setGmailConfig] = useState({
+    emailAddress: '',
+    clientId: '',
+    clientSecret: '',
+    refreshToken: '',
+    pollingInterval: '5',
+    autoCreateJobs: true,
+    markAsRead: true,
+    enabled: false,
+  });
+  const [gmailSaving, setGmailSaving] = useState(false);
+  const [gmailPolling, setGmailPolling] = useState(false);
+  const [gmailPollResult, setGmailPollResult] = useState<any>(null);
+  const [gmailDiagnostic, setGmailDiagnostic] = useState<any>(null);
+  const [gmailDiagLoading, setGmailDiagLoading] = useState(false);
+  const isGmailConfigured = !!(gmailConfig.emailAddress && gmailConfig.clientId && gmailConfig.refreshToken);
+
   // ─── Email Provider State ───────────────────────────────────
-  const [emailProvider, setEmailProvider] = useState<'smtp' | 'sendgrid' | 'ses'>('smtp');
+  const [emailProvider, setEmailProvider] = useState<'smtp' | 'sendgrid' | 'ses' | 'gmail'>('smtp');
   const [emailConfig, setEmailConfig] = useState({
     host: '',
     port: '587',
@@ -177,6 +195,22 @@ export function Integrations() {
           fromEmail: data.fromEmail || '',
           fromName: data.fromName || 'Wirez R Us',
           apiKey: data.apiKey || '',
+          enabled: data.enabled || false,
+        });
+      }
+    }).catch(() => {});
+    // Load Gmail catch-all config
+    getDoc(doc(db, 'settings', 'gmail')).then(snap => {
+      if (snap.exists()) {
+        const data = snap.data();
+        setGmailConfig({
+          emailAddress: data.emailAddress || '',
+          clientId: data.clientId || '',
+          clientSecret: data.clientSecret || '',
+          refreshToken: data.refreshToken || '',
+          pollingInterval: data.pollingInterval || '5',
+          autoCreateJobs: data.autoCreateJobs !== false,
+          markAsRead: data.markAsRead !== false,
           enabled: data.enabled || false,
         });
       }
@@ -303,6 +337,60 @@ export function Integrations() {
       toast.error('Could not reach Email API — check server configuration');
     } finally {
       setEmailTesting(false);
+    }
+  };
+
+  // ─── Save Gmail Catch-All Settings ─────────────────────────
+  const handleSaveGmail = async () => {
+    if (!db) { toast.error('Database not connected'); return; }
+    setGmailSaving(true);
+    try {
+      await setDoc(doc(db, 'settings', 'gmail'), {
+        ...gmailConfig,
+        updatedAt: new Date().toISOString(),
+      });
+      toast.success('Gmail catch-all settings saved');
+    } catch (err) {
+      toast.error('Failed to save Gmail settings');
+    } finally {
+      setGmailSaving(false);
+    }
+  };
+
+  const handleGmailPollNow = async () => {
+    setGmailPolling(true);
+    setGmailPollResult(null);
+    try {
+      const res = await fetch('/api/email/poll-inbox', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await res.json();
+      setGmailPollResult(data);
+      if (data.success) {
+        toast.success(`Polled inbox: ${data.processed || 0} emails processed, ${data.errors || 0} errors`);
+      } else {
+        toast.error(data.error || 'Poll failed');
+      }
+    } catch (err: any) {
+      setGmailPollResult({ error: err.message });
+      toast.error('Could not reach poll endpoint');
+    } finally {
+      setGmailPolling(false);
+    }
+  };
+
+  const handleGmailDiagnostic = async () => {
+    setGmailDiagLoading(true);
+    setGmailDiagnostic(null);
+    try {
+      const res = await fetch('/api/email/poll-inbox');
+      const data = await res.json();
+      setGmailDiagnostic(data);
+    } catch (err: any) {
+      setGmailDiagnostic({ error: err.message });
+    } finally {
+      setGmailDiagLoading(false);
     }
   };
 
@@ -787,6 +875,251 @@ export function Integrations() {
           </div>
         </div>
 
+        {/* ─── Gmail Catch-All Inbox Polling ──────────────────────── */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="p-6 flex items-start gap-4 border-b border-slate-100">
+            <div className="w-12 h-12 rounded-xl bg-red-500/10 flex items-center justify-center shrink-0">
+              <Inbox className="w-6 h-6 text-red-500" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                Gmail Catch-All
+                <span className={cn(
+                  "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium",
+                  gmailConfig.enabled && isGmailConfigured ? 'bg-emerald-100 text-emerald-700' :
+                  isGmailConfigured ? 'bg-blue-100 text-blue-700' :
+                  'bg-amber-100 text-amber-700'
+                )}>
+                  {gmailConfig.enabled && isGmailConfigured ? <CheckCircle2 className="w-3 h-3" /> :
+                   isGmailConfigured ? <Clock className="w-3 h-3" /> :
+                   <AlertCircle className="w-3 h-3" />}
+                  {gmailConfig.enabled && isGmailConfigured ? 'Active' :
+                   isGmailConfigured ? 'Configured' : 'Setup Required'}
+                </span>
+              </h3>
+              <p className="text-slate-500 text-sm mt-1">
+                Poll a Gmail inbox for work orders from property managers. Uses Gmail API with OAuth2.
+                Set up a dedicated address like <strong>jobs@wirezrus.com.au</strong> or <strong>wirezrusjobs@gmail.com</strong>.
+              </p>
+            </div>
+          </div>
+
+          <div className="p-6 space-y-5">
+            {/* OAuth Credentials */}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <SettingsInput
+                label="Gmail Address"
+                value={gmailConfig.emailAddress}
+                onChange={v => setGmailConfig(c => ({ ...c, emailAddress: v }))}
+                placeholder="wirezrusjobs@gmail.com"
+              />
+              <SettingsInput
+                label="Polling Interval (minutes)"
+                value={gmailConfig.pollingInterval}
+                onChange={v => setGmailConfig(c => ({ ...c, pollingInterval: v }))}
+                placeholder="5"
+                type="number"
+              />
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <SettingsInput
+                label="Google OAuth Client ID"
+                value={gmailConfig.clientId}
+                onChange={v => setGmailConfig(c => ({ ...c, clientId: v }))}
+                placeholder="xxxx.apps.googleusercontent.com"
+              />
+              <SettingsInput
+                label="Google OAuth Client Secret"
+                value={gmailConfig.clientSecret}
+                onChange={v => setGmailConfig(c => ({ ...c, clientSecret: v }))}
+                placeholder="GOCSPX-xxxxxxxx"
+                secret
+              />
+            </div>
+
+            <SettingsInput
+              label="OAuth Refresh Token"
+              value={gmailConfig.refreshToken}
+              onChange={v => setGmailConfig(c => ({ ...c, refreshToken: v }))}
+              placeholder="1//0xxxxxxxxxxxxxxxxxxxxxxxx"
+              secret
+            />
+
+            {/* Toggles */}
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setGmailConfig(c => ({ ...c, enabled: !c.enabled }))}
+                  className={cn("relative w-11 h-6 rounded-full transition-colors",
+                    gmailConfig.enabled ? 'bg-emerald-500' : 'bg-slate-300'
+                  )}
+                  title="Toggle Gmail polling"
+                >
+                  <span className={cn("absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform",
+                    gmailConfig.enabled && 'translate-x-5'
+                  )} />
+                </button>
+                <span className="text-sm text-slate-700 font-medium">Enable polling</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setGmailConfig(c => ({ ...c, autoCreateJobs: !c.autoCreateJobs }))}
+                  className={cn("relative w-11 h-6 rounded-full transition-colors",
+                    gmailConfig.autoCreateJobs ? 'bg-emerald-500' : 'bg-slate-300'
+                  )}
+                  title="Toggle auto-create jobs"
+                >
+                  <span className={cn("absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform",
+                    gmailConfig.autoCreateJobs && 'translate-x-5'
+                  )} />
+                </button>
+                <span className="text-sm text-slate-700 font-medium">Auto-create jobs</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setGmailConfig(c => ({ ...c, markAsRead: !c.markAsRead }))}
+                  className={cn("relative w-11 h-6 rounded-full transition-colors",
+                    gmailConfig.markAsRead ? 'bg-emerald-500' : 'bg-slate-300'
+                  )}
+                  title="Toggle mark as read"
+                >
+                  <span className={cn("absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform",
+                    gmailConfig.markAsRead && 'translate-x-5'
+                  )} />
+                </button>
+                <span className="text-sm text-slate-700 font-medium">Mark as read</span>
+              </div>
+            </div>
+
+            {/* Diagnostic panel */}
+            {gmailDiagnostic && (
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                <p className="text-xs font-semibold text-slate-700 mb-2">Server Diagnostic</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-xs">
+                  {gmailDiagnostic.checks && Object.entries(gmailDiagnostic.checks).map(([key, val]) => (
+                    <div key={key} className="flex items-center gap-2">
+                      <span className="font-mono text-slate-500">{key}:</span>
+                      <span className="text-slate-800">{String(val)}</span>
+                    </div>
+                  ))}
+                </div>
+                {gmailDiagnostic.error && (
+                  <p className="text-xs text-red-600 mt-2">{gmailDiagnostic.error}</p>
+                )}
+              </div>
+            )}
+
+            {/* Poll results */}
+            {gmailPollResult && (
+              <div className={cn(
+                "p-3 rounded-lg border",
+                gmailPollResult.success ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'
+              )}>
+                <p className={cn("text-xs font-semibold mb-1",
+                  gmailPollResult.success ? 'text-emerald-800' : 'text-red-800'
+                )}>
+                  {gmailPollResult.success
+                    ? `Processed ${gmailPollResult.processed || 0} email(s), ${gmailPollResult.errors || 0} error(s)`
+                    : `Error: ${gmailPollResult.error || 'Unknown'}`}
+                </p>
+                {gmailPollResult.results?.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    {gmailPollResult.results.map((r: any, i: number) => (
+                      <div key={i} className="text-[11px] flex items-center gap-2">
+                        {r.error
+                          ? <span className="text-red-600">{r.error}</span>
+                          : <>
+                              <span className="font-medium text-slate-800">{r.subject?.substring(0, 40)}</span>
+                              <span className="text-slate-400">→</span>
+                              <span className="text-emerald-700">{r.software}</span>
+                              <span className="text-slate-400">→</span>
+                              <span className="font-mono text-blue-600">{r.jobId}</span>
+                            </>
+                        }
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* How it works */}
+            <div className="p-3 bg-red-50 border border-red-100 rounded-lg">
+              <p className="text-xs font-semibold text-red-800 mb-2">How Gmail Catch-All works</p>
+              <div className="flex items-center gap-2 text-xs text-red-700 flex-wrap">
+                <span className="bg-red-200/60 rounded px-1.5 py-0.5 font-medium">Email arrives</span>
+                <span>→</span>
+                <span className="bg-red-200/60 rounded px-1.5 py-0.5 font-medium">Cron polls Gmail API</span>
+                <span>→</span>
+                <span className="bg-red-200/60 rounded px-1.5 py-0.5 font-medium">Detect PM software</span>
+                <span>→</span>
+                <span className="bg-red-200/60 rounded px-1.5 py-0.5 font-medium">Parse &amp; create job</span>
+                <span>→</span>
+                <span className="bg-red-200/60 rounded px-1.5 py-0.5 font-medium">Mark as read</span>
+              </div>
+              <p className="text-[10px] text-red-600 mt-2">
+                Detects: PropertyMe, Console Cloud, PropertyTree, Palace, Rex PM, ManagedApp, Inspection Express, MRI Software, and generic emails.
+              </p>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex flex-wrap gap-3 pt-1 border-t border-slate-100">
+              <button
+                onClick={handleSaveGmail}
+                disabled={gmailSaving}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+              >
+                {gmailSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                Save Gmail Settings
+              </button>
+              <button
+                onClick={handleGmailPollNow}
+                disabled={gmailPolling || !isGmailConfigured}
+                className="px-4 py-2 bg-red-500 hover:bg-red-600 disabled:bg-red-200 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                title="Trigger an immediate poll of the Gmail inbox"
+              >
+                {gmailPolling ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                {gmailPolling ? 'Polling...' : 'Poll Now'}
+              </button>
+              <button
+                onClick={handleGmailDiagnostic}
+                disabled={gmailDiagLoading}
+                className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                title="Check server environment variables"
+              >
+                {gmailDiagLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <TestTube2 className="w-4 h-4" />}
+                Diagnostic
+              </button>
+              <a
+                href="https://console.cloud.google.com/apis/credentials"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+              >
+                <ExternalLink className="w-4 h-4" />
+                Google Cloud Console
+              </a>
+            </div>
+
+            {/* Setup help */}
+            {!isGmailConfigured && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 space-y-2">
+                <p className="font-semibold flex items-center gap-1.5"><AlertCircle className="w-4 h-4" /> Gmail Setup Guide</p>
+                <ol className="list-decimal list-inside text-xs text-amber-700 space-y-1">
+                  <li>Create a Gmail or Google Workspace address for receiving work orders</li>
+                  <li>Go to <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-medium">Google Cloud Console</a> → Create OAuth 2.0 credentials (Web App)</li>
+                  <li>Enable the <strong>Gmail API</strong> in your Google Cloud project</li>
+                  <li>Use the <a href="https://developers.google.com/oauthplayground" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-medium">OAuth Playground</a> to generate a refresh token with scope <code className="bg-amber-100 px-1 rounded text-[10px]">https://www.googleapis.com/auth/gmail.modify</code></li>
+                  <li>Paste credentials above and click <strong>Save Gmail Settings</strong></li>
+                  <li>Set these as environment variables on Vercel: <code className="bg-amber-100 px-1 rounded text-[10px]">GMAIL_ADDRESS</code>, <code className="bg-amber-100 px-1 rounded text-[10px]">GMAIL_CLIENT_ID</code>, <code className="bg-amber-100 px-1 rounded text-[10px]">GMAIL_CLIENT_SECRET</code>, <code className="bg-amber-100 px-1 rounded text-[10px]">GMAIL_REFRESH_TOKEN</code></li>
+                  <li>Add a <a href="https://vercel.com/docs/cron-jobs" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-medium">Vercel Cron</a> to call <code className="bg-amber-100 px-1 rounded text-[10px]">POST /api/email/poll-inbox</code> every 2–5 minutes</li>
+                </ol>
+              </div>
+            )}
+          </div>
+        </div>
+
         <IntegrationCard
           icon={Database}
           title="Firebase Database"
@@ -926,22 +1259,54 @@ export function Integrations() {
             {/* Provider selector */}
             <div>
               <label className="block text-xs font-medium text-slate-600 mb-2">Provider</label>
-              <div className="flex gap-2">
-                {(['smtp', 'sendgrid', 'ses'] as const).map(p => (
+              <div className="flex gap-2 flex-wrap">
+                {(['gmail', 'smtp', 'sendgrid', 'ses'] as const).map(p => (
                   <button
                     key={p}
-                    onClick={() => setEmailProvider(p)}
+                    onClick={() => {
+                      setEmailProvider(p);
+                      if (p === 'gmail') {
+                        setEmailConfig(c => ({ ...c, host: 'smtp.gmail.com', port: '587' }));
+                      }
+                    }}
                     className={cn("px-4 py-2 rounded-lg text-sm font-medium border transition-colors",
                       emailProvider === p ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
                     )}
                   >
-                    {p === 'smtp' ? 'SMTP' : p === 'sendgrid' ? 'SendGrid' : 'Amazon SES'}
+                    {p === 'gmail' ? 'Gmail SMTP' : p === 'smtp' ? 'Custom SMTP' : p === 'sendgrid' ? 'SendGrid' : 'Amazon SES'}
                   </button>
                 ))}
               </div>
             </div>
 
-            {emailProvider === 'smtp' ? (
+            {emailProvider === 'gmail' ? (
+              <>
+                <div className="p-3 bg-red-50 border border-red-100 rounded-lg">
+                  <p className="text-xs font-semibold text-red-800 mb-1 flex items-center gap-1.5">
+                    <Mail className="w-3.5 h-3.5" /> Gmail SMTP Settings
+                  </p>
+                  <p className="text-[11px] text-red-700">
+                    Uses <strong>smtp.gmail.com:587</strong> with TLS. You need a <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-medium">Google App Password</a> (not your regular Gmail password).
+                    Enable 2-Step Verification on your Google account first.
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <SettingsInput
+                    label="Gmail Address"
+                    value={emailConfig.username}
+                    onChange={v => setEmailConfig(c => ({ ...c, username: v, fromEmail: c.fromEmail || v }))}
+                    placeholder="wirezrus@gmail.com"
+                  />
+                  <SettingsInput
+                    label="App Password"
+                    value={emailConfig.password}
+                    onChange={v => setEmailConfig(c => ({ ...c, password: v }))}
+                    placeholder="xxxx xxxx xxxx xxxx"
+                    secret
+                  />
+                </div>
+              </>
+            ) : emailProvider === 'smtp' ? (
               <>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <SettingsInput
