@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Search, Upload, AlertTriangle, TrendingUp, TrendingDown, Package, RefreshCw, DollarSign, BarChart3, CheckCircle2, XCircle, ArrowRight, Check } from 'lucide-react';
+import { Search, Upload, AlertTriangle, TrendingUp, TrendingDown, Package, RefreshCw, DollarSign, BarChart3, CheckCircle2, XCircle, ArrowRight, Check, Percent, Settings, RefreshCcw, Pencil } from 'lucide-react';
 import { cn } from '../utils';
 
 interface PartEntry {
@@ -8,6 +8,8 @@ interface PartEntry {
   partKey: string;
   supplier: string;
   costPrice: number;
+  sellPrice: number | null;
+  markupPercent: number | null;
   previousPrice: number | null;
   priceChangePercent: number | null;
   flagged: boolean;
@@ -55,6 +57,13 @@ export function Pricing() {
   const [manualPrice, setManualPrice] = useState('');
   const [manualSupplier, setManualSupplier] = useState('Rexel');
   const [manualBarcode, setManualBarcode] = useState('');
+
+  // Sell price / markup
+  const [globalMarkup, setGlobalMarkup] = useState<number>(30);
+  const [showSettings, setShowSettings] = useState(false);
+  const [editingSellPrice, setEditingSellPrice] = useState<string | null>(null);
+  const [editSellValue, setEditSellValue] = useState('');
+  const [syncing, setSyncing] = useState(false);
 
   const fetchParts = async () => {
     setLoading(true);
@@ -222,6 +231,95 @@ export function Pricing() {
     }
   };
 
+  // Compute effective sell price for a part
+  const getSellPrice = (part: PartEntry): number => {
+    if (part.sellPrice !== null && part.sellPrice !== undefined) return part.sellPrice;
+    if (part.markupPercent !== null && part.markupPercent !== undefined) {
+      return part.costPrice * (1 + part.markupPercent / 100);
+    }
+    return part.costPrice * (1 + globalMarkup / 100);
+  };
+
+  const isCustomSellPrice = (part: PartEntry): boolean => {
+    return part.sellPrice !== null && part.sellPrice !== undefined;
+  };
+
+  // Save per-item sell price
+  const handleSaveSellPrice = async (part: PartEntry) => {
+    const val = parseFloat(editSellValue);
+    if (isNaN(val) || val <= 0) { setEditingSellPrice(null); return; }
+    try {
+      await fetch('/api/xero/pricing', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ partKey: part.partKey, sellPrice: val }),
+      });
+      setParts(prev => prev.map(p => p.partKey === part.partKey ? { ...p, sellPrice: val } : p));
+    } catch (err) {
+      console.error('Failed to save sell price:', err);
+    }
+    setEditingSellPrice(null);
+  };
+
+  // Clear per-item sell price (revert to global markup)
+  const handleClearSellPrice = async (part: PartEntry) => {
+    try {
+      await fetch('/api/xero/pricing', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ partKey: part.partKey, sellPrice: null }),
+      });
+      setParts(prev => prev.map(p => p.partKey === part.partKey ? { ...p, sellPrice: null } : p));
+    } catch (err) {
+      console.error('Failed to clear sell price:', err);
+    }
+  };
+
+  // Sync all pricing items to Parts Catalog (Firestore partsCatalog collection)
+  const handleSyncToCatalog = async () => {
+    setSyncing(true);
+    try {
+      const { doc, setDoc } = await import('firebase/firestore');
+      const { db } = await import('../services/firebase');
+      if (!db) throw new Error('Firestore not available');
+
+      let synced = 0;
+      for (const part of parts) {
+        const catalogPart = {
+          id: part.partKey,
+          name: part.partName,
+          defaultCost: getSellPrice(part),
+          category: categoriseFromName(part.partName),
+          supplier: part.supplier,
+          costPrice: part.costPrice,
+          sellPrice: getSellPrice(part),
+          barcode: part.barcode || null,
+          syncedFromPricing: true,
+        };
+        await setDoc(doc(db, 'partsCatalog', part.partKey), catalogPart, { merge: true });
+        synced++;
+      }
+      alert(`Synced ${synced} parts to the Parts Catalog. Field techs can now access them.`);
+    } catch (err: any) {
+      console.error('Sync failed:', err);
+      alert('Sync failed: ' + err.message);
+    }
+    setSyncing(false);
+  };
+
+  // Simple auto-category from part name
+  function categoriseFromName(name: string): string {
+    const n = name.toLowerCase();
+    if (n.includes('cable') || n.includes('wire') || n.includes('conduit')) return 'Cabling';
+    if (n.includes('switch') || n.includes('breaker') || n.includes('rcd') || n.includes('mcb')) return 'Switchboard';
+    if (n.includes('smoke') || n.includes('alarm') || n.includes('detector')) return 'Smoke Alarm';
+    if (n.includes('light') || n.includes('lamp') || n.includes('downlight') || n.includes('led')) return 'Lighting';
+    if (n.includes('power point') || n.includes('gpo') || n.includes('outlet')) return 'General';
+    if (n.includes('saddle') || n.includes('clip') || n.includes('bracket') || n.includes('mount')) return 'General';
+    if (n.includes('gland') || n.includes('connector') || n.includes('terminal')) return 'General';
+    return 'Other';
+  }
+
   return (
     <div className="max-w-5xl mx-auto space-y-5">
       {/* ── Header ── */}
@@ -230,7 +328,7 @@ export function Pricing() {
           <h1 className="text-xl font-bold text-slate-900">Parts & Pricing</h1>
           <p className="text-sm text-slate-500">Rexel, Middy's, L&H — import invoices, track price changes</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <button
             onClick={() => setShowManual(!showManual)}
             className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50 flex items-center gap-1.5"
@@ -242,6 +340,24 @@ export function Pricing() {
             className="px-3 py-2 bg-amber-500 text-white rounded-xl text-sm font-bold hover:bg-amber-600 flex items-center gap-1.5"
           >
             <Upload className="w-4 h-4" /> Import CSV
+          </button>
+          <button
+            onClick={() => setShowSettings(!showSettings)}
+            className={cn(
+              'px-3 py-2 border rounded-xl text-sm font-medium flex items-center gap-1.5',
+              showSettings ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+            )}
+          >
+            <Settings className="w-4 h-4" /> Markup
+          </button>
+          <button
+            onClick={handleSyncToCatalog}
+            disabled={syncing || parts.length === 0}
+            className="px-3 py-2 bg-emerald-500 text-white rounded-xl text-sm font-bold hover:bg-emerald-600 disabled:opacity-50 flex items-center gap-1.5"
+            title="Push all pricing items to Parts Catalog for field techs"
+          >
+            {syncing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <RefreshCcw className="w-4 h-4" />}
+            {syncing ? 'Syncing...' : 'Sync to Catalog'}
           </button>
           <button onClick={fetchParts} className="p-2 bg-white border border-slate-200 rounded-xl hover:bg-slate-50" title="Refresh">
             <RefreshCw className={cn('w-4 h-4 text-slate-500', loading && 'animate-spin')} />
@@ -276,6 +392,36 @@ export function Pricing() {
           <span className="text-2xl font-bold text-slate-900">${stats.avgPrice.toFixed(2)}</span>
         </div>
       </div>
+
+      {/* ── Markup Settings ── */}
+      {showSettings && (
+        <div className="bg-blue-50 rounded-xl border border-blue-200 p-4 space-y-3">
+          <h3 className="text-sm font-bold text-blue-800 flex items-center gap-2">
+            <Percent className="w-4 h-4" /> Global Markup Settings
+          </h3>
+          <p className="text-xs text-blue-600">
+            Set a default markup percentage applied to all parts. You can override the sell price on individual items.
+          </p>
+          <div className="flex items-center gap-3">
+            <label className="text-xs font-medium text-blue-700">Default Markup %</label>
+            <input
+              type="number"
+              min="0"
+              max="500"
+              step="1"
+              value={globalMarkup}
+              onChange={e => setGlobalMarkup(Number(e.target.value) || 0)}
+              className="w-24 px-3 py-2 border border-blue-200 rounded-lg text-sm font-bold text-center bg-white focus:ring-2 focus:ring-blue-400"
+            />
+            <span className="text-xs text-blue-600">
+              e.g. $10.00 cost → <strong>${(10 * (1 + globalMarkup / 100)).toFixed(2)}</strong> sell
+            </span>
+          </div>
+          <p className="text-[10px] text-blue-500">
+            Items with a custom sell price (pencil icon) will ignore this setting. Click "Sync to Catalog" to push sell prices to the Parts Catalog for field techs.
+          </p>
+        </div>
+      )}
 
       {/* ── Manual Add ── */}
       {showManual && (
@@ -688,20 +834,27 @@ export function Pricing() {
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
           {/* Table header */}
           <div className="hidden sm:grid grid-cols-12 gap-2 px-4 py-2.5 bg-slate-50 border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-            <div className="col-span-4">Part Name</div>
+            <div className="col-span-3">Part Name</div>
             <div className="col-span-2">Supplier</div>
-            <div className="col-span-2 text-right">Price</div>
+            <div className="col-span-1 text-right">Cost</div>
+            <div className="col-span-2 text-right">Sell Price</div>
             <div className="col-span-2 text-right">Change</div>
             <div className="col-span-2 text-right">Source</div>
           </div>
 
-          {filtered.map(part => (
+          {filtered.map(part => {
+            const sell = getSellPrice(part);
+            const margin = sell - part.costPrice;
+            const isCustom = isCustomSellPrice(part);
+            const isEditing = editingSellPrice === part.partKey;
+
+            return (
             <div key={part._id || part.partKey} className={cn(
               'grid grid-cols-1 sm:grid-cols-12 gap-1 sm:gap-2 px-4 py-3 border-b border-slate-100 hover:bg-slate-50 transition-colors',
               part.flagged && 'bg-red-50/50'
             )}>
               {/* Part name */}
-              <div className="sm:col-span-4">
+              <div className="sm:col-span-3">
                 <span className="text-sm font-medium text-slate-900">{part.partName}</span>
                 {part.barcode && <span className="ml-2 text-[10px] text-slate-400 font-mono">{part.barcode}</span>}
                 {part.flagged && (
@@ -714,11 +867,62 @@ export function Pricing() {
               <div className="sm:col-span-2">
                 <span className="text-xs text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full">{part.supplier}</span>
               </div>
-              {/* Price */}
-              <div className="sm:col-span-2 sm:text-right">
+              {/* Cost Price */}
+              <div className="sm:col-span-1 sm:text-right">
                 <span className="text-sm font-bold text-slate-900">${(part.costPrice || 0).toFixed(2)}</span>
                 {part.previousPrice != null && part.previousPrice !== part.costPrice && (
-                  <span className="ml-1 text-[10px] text-slate-400 line-through">${part.previousPrice.toFixed(2)}</span>
+                  <span className="block text-[10px] text-slate-400 line-through">${part.previousPrice.toFixed(2)}</span>
+                )}
+              </div>
+              {/* Sell Price */}
+              <div className="sm:col-span-2 sm:text-right">
+                {isEditing ? (
+                  <div className="flex items-center gap-1 justify-end">
+                    <span className="text-xs text-slate-400">$</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={editSellValue}
+                      onChange={e => setEditSellValue(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') handleSaveSellPrice(part);
+                        if (e.key === 'Escape') setEditingSellPrice(null);
+                      }}
+                      className="w-20 px-2 py-1 border border-blue-300 rounded text-sm text-right font-bold focus:ring-2 focus:ring-blue-400 outline-none"
+                      autoFocus
+                      placeholder="Sell price"
+                    />
+                    <button onClick={() => handleSaveSellPrice(part)} className="p-0.5 text-emerald-600 hover:bg-emerald-50 rounded" title="Save">
+                      <Check className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1 justify-end">
+                    <span className={cn('text-sm font-bold', isCustom ? 'text-blue-700' : 'text-emerald-700')}>
+                      ${sell.toFixed(2)}
+                    </span>
+                    {isCustom && (
+                      <span className="text-[9px] bg-blue-100 text-blue-600 px-1 py-0.5 rounded font-bold">CUSTOM</span>
+                    )}
+                    <button
+                      onClick={() => { setEditingSellPrice(part.partKey); setEditSellValue(sell.toFixed(2)); }}
+                      className="p-0.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                      title="Set custom sell price"
+                    >
+                      <Pencil className="w-3 h-3" />
+                    </button>
+                    {isCustom && (
+                      <button
+                        onClick={() => handleClearSellPrice(part)}
+                        className="p-0.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+                        title="Revert to markup"
+                      >
+                        <XCircle className="w-3 h-3" />
+                      </button>
+                    )}
+                    <span className="text-[9px] text-slate-400 block">+${margin.toFixed(2)}</span>
+                  </div>
                 )}
               </div>
               {/* Change */}
@@ -741,7 +945,8 @@ export function Pricing() {
                 {part.invoiceRef && <span className="ml-1 text-[10px] text-slate-300">{part.invoiceRef.substring(0, 15)}</span>}
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

@@ -110,6 +110,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ parts: filtered, total: filtered.length });
     }
 
+    // ──────────────── PATCH — update sell price / markup for individual items ────────────────
+    if (req.method === 'PATCH') {
+      const { partKey, sellPrice, markupPercent } = req.body as {
+        partKey: string;
+        sellPrice?: number;
+        markupPercent?: number;
+      };
+      if (!partKey) return res.status(400).json({ error: 'Missing partKey' });
+
+      const patchFields: any = {};
+      if (sellPrice !== undefined) patchFields.sellPrice = toFV(sellPrice);
+      if (markupPercent !== undefined) patchFields.markupPercent = toFV(markupPercent);
+      patchFields.updatedAt = toFV(new Date().toISOString());
+
+      const patchUrl = `${baseUrl}/parts_catalog/${partKey}?key=${apiKey}&updateMask.fieldPaths=sellPrice&updateMask.fieldPaths=markupPercent&updateMask.fieldPaths=updatedAt`;
+      const patchRes = await fetch(patchUrl, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ fields: patchFields }),
+      });
+      if (!patchRes.ok) return res.status(500).json({ error: 'Failed to update sell price' });
+      return res.status(200).json({ success: true, partKey, sellPrice, markupPercent });
+    }
+
     // ──────────────── POST ────────────────
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
@@ -121,6 +145,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         invoiceRef?: string;
         barcode?: string;
         source?: string; // 'csv' | 'email' | 'barcode' | 'manual'
+        sellPrice?: number;
+        markupPercent?: number;
       }>;
     };
 
@@ -136,12 +162,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const docUrl = `${baseUrl}/parts_catalog/${partKey}?key=${apiKey}`;
       const existRes = await fetch(docUrl, { headers });
       let previousPrice: number | undefined;
+      let existingSellPrice: number | null = null;
+      let existingMarkup: number | null = null;
 
       if (existRes.ok) {
         const existData = await existRes.json();
-        if (existData.fields?.costPrice) {
-          previousPrice = fromFV(existData.fields.costPrice);
-        }
+        if (existData.fields?.costPrice) previousPrice = fromFV(existData.fields.costPrice);
+        if (existData.fields?.sellPrice) existingSellPrice = fromFV(existData.fields.sellPrice);
+        if (existData.fields?.markupPercent) existingMarkup = fromFV(existData.fields.markupPercent);
       }
 
       // Calculate price change
@@ -154,11 +182,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const now = new Date().toISOString();
+
       const doc: Record<string, any> = {
         partName: item.partName,
         partKey,
         supplier: item.supplier,
         costPrice: item.costPrice,
+        sellPrice: item.sellPrice ?? existingSellPrice ?? null,
+        markupPercent: item.markupPercent ?? existingMarkup ?? null,
         previousPrice: previousPrice ?? null,
         priceChangePercent: priceChangePercent ?? null,
         flagged,
