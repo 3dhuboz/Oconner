@@ -296,9 +296,9 @@ function AppContent() {
         </AdminRoute>
       } />
       <Route path="/map" element={
-        <AdminRoute>
+        <ProtectedRoute>
           <LiveMap jobs={jobs} electricians={electricians} />
-        </AdminRoute>
+        </ProtectedRoute>
       } />
       <Route path="/parts" element={
         <AdminRoute>

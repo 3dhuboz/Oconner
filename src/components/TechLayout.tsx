@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ClipboardList, Calendar, User, Zap, LogOut, Wifi, WifiOff, CloudOff, RefreshCw } from 'lucide-react';
+import { ClipboardList, Calendar, User, Zap, LogOut, Wifi, WifiOff, CloudOff, RefreshCw, MapPin } from 'lucide-react';
 import { cn } from '../utils';
 import { useAuth } from '../context/AuthContext';
 import { useSyncStatus } from '../hooks/useOfflineSync';
@@ -20,6 +20,7 @@ export function TechLayout({ children }: TechLayoutProps) {
   const tabs = [
     { name: 'My Jobs', path: '/', icon: ClipboardList },
     { name: 'Today', path: '/today', icon: Calendar },
+    { name: 'Map', path: '/map', icon: MapPin },
     { name: 'Profile', path: '/profile', icon: User },
   ];
 

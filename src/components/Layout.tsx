@@ -34,7 +34,7 @@ export function Layout({ children, jobs = [] }: LayoutProps) {
     { name: 'Dashboard', path: '/', icon: LayoutDashboard, roles: ['dev', 'admin', 'user'] },
     { name: 'Job Board', path: '/jobs', icon: ClipboardList, roles: ['dev', 'admin', 'user'] },
     { name: 'Calendar', path: '/calendar', icon: Calendar, roles: ['dev', 'admin', 'user'] },
-    { name: 'Live Map', path: '/map', icon: MapPin, roles: ['dev', 'admin'] },
+    { name: 'Live Map', path: '/map', icon: MapPin, roles: ['dev', 'admin', 'user'] },
     { name: 'Team', path: '/team', icon: Users, roles: ['dev', 'admin'] },
     { name: 'Parts Catalog', path: '/parts', icon: Package, roles: ['dev', 'admin'] },
     { name: 'Stocktake', path: '/stocktake', icon: Truck, roles: ['dev', 'admin'] },
