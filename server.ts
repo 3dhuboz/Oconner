@@ -70,7 +70,7 @@ async function startServer() {
           <body>
             <script>
               if (window.opener) {
-                window.opener.postMessage({ type: 'OAUTH_AUTH_SUCCESS' }, '*');
+                window.opener.postMessage({ type: 'OAUTH_AUTH_SUCCESS' }, window.location.origin);
                 window.close();
               } else {
                 window.location.href = '/integrations';

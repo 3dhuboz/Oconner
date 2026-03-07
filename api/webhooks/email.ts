@@ -155,7 +155,7 @@ export interface AIExtractionResult {
 async function extractWithAI(emailBody: string, subject: string, from: string): Promise<AIExtractionResult | null> {
   const openaiKey = process.env.OPENAI_API_KEY;
   if (!openaiKey) {
-    console.log('[CloudMailin] No OPENAI_API_KEY — skipping AI extraction');
+    console.log('[Email Webhook] No OPENAI_API_KEY — skipping AI extraction');
     return null;
   }
 
@@ -232,7 +232,7 @@ Overall confidence = average of the 5 critical field confidence scores.`
     });
 
     if (!res.ok) {
-      console.error('[CloudMailin] OpenAI API error:', res.status, await res.text());
+      console.error('[Email Webhook] OpenAI API error:', res.status, await res.text());
       return null;
     }
 
@@ -251,7 +251,7 @@ Overall confidence = average of the 5 critical field confidence scores.`
 
     return parsed;
   } catch (err: any) {
-    console.error('[CloudMailin] AI extraction error:', err.message);
+    console.error('[Email Webhook] AI extraction error:', err.message);
     return null;
   }
 }
@@ -297,16 +297,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const now = new Date();
     const combined = `${subject}\n${emailContent}`;
 
-    console.log(`[CloudMailin] Email from: ${from} | Subject: ${subject}`);
-    console.log(`[CloudMailin] Body keys: ${Object.keys(body).join(', ')}`);
+    console.log(`[Email Webhook] Email from: ${from} | Subject: ${subject}`);
+    console.log(`[Email Webhook] Body keys: ${Object.keys(body).join(', ')}`);
 
     // ── Step 1: Regex extraction ──
     const regex = extractWithRegex(combined, from);
-    console.log('[CloudMailin] Regex extracted:', JSON.stringify(regex, null, 2));
+    console.log('[Email Webhook] Regex extracted:', JSON.stringify(regex, null, 2));
 
     // ── Step 2: AI extraction (fills gaps) ──
     const ai = await extractWithAI(emailContent, subject, from);
-    if (ai) console.log('[CloudMailin] AI extracted:', JSON.stringify(ai, null, 2));
+    if (ai) console.log('[Email Webhook] AI extracted:', JSON.stringify(ai, null, 2));
 
     // ── Step 3: Merge — regex label wins first, then AI fills gaps ──
     const tenantName      = regex.tenantName      || ai?.tenantName      || '';
@@ -394,7 +394,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const apiKey = process.env.VITE_FIREBASE_API_KEY || process.env.VITE_FB_API_KEY;
 
     if (!projectId || !apiKey) {
-      console.error('[CloudMailin] Missing VITE_FIREBASE_PROJECT_ID or VITE_FIREBASE_API_KEY');
+      console.error('[Email Webhook] Missing VITE_FIREBASE_PROJECT_ID or VITE_FIREBASE_API_KEY');
       return res.status(200).json({ success: false, warning: 'Firebase not configured on server' });
     }
 
@@ -415,7 +415,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (authData.idToken) {
         idToken = authData.idToken;
       } else {
-        console.error('[CloudMailin] Auth failed:', authData.error?.message);
+        console.error('[Email Webhook] Auth failed:', authData.error?.message);
       }
     }
 
@@ -432,7 +432,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (anonData.idToken) {
         idToken = anonData.idToken;
       } else {
-        console.error('[CloudMailin] Anonymous auth failed:', anonData.error?.message);
+        console.error('[Email Webhook] Anonymous auth failed:', anonData.error?.message);
         return res.status(200).json({ success: false, warning: 'Authentication failed - enable Anonymous auth in Firebase Console', error: anonData.error?.message });
       }
     }
@@ -491,7 +491,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           if (activeJobs.length > 0) {
             const existingDoc = activeJobs[0].document;
             const existingId = existingDoc.name?.split('/').pop();
-            console.log(`[CloudMailin] Duplicate detected: active job ${existingId} at ${propertyAddress}`);
+            console.log(`[Email Webhook] Duplicate detected: active job ${existingId} at ${propertyAddress}`);
 
             // Append this email as a follow-up note to the existing job
             const existingNotes = existingDoc.fields?.siteNotes?.stringValue || '';
@@ -517,11 +517,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
             duplicateJobId = existingId;
             duplicateAction = 'appended_to_existing';
-            console.log(`[CloudMailin] Follow-up appended to existing job ${existingId}`);
+            console.log(`[Email Webhook] Follow-up appended to existing job ${existingId}`);
           }
         }
       } catch (dupErr: any) {
-        console.warn('[CloudMailin] Duplicate check failed (non-fatal):', dupErr.message);
+        console.warn('[Email Webhook] Duplicate check failed (non-fatal):', dupErr.message);
       }
     }
 
@@ -557,18 +557,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (!firestoreRes.ok) {
       const errText = await firestoreRes.text();
-      console.error('[CloudMailin] Firestore REST error:', firestoreRes.status, errText);
+      console.error('[Email Webhook] Firestore REST error:', firestoreRes.status, errText);
       return res.status(200).json({ success: false, warning: 'Firestore write failed', error: errText });
     }
 
     const result = await firestoreRes.json();
     const docId = result.name?.split('/').pop() || 'unknown';
-    console.log(`[CloudMailin] Job saved: ${docId} | Type: ${jobType} | Urgency: ${urgency} | Method: ${extractionMethod}`);
+    console.log(`[Email Webhook] Job saved: ${docId} | Type: ${jobType} | Urgency: ${urgency} | Method: ${extractionMethod}`);
 
     return res.status(200).json({ success: true, jobId: docId, action: 'created_new', extraction: extractionMethod });
 
   } catch (err: any) {
-    console.error('[CloudMailin] Unhandled error:', err.message, err.stack);
+    console.error('[Email Webhook] Unhandled error:', err.message, err.stack);
     return res.status(200).json({ error: 'Webhook error', details: err.message });
   }
 }

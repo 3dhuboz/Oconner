@@ -107,37 +107,6 @@ You may need to adjust the webhook handler in `server.ts` to parse Mailgun's for
 
 ---
 
-### Option 3: Use CloudMailin (Easiest)
-
-CloudMailin specializes in email-to-webhook and is very developer-friendly.
-
-#### Step 1: Sign Up
-
-1. Go to [CloudMailin](https://www.cloudmailin.com/)
-2. Create a free account
-
-#### Step 2: Create Email Address
-
-1. CloudMailin will give you a temporary email address like `abc123@cloudmailin.net`
-2. Or configure your own domain
-
-#### Step 3: Configure Target
-
-1. Set webhook URL: `https://your-app-domain.com/api/email/inbound`
-2. Choose format: JSON (HTTP POST)
-3. Set attachment handling: Include as base64
-
-#### Step 4: DNS (For Custom Domain)
-
-If using `inbound.wirezrus.com`:
-
-```
-Type: MX
-Host: inbound.wirezrus.com
-Value: mx.cloudmailin.net
-Priority: 10
-```
-
 ---
 
 ## Current Code Status

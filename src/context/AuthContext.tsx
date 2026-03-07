@@ -128,11 +128,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setLicense({ status: 'No License', plan: 'None' });
           }
         } else {
-          // No Firestore - fallback
+          // No Firestore - fallback (least privilege)
           setUser({
             email: fbUser.email!,
             name: fbUser.displayName || 'User',
-            role: 'admin',
+            role: 'user',
             uid: fbUser.uid,
           });
           setLicense({ status: 'Active', plan: 'Offline Mode' });
@@ -145,10 +145,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsLoading(false);
     });
 
-    // Backend monitoring
+    // Backend monitoring — real connectivity check
     const interval = setInterval(() => {
-      setBackendStatus(prev => ({ ...prev, latency: Math.floor(Math.random() * 80) + 20 }));
-    }, 5000);
+      setBackendStatus(prev => ({ ...prev, firebase: !!db, api: navigator.onLine, latency: navigator.onLine ? prev.latency : 0 }));
+    }, 10000);
 
     return () => {
       unsubscribe();

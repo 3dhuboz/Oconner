@@ -4,6 +4,7 @@ import { Job, JobStatus, ContactAttempt, Electrician } from '../types';
 import { format } from 'date-fns';
 import jsPDF from 'jspdf';
 import { PDFDocument, rgb } from 'pdf-lib';
+import DOMPurify from 'dompurify';
 import { 
   ArrowLeft, Phone, Mail, FileText, Calendar as CalendarIcon, 
   CheckCircle2, AlertCircle, Camera, Wrench, DollarSign, Send, Loader2, User,
@@ -2561,7 +2562,7 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
               {job.rawEmailHtml ? (
                 <div
                   className="prose prose-sm max-w-none text-slate-800"
-                  dangerouslySetInnerHTML={{ __html: job.rawEmailHtml }}
+                  dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(job.rawEmailHtml) }}
                 />
               ) : (
                 <pre className="text-sm text-slate-700 whitespace-pre-wrap font-mono leading-relaxed">
