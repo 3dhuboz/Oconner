@@ -574,11 +574,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           /^outlook test message$|^microsoft outlook test/i,
           /\$[0-9]+\.?[0-9]* payment|subscription renewal|auto-renew/i,
         ];
-        const bodyLower = body.toLowerCase();
-        const hasUnsubscribe = /unsubscribe|opt.out|email preferences|manage.*subscription/i.test(bodyLower);
         const isSkippable = skipSenderPatterns.some(p => p.test(fromLower)) ||
-          skipSubjectPatterns.some(p => p.test(subjectLower)) ||
-          hasUnsubscribe;
+          skipSubjectPatterns.some(p => p.test(subjectLower));
         
         if (isSkippable) {
           // Mark as read so we don't re-check it
