@@ -20,7 +20,7 @@ interface DashboardProps {
 const PIPELINE = [
   { key: 'INTAKE', label: 'Intake', color: 'bg-blue-500', ring: 'ring-blue-200' },
   { key: 'SCHEDULING', label: 'Scheduling', color: 'bg-purple-500', ring: 'ring-purple-200' },
-  { key: 'DISPATCHED', label: 'Dispatched', color: 'bg-amber-500', ring: 'ring-amber-200' },
+  { key: 'DISPATCHED', label: 'Dispatched', color: 'bg-[#F5A623]', ring: 'ring-amber-200' },
   { key: 'EXECUTION', label: 'In Field', color: 'bg-orange-500', ring: 'ring-orange-200' },
   { key: 'REVIEW', label: 'Review', color: 'bg-rose-500', ring: 'ring-rose-200' },
   { key: 'CLOSED', label: 'Closed', color: 'bg-emerald-500', ring: 'ring-emerald-200' },
@@ -112,7 +112,7 @@ export function Dashboard({ jobs, electricians }: DashboardProps) {
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     {j.runningLateNotified && (
-                      <span className="text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-bold">NOTIFIED</span>
+                      <span className="text-[10px] bg-amber-100 text-[#E8862A] px-1.5 py-0.5 rounded-full font-bold">NOTIFIED</span>
                     )}
                     <span className="text-xs text-red-600 font-medium">View →</span>
                   </div>
@@ -202,11 +202,11 @@ export function Dashboard({ jobs, electricians }: DashboardProps) {
         <Link to="/calendar" className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:border-slate-300 hover:shadow-md transition-all group">
           <div className="flex items-center gap-2 mb-2">
             <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center">
-              <Calendar className="w-4 h-4 text-amber-600" />
+              <Calendar className="w-4 h-4 text-[#E8862A]" />
             </div>
           </div>
           <p className="text-2xl font-bold text-slate-900">{todayJobs.length}</p>
-          <p className="text-xs font-medium text-slate-500 group-hover:text-amber-600">Today's Jobs</p>
+          <p className="text-xs font-medium text-slate-500 group-hover:text-[#E8862A]">Today's Jobs</p>
         </Link>
 
         <Link to="/team" className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:border-slate-300 hover:shadow-md transition-all group">
@@ -283,7 +283,7 @@ export function Dashboard({ jobs, electricians }: DashboardProps) {
         {/* Quick Actions Widget */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
           <h2 className="text-sm font-bold text-slate-700 flex items-center gap-2 mb-4">
-            <Zap className="w-4 h-4 text-amber-500" /> Quick Actions
+            <Zap className="w-4 h-4 text-[#F5A623]" /> Quick Actions
           </h2>
           <div className="grid grid-cols-3 sm:grid-cols-2 gap-2">
             <Link to="/jobs/new" className="flex flex-col items-center gap-1.5 p-3 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 transition-colors group">
@@ -361,7 +361,7 @@ export function Dashboard({ jobs, electricians }: DashboardProps) {
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col">
           <div className="p-4 border-b border-slate-200 flex justify-between items-center">
             <h2 className="text-sm font-bold text-slate-700 flex items-center gap-2">
-              <Calendar className="w-4 h-4 text-amber-500" /> Today's Schedule
+              <Calendar className="w-4 h-4 text-[#F5A623]" /> Today's Schedule
             </h2>
             <Link to="/calendar" className="text-xs font-medium text-indigo-600 hover:text-indigo-700">Calendar</Link>
           </div>
@@ -383,7 +383,7 @@ export function Dashboard({ jobs, electricians }: DashboardProps) {
                               {format(new Date(job.scheduledDate!), 'a')}
                             </p>
                           </div>
-                          <div className="w-0.5 h-10 bg-amber-400 rounded-full shrink-0" />
+                          <div className="w-0.5 h-10 bg-[#F5A623] rounded-full shrink-0" />
                           <div className="min-w-0">
                             <p className="text-sm font-semibold text-slate-800 truncate">{job.title}</p>
                             <p className="text-xs text-slate-500 truncate">{tech?.name || 'Unassigned'} • {job.propertyAddress}</p>
@@ -426,7 +426,7 @@ export function Dashboard({ jobs, electricians }: DashboardProps) {
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       {tech.today > 0 && (
-                        <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 text-[10px] font-bold rounded-full">
+                        <span className="px-1.5 py-0.5 bg-amber-100 text-[#E8862A] text-[10px] font-bold rounded-full">
                           {tech.today} today
                         </span>
                       )}

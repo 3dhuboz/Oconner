@@ -667,7 +667,7 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
                 <p className={cn(
                   "text-5xl font-mono font-bold tracking-tight",
                   clockStatus === 'working' ? "text-emerald-700" :
-                  clockStatus === 'on_break' ? "text-amber-600" :
+                  clockStatus === 'on_break' ? "text-[#E8862A]" :
                   clockStatus === 'clocked_off' ? "text-slate-700" :
                   "text-slate-300"
                 )}>
@@ -702,7 +702,7 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
                     <div className="flex gap-3">
                       <button
                         onClick={() => addEntry('break_start')}
-                        className="flex-1 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
+                        className="flex-1 py-3 bg-[#F5A623] hover:bg-[#E8862A] text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
                       >
                         <Coffee className="w-4 h-4" /> Break
                       </button>
@@ -745,7 +745,7 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
                           "font-semibold capitalize",
                           entry.type === 'clock_on' ? "text-emerald-600" :
                           entry.type === 'clock_off' ? "text-rose-600" :
-                          entry.type === 'break_start' ? "text-amber-600" :
+                          entry.type === 'break_start' ? "text-[#E8862A]" :
                           "text-blue-600"
                         )}>
                           {entry.type.replace('_', ' ')}
@@ -921,7 +921,7 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
                         {partsCatalog.length > 0 && (
                           <button
                             onClick={() => setShowPartPicker(true)}
-                            className="flex-1 py-3.5 bg-amber-50 border-2 border-amber-200 text-amber-700 rounded-xl text-sm font-bold flex items-center justify-center gap-1.5 active:scale-[0.98] transition-all"
+                            className="flex-1 py-3.5 bg-amber-50 border-2 border-amber-200 text-[#E8862A] rounded-xl text-sm font-bold flex items-center justify-center gap-1.5 active:scale-[0.98] transition-all"
                           >
                             <Package className="w-4 h-4" /> From Catalog
                           </button>
@@ -952,7 +952,7 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
                           value={partSearch}
                           onChange={e => setPartSearch(e.target.value)}
                           placeholder="Search parts..."
-                          className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                          className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:ring-2 focus:ring-[#F5A623] focus:border-[#F5A623]"
                           autoFocus
                         />
                       </div>
@@ -978,7 +978,7 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
                               </div>
                               <div className="flex items-center gap-2 shrink-0">
                                 <span className="text-xs font-bold text-slate-500">${part.defaultCost.toFixed(2)}</span>
-                                <Plus className="w-4 h-4 text-amber-500" />
+                                <Plus className="w-4 h-4 text-[#F5A623]" />
                               </div>
                             </button>
                           ))
@@ -1016,7 +1016,7 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
                 ))}
                 {job.status === 'EXECUTION' && (
                   uploading ? (
-                    <div className="aspect-square rounded-xl border-2 border-dashed border-amber-300 bg-amber-50 flex flex-col items-center justify-center text-amber-500">
+                    <div className="aspect-square rounded-xl border-2 border-dashed border-amber-300 bg-amber-50 flex flex-col items-center justify-center text-[#F5A623]">
                       <Loader2 className="w-6 h-6 mb-1 animate-spin" />
                       <span className="text-[10px] font-medium">Uploading...</span>
                     </div>
@@ -1385,7 +1385,7 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
                     'px-3 py-1.5 rounded-full text-xs font-bold',
                     job.paymentStatus === 'paid' ? 'bg-emerald-600 text-white' :
                     job.paymentStatus === 'failed' ? 'bg-red-100 text-red-700' :
-                    'bg-amber-100 text-amber-700'
+                    'bg-amber-100 text-[#E8862A]'
                   )}>
                     {job.paymentStatus === 'paid' ? '✓ PAID' :
                      job.paymentStatus === 'failed' ? '✗ FAILED' :
@@ -1488,7 +1488,7 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
                 </h3>
                 <p className={cn(
                   'text-sm mt-1',
-                  allPassed ? 'text-emerald-700' : 'text-amber-700'
+                  allPassed ? 'text-emerald-700' : 'text-[#E8862A]'
                 )}>
                   {allPassed
                     ? 'All checks passed. Ready to submit this job.'
@@ -1516,7 +1516,7 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
                         ? 'bg-emerald-500 text-white'
                         : item.required
                           ? 'bg-red-500 text-white'
-                          : 'bg-amber-400 text-white'
+                          : 'bg-[#F5A623] text-white'
                     )}>
                       {item.passed ? '✓' : item.required ? '✗' : '!'}
                     </div>
@@ -1531,7 +1531,7 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
                         <p className="text-xs text-red-600 mt-0.5">Required — go back and complete this</p>
                       )}
                       {!item.passed && !item.required && (
-                        <p className="text-xs text-amber-600 mt-0.5">Recommended — you can override if not needed</p>
+                        <p className="text-xs text-[#E8862A] mt-0.5">Recommended — you can override if not needed</p>
                       )}
                     </div>
                   </div>
@@ -1548,7 +1548,7 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
                       value={overrideReason}
                       onChange={e => setOverrideReason(e.target.value)}
                       placeholder="e.g. No parts required for this job"
-                      className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                      className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#F5A623]"
                     />
                   </div>
                 )}
@@ -1571,7 +1571,7 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
                 ) : (
                   <button
                     onClick={() => handleConfirmSubmit(true)}
-                    className="w-full py-3.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold text-base transition-colors flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20"
+                    className="w-full py-3.5 bg-[#F5A623] hover:bg-[#E8862A] text-white rounded-xl font-bold text-base transition-colors flex items-center justify-center gap-2 shadow-lg shadow-[#F5A623]/20"
                   >
                     <CheckCircle2 className="w-5 h-5" />
                     Submit Anyway (Override)

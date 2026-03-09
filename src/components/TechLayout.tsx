@@ -27,11 +27,9 @@ export function TechLayout({ children }: TechLayoutProps) {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
       {/* Top header — compact, branded */}
-      <header className="bg-slate-900 text-white px-4 py-3 flex items-center justify-between shrink-0 safe-top">
+      <header className="bg-[#1a1a2e] text-white px-4 py-3 flex items-center justify-between shrink-0 safe-top">
         <div className="flex items-center gap-2.5">
-          <div className="bg-amber-500 p-1.5 rounded-lg">
-            <Zap className="w-4 h-4 text-slate-900" />
-          </div>
+          <img src="/logo.png" alt="Wirez R Us" className="w-8 h-8 object-contain" />
           <div>
             <span className="text-sm font-bold tracking-tight">Wirez R Us</span>
             <span className="text-[10px] text-slate-400 ml-2">Tech Portal</span>
@@ -45,7 +43,7 @@ export function TechLayout({ children }: TechLayoutProps) {
               "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold transition-colors",
               isOnline
                 ? pendingCount > 0
-                  ? "bg-amber-500/20 text-amber-400"
+                  ? "bg-[#F5A623]/20 text-[#F5A623]"
                   : "bg-emerald-500/20 text-emerald-400"
                 : "bg-rose-500/20 text-rose-400"
             )}
@@ -90,12 +88,12 @@ export function TechLayout({ children }: TechLayoutProps) {
                 className={cn(
                   "flex flex-col items-center gap-0.5 py-2 px-4 rounded-lg transition-colors min-w-[64px]",
                   isActive
-                    ? "text-amber-600"
+                    ? "text-[#E8862A]"
                     : "text-slate-400"
                 )}
               >
                 <Icon className={cn("w-5 h-5", isActive && "stroke-[2.5]")} />
-                <span className={cn("text-[10px] font-semibold", isActive && "text-amber-600")}>
+                <span className={cn("text-[10px] font-semibold", isActive && "text-[#E8862A]")}>
                   {tab.name}
                 </span>
               </Link>

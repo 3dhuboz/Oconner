@@ -11,7 +11,7 @@ const IntegrationCard = ({ icon: Icon, title, status, statusColor, children, onA
   const statusStyles: Record<string, string> = {
     green: 'bg-emerald-100 text-emerald-700',
     slate: 'bg-slate-100 text-slate-600',
-    amber: 'bg-amber-100 text-amber-700',
+    amber: 'bg-amber-100 text-[#E8862A]',
   };
 
   return (
@@ -612,7 +612,7 @@ export function Integrations() {
             </div>
           )}
           {!xeroExpanded && !xeroConnected && (
-            <div className="px-6 py-3 bg-amber-50 border-t border-amber-100 text-xs text-amber-700 flex items-center justify-between">
+            <div className="px-6 py-3 bg-amber-50 border-t border-amber-100 text-xs text-[#E8862A] flex items-center justify-between">
               <span className="flex items-center gap-2"><AlertCircle className="w-3.5 h-3.5" /> Add your Client ID and Client Secret to connect Xero</span>
               <button onClick={() => setXeroExpanded(true)} className="text-amber-800 font-semibold hover:underline">Set up →</button>
             </div>
@@ -632,7 +632,7 @@ export function Integrations() {
                   "inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium",
                   gmailConfig.enabled && isGmailConfigured ? 'bg-emerald-100 text-emerald-700' :
                   isGmailConfigured ? 'bg-blue-100 text-blue-700' :
-                  'bg-amber-100 text-amber-700'
+                  'bg-amber-100 text-[#E8862A]'
                 )}>
                   {gmailConfig.enabled && isGmailConfigured ? <CheckCircle2 className="w-3 h-3" /> :
                    isGmailConfigured ? <Clock className="w-3 h-3" /> :
@@ -850,7 +850,7 @@ export function Integrations() {
             {!isGmailConfigured && (
               <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 space-y-2">
                 <p className="font-semibold flex items-center gap-1.5"><AlertCircle className="w-4 h-4" /> Gmail Setup Guide</p>
-                <ol className="list-decimal list-inside text-xs text-amber-700 space-y-1">
+                <ol className="list-decimal list-inside text-xs text-[#E8862A] space-y-1">
                   <li>Create a Gmail or Google Workspace address for receiving work orders</li>
                   <li>Go to <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-medium">Google Cloud Console</a> → Create OAuth 2.0 credentials (Web App)</li>
                   <li>Enable the <strong>Gmail API</strong> in your Google Cloud project</li>
@@ -868,7 +868,7 @@ export function Integrations() {
           icon={Database}
           title="Firebase Database"
           status={{ text: backendStatus.firebase ? 'Connected' : 'Not Configured', color: backendStatus.firebase ? 'green' : 'amber' }}
-          statusColor={{ bg: 'bg-amber-500/10', text: 'text-amber-500' }}
+          statusColor={{ bg: 'bg-[#F5A623]/10', text: 'text-[#F5A623]' }}
         >
           <p>Connect your Firebase project to sync job data, photos, and electrician field updates in real-time.</p>
           <p className="text-xs">Configuration is managed in the <Link to="/admin" className="text-blue-600 underline">Dev Console</Link>.</p>

@@ -190,9 +190,7 @@ export function Purchase() {
       <div className="bg-slate-900 text-white py-6 px-4">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="bg-amber-500 p-2 rounded-lg">
-              <Zap className="w-6 h-6 text-slate-900" />
-            </div>
+            <img src="/logo.png" alt="Wirez R Us" className="w-10 h-10 object-contain" />
             <span className="text-xl font-bold tracking-tight">Wirez R Us</span>
           </div>
           <div className="flex items-center gap-4">
@@ -215,9 +213,9 @@ export function Purchase() {
             const isActive = stepMap.indexOf(step) >= i;
             return (
               <React.Fragment key={label}>
-                {i > 0 && <div className={`w-12 h-0.5 ${isActive ? 'bg-amber-500' : 'bg-slate-200'}`} />}
+                {i > 0 && <div className={`w-12 h-0.5 ${isActive ? 'bg-[#F5A623]' : 'bg-slate-200'}`} />}
                 <div className="flex items-center gap-2">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${isActive ? 'bg-amber-500 text-slate-900' : 'bg-slate-200 text-slate-500'}`}>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${isActive ? 'bg-[#F5A623] text-slate-900' : 'bg-slate-200 text-slate-500'}`}>
                     {i + 1}
                   </div>
                   <span className={`text-sm font-medium ${isActive ? 'text-slate-900' : 'text-slate-400'}`}>{label}</span>
@@ -242,12 +240,12 @@ export function Purchase() {
                   onClick={() => setSelectedPlan(p.id)}
                   className={`relative p-6 rounded-2xl border-2 cursor-pointer transition-all ${
                     selectedPlan === p.id
-                      ? 'border-amber-500 bg-amber-50 shadow-lg'
+                      ? 'border-[#F5A623] bg-amber-50 shadow-lg'
                       : 'border-slate-200 bg-white hover:border-amber-200'
                   }`}
                 >
                   {p.recommended && (
-                    <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-amber-500 text-slate-900 text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full">
+                    <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-[#F5A623] text-slate-900 text-[10px] font-bold uppercase tracking-wider px-3 py-1 rounded-full">
                       Most Popular
                     </span>
                   )}
@@ -289,7 +287,7 @@ export function Purchase() {
               </div>
               <button
                 onClick={() => setStep('details')}
-                className="inline-flex items-center gap-2 px-8 py-3 bg-amber-500 text-slate-900 rounded-xl font-bold text-lg hover:bg-amber-400 transition-colors"
+                className="inline-flex items-center gap-2 px-8 py-3 bg-[#F5A623] text-slate-900 rounded-xl font-bold text-lg hover:bg-[#F5A623] transition-colors"
               >
                 Continue <ArrowRight className="w-5 h-5" />
               </button>
@@ -313,7 +311,7 @@ export function Purchase() {
                   required
                   value={form.companyName}
                   onChange={e => setForm(p => ({ ...p, companyName: e.target.value }))}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#F5A623] focus:border-[#F5A623]"
                   placeholder="e.g. Spark Electrical"
                 />
               </div>
@@ -323,7 +321,7 @@ export function Purchase() {
                   type="text"
                   value={form.contactName}
                   onChange={e => setForm(p => ({ ...p, contactName: e.target.value }))}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#F5A623] focus:border-[#F5A623]"
                   placeholder="e.g. John Smith"
                 />
               </div>
@@ -334,7 +332,7 @@ export function Purchase() {
                   required
                   value={form.contactEmail}
                   onChange={e => setForm(p => ({ ...p, contactEmail: e.target.value }))}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#F5A623] focus:border-[#F5A623]"
                   placeholder="you@company.com"
                 />
               </div>
@@ -344,7 +342,7 @@ export function Purchase() {
                   type="tel"
                   value={form.contactPhone}
                   onChange={e => setForm(p => ({ ...p, contactPhone: e.target.value }))}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#F5A623] focus:border-[#F5A623]"
                   placeholder="04XX XXX XXX"
                 />
               </div>
@@ -356,7 +354,7 @@ export function Purchase() {
                   minLength={6}
                   value={form.password}
                   onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#F5A623] focus:border-[#F5A623]"
                   placeholder="••••••••"
                 />
               </div>
@@ -372,7 +370,7 @@ export function Purchase() {
                   }
                   setStep('confirm');
                 }}
-                className="inline-flex items-center gap-2 px-8 py-3 bg-amber-500 text-slate-900 rounded-xl font-bold hover:bg-amber-400 transition-colors"
+                className="inline-flex items-center gap-2 px-8 py-3 bg-[#F5A623] text-slate-900 rounded-xl font-bold hover:bg-[#F5A623] transition-colors"
               >
                 Review Order <ArrowRight className="w-5 h-5" />
               </button>
@@ -409,7 +407,7 @@ export function Purchase() {
 
               <div className="flex items-center justify-between text-lg">
                 <p className="font-bold text-slate-900">Total</p>
-                <p className="font-bold text-amber-600 text-2xl">${totalMonthly}/mo</p>
+                <p className="font-bold text-[#E8862A] text-2xl">${totalMonthly}/mo</p>
               </div>
 
               <div className="bg-slate-50 rounded-xl p-4 space-y-2 text-sm">
@@ -423,7 +421,7 @@ export function Purchase() {
               <button
                 onClick={handlePurchase}
                 disabled={isProcessing}
-                className="w-full py-4 bg-amber-500 text-slate-900 rounded-xl font-bold text-lg hover:bg-amber-400 transition-colors flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                className="w-full py-4 bg-[#F5A623] text-slate-900 rounded-xl font-bold text-lg hover:bg-[#F5A623] transition-colors flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
               >
                 {isProcessing ? (
                   <><Loader2 className="w-5 h-5 animate-spin" /> Creating your account...</>
@@ -434,7 +432,7 @@ export function Purchase() {
 
               <p className="text-xs text-slate-400 text-center">
                 By continuing, you agree to the Wirez R Us Terms of Service. Need help?{' '}
-                <a href="https://www.facebook.com/pennywiseitoz" target="_blank" rel="noopener noreferrer" className="text-amber-600 hover:underline">
+                <a href="https://www.facebook.com/pennywiseitoz" target="_blank" rel="noopener noreferrer" className="text-[#E8862A] hover:underline">
                   Contact Penny Wise I.T
                 </a>
               </p>
@@ -451,9 +449,7 @@ export function Purchase() {
       <footer className="bg-slate-900 text-slate-400 py-8 px-4 mt-16">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="bg-amber-500 p-1.5 rounded-lg">
-              <Zap className="w-4 h-4 text-slate-900" />
-            </div>
+            <img src="/logo.png" alt="Wirez R Us" className="w-8 h-8 object-contain" />
             <span className="font-bold text-white">Wirez R Us</span>
             <span className="text-sm">Field Management System</span>
           </div>

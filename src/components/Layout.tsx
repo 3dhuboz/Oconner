@@ -59,14 +59,12 @@ export function Layout({ children, jobs = [] }: LayoutProps) {
 
       {/* Sidebar — hidden on mobile, slide-in when open */}
       <aside className={cn(
-        "fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-white flex flex-col shrink-0 transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0",
+        "fixed inset-y-0 left-0 z-50 w-64 bg-[#1a1a2e] text-white flex flex-col shrink-0 transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0",
         sidebarOpen ? "translate-x-0" : "-translate-x-full"
       )}>
         <div className="p-4 sm:p-6 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="bg-amber-500 p-2 rounded-lg">
-              <Zap className="w-5 h-5 sm:w-6 sm:h-6 text-slate-900" />
-            </div>
+            <img src="/logo.png" alt="Wirez R Us" className="w-9 h-9 sm:w-10 sm:h-10 object-contain" />
             <span className="text-lg sm:text-xl font-bold tracking-tight">Wirez R Us</span>
           </div>
           {/* Close button on mobile */}
@@ -93,14 +91,14 @@ export function Layout({ children, jobs = [] }: LayoutProps) {
                 className={cn(
                   "flex items-center gap-3 px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl transition-colors",
                   isActive 
-                    ? "bg-amber-500/10 text-amber-500" 
+                    ? "bg-[#F5A623]/10 text-[#F5A623]" 
                     : "text-slate-400 hover:bg-slate-800 hover:text-white"
                 )}
               >
                 <Icon className="w-5 h-5 shrink-0" />
                 <span className="font-medium text-sm sm:text-base flex-1">{item.name}</span>
                 {needsReviewCount > 0 && (
-                  <span className="ml-auto bg-amber-500 text-slate-900 text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center leading-tight">
+                  <span className="ml-auto bg-[#F5A623] text-[#1a1a2e] text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center leading-tight">
                     {needsReviewCount}
                   </span>
                 )}
@@ -109,9 +107,9 @@ export function Layout({ children, jobs = [] }: LayoutProps) {
           })}
         </nav>
 
-        <div className="p-3 sm:p-4 border-t border-slate-800">
-          <div className="flex items-center gap-3 px-3 sm:px-4 py-2 bg-slate-800/50 rounded-xl mb-3">
-            <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold shrink-0">
+        <div className="p-3 sm:p-4 border-t border-[#2a2a42]">
+          <div className="flex items-center gap-3 px-3 sm:px-4 py-2 bg-[#2a2a42]/50 rounded-xl mb-3">
+            <div className="w-8 h-8 rounded-full bg-[#F5A623] text-[#1a1a2e] flex items-center justify-center text-xs font-bold shrink-0">
               {user.name.charAt(0)}
             </div>
             <div className="flex flex-col overflow-hidden">
@@ -525,7 +523,7 @@ function forwardForm() {
               a.click();
               URL.revokeObjectURL(url);
             }}
-            className="w-full flex items-center gap-3 px-3 sm:px-4 py-2 text-slate-500 hover:text-amber-400 hover:bg-slate-800 rounded-lg transition-colors text-xs font-medium mb-1"
+            className="w-full flex items-center gap-3 px-3 sm:px-4 py-2 text-slate-500 hover:text-[#F5A623] hover:bg-slate-800 rounded-lg transition-colors text-xs font-medium mb-1"
           >
             <Download className="w-3.5 h-3.5 shrink-0" />
             <span className="truncate">Work Order Template</span>
@@ -534,7 +532,7 @@ function forwardForm() {
             href="https://www.facebook.com/pennywiseitoz"
             target="_blank"
             rel="noopener noreferrer"
-            className="w-full flex items-center gap-3 px-3 sm:px-4 py-2 text-slate-500 hover:text-amber-400 hover:bg-slate-800 rounded-lg transition-colors text-xs font-medium mb-1"
+            className="w-full flex items-center gap-3 px-3 sm:px-4 py-2 text-slate-500 hover:text-[#F5A623] hover:bg-slate-800 rounded-lg transition-colors text-xs font-medium mb-1"
           >
             <Headphones className="w-3.5 h-3.5 shrink-0" /> <span className="truncate">Support by Penny Wise I.T</span>
             <ExternalLink className="w-3 h-3 ml-auto shrink-0" />

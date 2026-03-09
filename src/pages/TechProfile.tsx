@@ -44,7 +44,7 @@ export function TechProfile() {
       {/* Profile card */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="bg-slate-900 px-5 py-6 flex items-center gap-4">
-          <div className="w-14 h-14 rounded-full bg-amber-500 flex items-center justify-center text-xl font-bold text-slate-900 shrink-0">
+          <div className="w-14 h-14 rounded-full bg-[#F5A623] flex items-center justify-center text-xl font-bold text-slate-900 shrink-0">
             {user.name.charAt(0)}
           </div>
           <div className="text-white min-w-0">
@@ -142,7 +142,7 @@ export function TechProfile() {
       {/* App info */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
         <div className="flex items-center gap-2.5 mb-4">
-          <div className="bg-amber-500 p-1.5 rounded-lg">
+          <div className="bg-[#F5A623] p-1.5 rounded-lg">
             <Zap className="w-4 h-4 text-slate-900" />
           </div>
           <div>
@@ -154,7 +154,7 @@ export function TechProfile() {
           href="https://www.facebook.com/pennywiseitoz"
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-2 text-xs text-slate-500 hover:text-amber-600 transition-colors"
+          className="flex items-center gap-2 text-xs text-slate-500 hover:text-[#E8862A] transition-colors"
         >
           <Headphones className="w-3.5 h-3.5" /> Support by Penny Wise I.T
           <ExternalLink className="w-3 h-3 ml-auto" />

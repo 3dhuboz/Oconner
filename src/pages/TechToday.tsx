@@ -41,7 +41,7 @@ export function TechToday({ jobs, electricians }: TechTodayProps) {
       {/* Header */}
       <div>
         <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-          <Calendar className="w-5 h-5 text-amber-500" /> Today
+          <Calendar className="w-5 h-5 text-[#F5A623]" /> Today
         </h1>
         <p className="text-sm text-slate-500 mt-0.5">
           {format(new Date(), 'EEEE, d MMMM yyyy')}
@@ -50,7 +50,7 @@ export function TechToday({ jobs, electricians }: TechTodayProps) {
           <p className="text-xs text-amber-800 italic leading-relaxed">
             "{dailyQuote.text}"
           </p>
-          <p className="text-[10px] text-amber-600 font-medium mt-1">
+          <p className="text-[10px] text-[#E8862A] font-medium mt-1">
             — {dailyQuote.author}
           </p>
         </div>
@@ -59,8 +59,8 @@ export function TechToday({ jobs, electricians }: TechTodayProps) {
       {/* Summary strip */}
       <div className="flex gap-3">
         <div className="flex-1 bg-amber-50 border border-amber-200 rounded-xl p-3 text-center">
-          <p className="text-2xl font-bold text-amber-700">{remaining.length}</p>
-          <p className="text-[11px] font-medium text-amber-600">Remaining</p>
+          <p className="text-2xl font-bold text-[#E8862A]">{remaining.length}</p>
+          <p className="text-[11px] font-medium text-[#E8862A]">Remaining</p>
         </div>
         <div className="flex-1 bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-center">
           <p className="text-2xl font-bold text-emerald-700">{completed.length}</p>

@@ -15,7 +15,7 @@ const TECH_COLORS = [
   { bg: 'bg-blue-100', border: 'border-blue-300', text: 'text-blue-800', dot: 'bg-blue-500', hover: 'hover:bg-blue-200', ring: 'ring-blue-400' },
   { bg: 'bg-emerald-100', border: 'border-emerald-300', text: 'text-emerald-800', dot: 'bg-emerald-500', hover: 'hover:bg-emerald-200', ring: 'ring-emerald-400' },
   { bg: 'bg-violet-100', border: 'border-violet-300', text: 'text-violet-800', dot: 'bg-violet-500', hover: 'hover:bg-violet-200', ring: 'ring-violet-400' },
-  { bg: 'bg-amber-100', border: 'border-amber-300', text: 'text-amber-800', dot: 'bg-amber-500', hover: 'hover:bg-amber-200', ring: 'ring-amber-400' },
+  { bg: 'bg-amber-100', border: 'border-amber-300', text: 'text-amber-800', dot: 'bg-[#F5A623]', hover: 'hover:bg-amber-200', ring: 'ring-[#F5A623]' },
   { bg: 'bg-rose-100', border: 'border-rose-300', text: 'text-rose-800', dot: 'bg-rose-500', hover: 'hover:bg-rose-200', ring: 'ring-rose-400' },
   { bg: 'bg-cyan-100', border: 'border-cyan-300', text: 'text-cyan-800', dot: 'bg-cyan-500', hover: 'hover:bg-cyan-200', ring: 'ring-cyan-400' },
   { bg: 'bg-orange-100', border: 'border-orange-300', text: 'text-orange-800', dot: 'bg-orange-500', hover: 'hover:bg-orange-200', ring: 'ring-orange-400' },
@@ -29,7 +29,7 @@ const UNASSIGNED_COLOR = { bg: 'bg-slate-100', border: 'border-slate-300', text:
 const STATUS_COLORS: Record<string, string> = {
   INTAKE: 'bg-blue-500',
   SCHEDULING: 'bg-purple-500',
-  DISPATCHED: 'bg-amber-500',
+  DISPATCHED: 'bg-[#F5A623]',
   EXECUTION: 'bg-orange-500',
   REVIEW: 'bg-rose-500',
   CLOSED: 'bg-emerald-500',

@@ -180,7 +180,7 @@ function StatCard({ label, value, total, color, prefix = '' }: { label: string; 
     indigo: 'bg-indigo-50 text-indigo-700 border-indigo-100',
     emerald: 'bg-emerald-50 text-emerald-700 border-emerald-100',
     sky: 'bg-sky-50 text-sky-700 border-sky-100',
-    amber: 'bg-amber-50 text-amber-700 border-amber-100',
+    amber: 'bg-amber-50 text-[#E8862A] border-amber-100',
   };
   return (
     <div className={cn("p-5 rounded-2xl border", colors[color])}>
@@ -329,7 +329,7 @@ function TenantsTab({ tenants, licenses, users, showAdd, setShowAdd, editing, se
                   <span className="text-sm font-bold text-slate-700">${monthlyTotal}/mo</span>
                   <button onClick={() => setEditing(t)} className="p-1.5 hover:bg-slate-100 rounded-lg"><Pencil className="w-3.5 h-3.5 text-slate-400" /></button>
                   <button onClick={() => handleToggleStatus(t)} className="p-1.5 hover:bg-slate-100 rounded-lg">
-                    {t.status === 'active' ? <EyeOff className="w-3.5 h-3.5 text-amber-500" /> : <Eye className="w-3.5 h-3.5 text-emerald-500" />}
+                    {t.status === 'active' ? <EyeOff className="w-3.5 h-3.5 text-[#F5A623]" /> : <Eye className="w-3.5 h-3.5 text-emerald-500" />}
                   </button>
                   <button onClick={() => handleDelete(t)} className="p-1.5 hover:bg-rose-50 rounded-lg"><Trash2 className="w-3.5 h-3.5 text-rose-400" /></button>
                 </div>
@@ -589,10 +589,10 @@ function LicensesTab({ licenses, tenants, users, showAdd, setShowAdd, addLog }: 
                   <td className="px-4 py-3 text-xs text-slate-600">{l.assignedEmail || l.assignedName || '—'}</td>
                   <td className="px-4 py-3">
                     <span className={cn("px-2 py-0.5 rounded-full text-[10px] font-bold uppercase",
-                      l.status === 'active' ? 'bg-emerald-100 text-emerald-700' : l.status === 'suspended' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'
+                      l.status === 'active' ? 'bg-emerald-100 text-emerald-700' : l.status === 'suspended' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-[#E8862A]'
                     )}>{l.status}</span>
                   </td>
-                  <td className="px-4 py-3 text-xs">{l.isIncluded ? <span className="text-emerald-600 font-medium">Included</span> : <span className="text-amber-600 font-medium">$29/mo</span>}</td>
+                  <td className="px-4 py-3 text-xs">{l.isIncluded ? <span className="text-emerald-600 font-medium">Included</span> : <span className="text-[#E8862A] font-medium">$29/mo</span>}</td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-1">
                       {l.status === 'active' ? (

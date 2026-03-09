@@ -1,8 +1,16 @@
 @import "tailwindcss";
 
+/* ─── Wirez R Us Brand Colors ─── */
+:root {
+  --brand-gold: #F5A623;
+  --brand-orange: #E8862A;
+  --brand-charcoal: #1a1a2e;
+  --brand-dark: #2D2D2D;
+}
+
 @layer components {
   .btn-primary {
-    @apply px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-medium hover:bg-slate-800 transition-colors shadow-sm;
+    @apply px-4 py-2 bg-[var(--brand-charcoal)] text-white rounded-lg text-sm font-medium hover:bg-[#2a2a42] transition-colors shadow-sm;
   }
 }
 

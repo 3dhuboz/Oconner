@@ -43,14 +43,12 @@ export function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-[#1a1a2e] flex items-center justify-center p-4">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden">
-        <div className="bg-amber-500 p-6 text-center">
-          <div className="w-16 h-16 bg-slate-900 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
-            <Zap className="w-8 h-8 text-amber-500" />
-          </div>
-          <h1 className="text-2xl font-bold text-slate-900">Wirez R Us</h1>
-          <p className="text-slate-900/80 font-medium">Field Management System</p>
+        <div className="bg-gradient-to-br from-[#F5A623] to-[#E8862A] p-6 text-center">
+          <img src="/logo.png" alt="Wirez R Us" className="w-20 h-20 object-contain mx-auto mb-3" />
+          <h1 className="text-2xl font-bold text-[#1a1a2e]">Wirez R Us</h1>
+          <p className="text-[#1a1a2e]/70 font-medium">Electrical &amp; Smoke Alarms</p>
         </div>
 
         <div className="p-8">
@@ -66,7 +64,7 @@ export function Login() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all"
+                  className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#F5A623] focus:border-[#F5A623] transition-all"
                   placeholder="user@company.com"
                 />
               </div>
@@ -83,7 +81,7 @@ export function Login() {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all"
+                  className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#F5A623] focus:border-[#F5A623] transition-all"
                   placeholder="••••••••"
                   minLength={6}
                 />
@@ -100,7 +98,7 @@ export function Login() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold transition-colors flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+              className="w-full py-3 bg-[#1a1a2e] hover:bg-[#2a2a42] text-white rounded-xl font-bold transition-colors flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
             >
               {isSubmitting ? (
                 <>
@@ -129,7 +127,7 @@ export function Login() {
             <button
               type="button"
               onClick={() => navigate('/purchase')}
-              className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-3 border-2 border-amber-300 bg-amber-50 rounded-xl text-amber-800 font-bold hover:bg-amber-100 transition-colors"
+              className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-3 border-2 border-[#F5A623]/40 bg-[#F5A623]/10 rounded-xl text-[#E8862A] font-bold hover:bg-[#F5A623]/20 transition-colors"
             >
               Purchase a License &amp; Get Started
             </button>
@@ -140,7 +138,7 @@ export function Login() {
               href="https://www.facebook.com/pennywiseitoz"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs text-slate-400 hover:text-amber-600 transition-colors"
+              className="text-xs text-slate-400 hover:text-[#F5A623] transition-colors"
             >
               Need help? Contact Penny Wise I.T
             </a>

@@ -15,7 +15,7 @@ interface TechDashboardProps {
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  DISPATCHED: { label: 'Dispatched', color: 'text-amber-700', bg: 'bg-amber-50 border-amber-200' },
+  DISPATCHED: { label: 'Dispatched', color: 'text-[#E8862A]', bg: 'bg-amber-50 border-amber-200' },
   EXECUTION: { label: 'In Progress', color: 'text-orange-700', bg: 'bg-orange-50 border-orange-200' },
   SCHEDULING: { label: 'Scheduled', color: 'text-purple-700', bg: 'bg-purple-50 border-purple-200' },
   REVIEW: { label: 'Under Review', color: 'text-rose-700', bg: 'bg-rose-50 border-rose-200' },
@@ -74,8 +74,8 @@ export function TechDashboard({ jobs, electricians }: TechDashboardProps) {
           <p className="text-[11px] font-medium text-orange-600">In Progress</p>
         </div>
         <div className="flex-1 bg-amber-50 border border-amber-200 rounded-xl p-3 text-center">
-          <p className="text-2xl font-bold text-amber-700">{dispatched.length}</p>
-          <p className="text-[11px] font-medium text-amber-600">Dispatched</p>
+          <p className="text-2xl font-bold text-[#E8862A]">{dispatched.length}</p>
+          <p className="text-[11px] font-medium text-[#E8862A]">Dispatched</p>
         </div>
         <div className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-3 text-center">
           <p className="text-2xl font-bold text-slate-700">{todayJobs.length}</p>
@@ -128,7 +128,7 @@ export function TechDashboard({ jobs, electricians }: TechDashboardProps) {
       {todayJobs.length > 0 && inProgress.length === 0 && (
         <div>
           <h2 className="text-sm font-bold text-slate-700 flex items-center gap-2 mb-3">
-            <Calendar className="w-4 h-4 text-amber-500" /> Today's Schedule
+            <Calendar className="w-4 h-4 text-[#F5A623]" /> Today's Schedule
           </h2>
           <div className="space-y-2">
             {todayJobs.map(job => (
@@ -145,7 +145,7 @@ export function TechDashboard({ jobs, electricians }: TechDashboardProps) {
                     {format(new Date(job.scheduledDate!), 'a')}
                   </p>
                 </div>
-                <div className="w-0.5 h-10 bg-amber-400 rounded-full shrink-0" />
+                <div className="w-0.5 h-10 bg-[#F5A623] rounded-full shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-slate-800 truncate">{job.title}</p>
                   <p className="text-xs text-slate-500 truncate flex items-center gap-1">

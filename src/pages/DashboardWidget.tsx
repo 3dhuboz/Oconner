@@ -15,7 +15,7 @@ interface DashboardWidgetProps {
 const PIPELINE = [
   { key: 'INTAKE', label: 'In', color: 'bg-blue-500' },
   { key: 'SCHEDULING', label: 'Sch', color: 'bg-purple-500' },
-  { key: 'DISPATCHED', label: 'Dis', color: 'bg-amber-500' },
+  { key: 'DISPATCHED', label: 'Dis', color: 'bg-[#F5A623]' },
   { key: 'EXECUTION', label: 'Fld', color: 'bg-orange-500' },
   { key: 'REVIEW', label: 'Rev', color: 'bg-rose-500' },
   { key: 'CLOSED', label: 'Cls', color: 'bg-emerald-500' },
@@ -55,9 +55,7 @@ export function DashboardWidget({ jobs, electricians }: DashboardWidgetProps) {
     return (
       <div className="w-screen bg-gradient-to-r from-slate-800 to-slate-900 text-white px-3 py-1.5 flex items-center justify-between shadow-lg border-b border-slate-700 cursor-pointer hover:from-slate-700 hover:to-slate-800 transition-all" onClick={() => setMinimized(false)}>
         <div className="flex items-center gap-2">
-          <div className="bg-amber-500 p-0.5 rounded">
-            <Zap className="w-2.5 h-2.5 text-slate-900" />
-          </div>
+          <img src="/logo.png" alt="Wirez R Us" className="w-4 h-4 object-contain" />
           <span className="text-[10px] font-semibold">Wirez</span>
           <span className="text-[9px] text-slate-400">•</span>
           <span className="text-[9px] text-slate-300">{totalActive} / {actionRequired.length}</span>
@@ -74,9 +72,7 @@ export function DashboardWidget({ jobs, electricians }: DashboardWidgetProps) {
         <div className="px-3 py-2 flex items-center justify-between">
           <div className="flex items-center gap-2 flex-1 min-w-0">
             <GripVertical className="w-4 h-4 text-slate-500 cursor-move flex-shrink-0" title="Drag to dock" />
-            <div className="bg-amber-500 p-1 rounded flex-shrink-0">
-              <Zap className="w-3.5 h-3.5 text-slate-900" />
-            </div>
+            <img src="/logo.png" alt="Wirez R Us" className="w-6 h-6 object-contain flex-shrink-0" />
             <span className="text-xs font-bold truncate">Wirez R Us</span>
           </div>
           <div className="flex items-center gap-1 ml-2 flex-shrink-0">
@@ -173,7 +169,7 @@ export function DashboardWidget({ jobs, electricians }: DashboardWidgetProps) {
             className="w-full px-3 py-2 flex items-center justify-between hover:bg-slate-50 transition-colors"
           >
             <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-              <Calendar className="w-4 h-4 text-amber-500" /> Today's Schedule ({todayJobs.length})
+              <Calendar className="w-4 h-4 text-[#F5A623]" /> Today's Schedule ({todayJobs.length})
             </span>
             {showToday ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronRight className="w-4 h-4 text-slate-400" />}
           </button>
@@ -191,7 +187,7 @@ export function DashboardWidget({ jobs, electricians }: DashboardWidgetProps) {
                       className="block px-3 py-2 hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0"
                     >
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-bold text-amber-600 w-14 shrink-0">
+                        <span className="text-[10px] font-bold text-[#E8862A] w-14 shrink-0">
                           {format(new Date(job.scheduledDate!), 'h:mm a')}
                         </span>
                         <div className="min-w-0 flex-1">
@@ -230,7 +226,7 @@ export function DashboardWidget({ jobs, electricians }: DashboardWidgetProps) {
                     </div>
                     <span className="text-xs text-slate-700 flex-1 truncate">{tech.name}</span>
                     {tech.today > 0 && (
-                      <span className="text-[9px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">{tech.today}</span>
+                      <span className="text-[9px] font-bold bg-amber-100 text-[#E8862A] px-1.5 py-0.5 rounded">{tech.today}</span>
                     )}
                     <span className="text-[9px] font-bold bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">{tech.active}</span>
                   </div>

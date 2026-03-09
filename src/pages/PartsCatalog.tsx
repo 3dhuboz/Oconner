@@ -188,7 +188,7 @@ export function PartsCatalog({ parts, setParts }: PartsCatalogProps) {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-            <Package className="w-5 h-5 text-amber-500" /> Parts Catalog
+            <Package className="w-5 h-5 text-[#F5A623]" /> Parts Catalog
           </h2>
           <p className="text-sm text-slate-500 mt-1">
             {parts.length} part{parts.length !== 1 ? 's' : ''} &bull; Technicians can quick-add these on site
@@ -214,7 +214,7 @@ export function PartsCatalog({ parts, setParts }: PartsCatalogProps) {
                 value={newName}
                 onChange={e => setNewName(e.target.value)}
                 placeholder="e.g. 10A Circuit Breaker"
-                className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-[#F5A623] focus:border-[#F5A623]"
                 autoFocus
               />
             </div>
@@ -227,7 +227,7 @@ export function PartsCatalog({ parts, setParts }: PartsCatalogProps) {
                 value={newCost}
                 onChange={e => setNewCost(e.target.value ? Number(e.target.value) : '')}
                 placeholder="0.00"
-                className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-[#F5A623] focus:border-[#F5A623]"
               />
             </div>
           </div>
@@ -238,7 +238,7 @@ export function PartsCatalog({ parts, setParts }: PartsCatalogProps) {
                 title="Category"
                 value={newCategory}
                 onChange={e => setNewCategory(e.target.value)}
-                className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white focus:ring-2 focus:ring-[#F5A623] focus:border-[#F5A623]"
               >
                 {DEFAULT_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
@@ -250,7 +250,7 @@ export function PartsCatalog({ parts, setParts }: PartsCatalogProps) {
                 value={newSupplier}
                 onChange={e => setNewSupplier(e.target.value)}
                 placeholder="e.g. Rexel"
-                className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-[#F5A623] focus:border-[#F5A623]"
               />
             </div>
             <div>
@@ -262,14 +262,14 @@ export function PartsCatalog({ parts, setParts }: PartsCatalogProps) {
                 value={newBarcode}
                 onChange={e => setNewBarcode(e.target.value)}
                 placeholder="Scan or type barcode"
-                className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-[#F5A623] focus:border-[#F5A623]"
               />
               {isMobile ? (
                 <>
                   <input ref={scanCameraRefAdd} type="file" accept="image/*" capture="environment" onChange={e => handleBarcodeScanPhoto(e, 'add')} className="hidden" />
                   <div id="barcode-scan-temp-add" className="hidden" />
                   <button type="button" onClick={() => scanCameraRefAdd.current?.click()}
-                    className="mt-1.5 w-full px-3 py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 bg-amber-500 text-white hover:bg-amber-600 active:bg-amber-700 transition-colors shadow-sm"
+                    className="mt-1.5 w-full px-3 py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 bg-[#F5A623] text-white hover:bg-[#E8862A] active:bg-[#E8862A] transition-colors shadow-sm"
                     title="Take a photo of the barcode">
                     <Camera className="w-4 h-4" /> Snap Barcode Photo
                   </button>
@@ -279,14 +279,14 @@ export function PartsCatalog({ parts, setParts }: PartsCatalogProps) {
                   <button type="button"
                     onClick={() => liveScanner === 'add' ? stopLiveScanner() : startLiveScanner('add')}
                     className={cn("mt-1.5 w-full px-3 py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-colors shadow-sm",
-                      liveScanner === 'add' ? 'bg-rose-500 text-white hover:bg-rose-600' : 'bg-amber-500 text-white hover:bg-amber-600'
+                      liveScanner === 'add' ? 'bg-rose-500 text-white hover:bg-rose-600' : 'bg-[#F5A623] text-white hover:bg-[#E8862A]'
                     )}
                     title={liveScanner === 'add' ? 'Stop camera' : 'Open camera to scan barcode'}>
                     {liveScanner === 'add' ? <><StopCircle className="w-4 h-4" /> Stop Camera</> : <><Camera className="w-4 h-4" /> Scan Barcode with Camera</>}
                   </button>
                   {liveScanner === 'add' && (
-                    <div className="mt-2 rounded-xl border-2 border-amber-400 bg-black overflow-hidden shadow-lg">
-                      <div className="px-3 py-2 bg-amber-500 flex items-center justify-between">
+                    <div className="mt-2 rounded-xl border-2 border-[#F5A623] bg-black overflow-hidden shadow-lg">
+                      <div className="px-3 py-2 bg-[#F5A623] flex items-center justify-between">
                         <span className="text-white text-xs font-bold flex items-center gap-1.5">
                           <Loader2 className="w-3.5 h-3.5 animate-spin" /> Point camera at barcode…
                         </span>
@@ -301,7 +301,7 @@ export function PartsCatalog({ parts, setParts }: PartsCatalogProps) {
               )}
               {scanStatus?.target === 'add' && (
                 <div className={cn("mt-2 px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2",
-                  scanStatus.state === 'scanning' && 'bg-amber-50 text-amber-700 border border-amber-200',
+                  scanStatus.state === 'scanning' && 'bg-amber-50 text-[#E8862A] border border-amber-200',
                   scanStatus.state === 'success' && 'bg-emerald-50 text-emerald-700 border border-emerald-200',
                   scanStatus.state === 'error' && 'bg-rose-50 text-rose-700 border border-rose-200'
                 )}>
@@ -338,7 +338,7 @@ export function PartsCatalog({ parts, setParts }: PartsCatalogProps) {
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search parts..."
-          className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm bg-white focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+          className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl text-sm bg-white focus:ring-2 focus:ring-[#F5A623] focus:border-[#F5A623]"
         />
       </div>
 
@@ -433,7 +433,7 @@ export function PartsCatalog({ parts, setParts }: PartsCatalogProps) {
                                   <input ref={scanCameraRefEdit} type="file" accept="image/*" capture="environment" onChange={e => handleBarcodeScanPhoto(e, 'edit')} className="hidden" />
                                   <div id="barcode-scan-temp-edit" className="hidden" />
                                   <button type="button" onClick={() => scanCameraRefEdit.current?.click()}
-                                    className="mt-1 w-full px-2.5 py-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 bg-amber-500 text-white hover:bg-amber-600 active:bg-amber-700 transition-colors shadow-sm"
+                                    className="mt-1 w-full px-2.5 py-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 bg-[#F5A623] text-white hover:bg-[#E8862A] active:bg-[#E8862A] transition-colors shadow-sm"
                                     title="Take a photo of the barcode">
                                     <Camera className="w-3.5 h-3.5" /> Snap Barcode Photo
                                   </button>
@@ -443,14 +443,14 @@ export function PartsCatalog({ parts, setParts }: PartsCatalogProps) {
                                   <button type="button"
                                     onClick={() => liveScanner === 'edit' ? stopLiveScanner() : startLiveScanner('edit')}
                                     className={cn("mt-1 w-full px-2.5 py-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors shadow-sm",
-                                      liveScanner === 'edit' ? 'bg-rose-500 text-white hover:bg-rose-600' : 'bg-amber-500 text-white hover:bg-amber-600'
+                                      liveScanner === 'edit' ? 'bg-rose-500 text-white hover:bg-rose-600' : 'bg-[#F5A623] text-white hover:bg-[#E8862A]'
                                     )}
                                     title={liveScanner === 'edit' ? 'Stop camera' : 'Open camera to scan barcode'}>
                                     {liveScanner === 'edit' ? <><StopCircle className="w-3.5 h-3.5" /> Stop Camera</> : <><Camera className="w-3.5 h-3.5" /> Scan Barcode with Camera</>}
                                   </button>
                                   {liveScanner === 'edit' && (
-                                    <div className="mt-2 rounded-xl border-2 border-amber-400 bg-black overflow-hidden shadow-lg">
-                                      <div className="px-3 py-1.5 bg-amber-500 flex items-center justify-between">
+                                    <div className="mt-2 rounded-xl border-2 border-[#F5A623] bg-black overflow-hidden shadow-lg">
+                                      <div className="px-3 py-1.5 bg-[#F5A623] flex items-center justify-between">
                                         <span className="text-white text-[11px] font-bold flex items-center gap-1.5">
                                           <Loader2 className="w-3 h-3 animate-spin" /> Point camera at barcode…
                                         </span>
@@ -465,7 +465,7 @@ export function PartsCatalog({ parts, setParts }: PartsCatalogProps) {
                               )}
                               {scanStatus?.target === 'edit' && (
                                 <div className={cn("mt-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium flex items-center gap-1.5",
-                                  scanStatus.state === 'scanning' && 'bg-amber-50 text-amber-700 border border-amber-200',
+                                  scanStatus.state === 'scanning' && 'bg-amber-50 text-[#E8862A] border border-amber-200',
                                   scanStatus.state === 'success' && 'bg-emerald-50 text-emerald-700 border border-emerald-200',
                                   scanStatus.state === 'error' && 'bg-rose-50 text-rose-700 border border-rose-200'
                                 )}>

@@ -149,7 +149,7 @@ export function PropertyHistory({ jobs, updateJob, electricians = [] }: Property
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search by address, tenant name, or agency..."
-          className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 shadow-sm"
+          className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#F5A623] shadow-sm"
         />
         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">
           {filtered.length} {filtered.length === 1 ? 'property' : 'properties'}
@@ -188,7 +188,7 @@ export function PropertyHistory({ jobs, updateJob, electricians = [] }: Property
             <div key={property.normalised} className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
               {/* Property header */}
               <div className="w-full px-4 sm:px-5 py-4 flex items-center gap-3 hover:bg-slate-50 transition-colors text-left">
-                <MapPin className="w-5 h-5 text-amber-500 shrink-0" />
+                <MapPin className="w-5 h-5 text-[#F5A623] shrink-0" />
                 <div className="flex-1 min-w-0">
                   {editingAddress === property.normalised ? (
                     <div className="flex items-center gap-2">
@@ -364,7 +364,7 @@ export function PropertyHistory({ jobs, updateJob, electricians = [] }: Property
                               </span>
                             )}
                             {property.totalMaterials > 0 && (
-                              <span className="px-2 py-0.5 bg-amber-50 rounded-full text-[10px] font-bold text-amber-700">
+                              <span className="px-2 py-0.5 bg-amber-50 rounded-full text-[10px] font-bold text-[#E8862A]">
                                 {property.totalMaterials} materials
                               </span>
                             )}
@@ -427,7 +427,7 @@ export function PropertyHistory({ jobs, updateJob, electricians = [] }: Property
                                   {job.urgency && job.urgency !== 'Routine' && (
                                     <span className={cn(
                                       "text-[10px] font-bold px-1.5 py-0.5 rounded-full",
-                                      job.urgency === 'Emergency' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
+                                      job.urgency === 'Emergency' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-[#E8862A]'
                                     )}>{job.urgency}</span>
                                   )}
                                 </div>
@@ -509,7 +509,7 @@ export function PropertyHistory({ jobs, updateJob, electricians = [] }: Property
                               target="_blank"
                               rel="noopener noreferrer"
                               title={`${photo.title} — ${format(new Date(photo.date), 'MMM d, yyyy')}`}
-                              className="shrink-0 w-24 h-24 rounded-xl overflow-hidden border border-slate-200 hover:ring-2 hover:ring-amber-400 transition-all relative group"
+                              className="shrink-0 w-24 h-24 rounded-xl overflow-hidden border border-slate-200 hover:ring-2 hover:ring-[#F5A623] transition-all relative group"
                             >
                               <img src={photo.url} alt={`Job ${photo.jobId}`} className="w-full h-full object-cover" />
                               <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-1 opacity-0 group-hover:opacity-100 transition-opacity">

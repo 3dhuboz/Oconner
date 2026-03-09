@@ -12,17 +12,17 @@ export function PromoFlyer() {
         <div className="bg-slate-900 text-white px-8 py-16 text-center relative overflow-hidden">
           <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
             {/* Abstract background pattern */}
-            <div className="absolute -top-24 -right-24 w-96 h-96 rounded-full border-[40px] border-amber-500"></div>
+            <div className="absolute -top-24 -right-24 w-96 h-96 rounded-full border-[40px] border-[#F5A623]"></div>
             <div className="absolute -bottom-24 -left-24 w-72 h-72 rounded-full border-[30px] border-emerald-500"></div>
           </div>
           
           <div className="relative z-10">
-            <div className="inline-flex items-center gap-2 bg-amber-500 text-slate-900 px-4 py-1.5 rounded-full font-bold text-sm mb-6 tracking-wide uppercase">
+            <div className="inline-flex items-center gap-2 bg-[#F5A623] text-slate-900 px-4 py-1.5 rounded-full font-bold text-sm mb-6 tracking-wide uppercase">
               <Zap className="w-4 h-4" /> Wirez R Us CRM
             </div>
             <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight mb-6 leading-tight">
               Stop Chasing Paperwork.<br/>
-              <span className="text-amber-400">Start Growing Your Business.</span>
+              <span className="text-[#F5A623]">Start Growing Your Business.</span>
             </h1>
             <p className="text-lg md:text-xl text-slate-300 max-w-2xl mx-auto font-medium">
               The all-in-one field service management platform built specifically for modern electrical contractors.
@@ -108,7 +108,7 @@ export function PromoFlyer() {
 
             <div className="flex gap-4">
               <div className="shrink-0 mt-1">
-                <div className="w-10 h-10 bg-amber-100 text-amber-600 rounded-lg flex items-center justify-center">
+                <div className="w-10 h-10 bg-amber-100 text-[#E8862A] rounded-lg flex items-center justify-center">
                   <Smartphone className="w-5 h-5" />
                 </div>
               </div>
@@ -155,17 +155,17 @@ export function PromoFlyer() {
           <div className="flex flex-col md:flex-row items-center justify-between gap-8">
             <div className="flex-1">
               <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
-                <ShieldCheck className="w-6 h-6 text-amber-500" /> The Bottom Line
+                <ShieldCheck className="w-6 h-6 text-[#F5A623]" /> The Bottom Line
               </h2>
               <p className="text-slate-300">
                 If your admin staff spends just 2 hours a day doing manual data entry, and your techs waste 30 minutes a day calling the office for job details, <strong>you are losing thousands of dollars a month.</strong> Wirez R Us reclaims that time.
               </p>
             </div>
             <div className="shrink-0 w-full md:w-auto text-center">
-              <Link to="/purchase" className="inline-flex items-center justify-center gap-2 bg-amber-500 text-slate-900 px-8 py-4 rounded-xl font-bold text-lg hover:bg-amber-400 transition-colors w-full md:w-auto print:hidden">
+              <Link to="/purchase" className="inline-flex items-center justify-center gap-2 bg-[#F5A623] text-slate-900 px-8 py-4 rounded-xl font-bold text-lg hover:bg-[#F5A623] transition-colors w-full md:w-auto print:hidden">
                 Get Started Now <ArrowRight className="w-5 h-5" />
               </Link>
-              <p className="hidden print:block text-amber-400 font-bold mt-4">Visit wirezrus.com to get started</p>
+              <p className="hidden print:block text-[#F5A623] font-bold mt-4">Visit wirezrus.com to get started</p>
             </div>
           </div>
         </div>

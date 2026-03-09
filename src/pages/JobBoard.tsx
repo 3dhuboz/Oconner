@@ -22,7 +22,7 @@ const COLUMNS: {
 }[] = [
   { id: 'INTAKE',     label: 'Intake',      headerBg: 'bg-blue-600',   cardBg: 'bg-white',       cardBorder: 'border-blue-200',   laneBg: 'bg-blue-50/80',   laneBorder: 'border-blue-200',   accent: 'text-blue-600' },
   { id: 'SCHEDULING', label: 'Scheduling',   headerBg: 'bg-purple-600', cardBg: 'bg-white',       cardBorder: 'border-purple-200', laneBg: 'bg-purple-50/80', laneBorder: 'border-purple-200', accent: 'text-purple-600' },
-  { id: 'DISPATCHED', label: 'Dispatched',   headerBg: 'bg-amber-500',  cardBg: 'bg-white',       cardBorder: 'border-amber-200',  laneBg: 'bg-amber-50/80',  laneBorder: 'border-amber-200',  accent: 'text-amber-600' },
+  { id: 'DISPATCHED', label: 'Dispatched',   headerBg: 'bg-[#F5A623]',  cardBg: 'bg-white',       cardBorder: 'border-amber-200',  laneBg: 'bg-amber-50/80',  laneBorder: 'border-amber-200',  accent: 'text-[#E8862A]' },
   { id: 'EXECUTION',  label: 'In Field',     headerBg: 'bg-orange-500', cardBg: 'bg-white',       cardBorder: 'border-orange-200', laneBg: 'bg-orange-50/80', laneBorder: 'border-orange-200', accent: 'text-orange-600' },
   { id: 'REVIEW',     label: 'Review',       headerBg: 'bg-rose-500',   cardBg: 'bg-white',       cardBorder: 'border-rose-200',   laneBg: 'bg-rose-50/80',   laneBorder: 'border-rose-200',   accent: 'text-rose-600' },
   { id: 'CLOSED',     label: 'Closed',       headerBg: 'bg-emerald-600',cardBg: 'bg-emerald-50',  cardBorder: 'border-emerald-200',laneBg: 'bg-emerald-50/60',laneBorder: 'border-emerald-200',accent: 'text-emerald-600' },
@@ -131,7 +131,7 @@ export function JobBoard({ jobs }: JobBoardProps) {
           placeholder="Search jobs, addresses, tenants, agencies..."
           value={search}
           onChange={e => setSearch(e.target.value)}
-          className="w-full pl-12 pr-4 py-3 border border-slate-200 rounded-2xl text-sm bg-white focus:ring-2 focus:ring-amber-500 focus:border-amber-500 shadow-sm"
+          className="w-full pl-12 pr-4 py-3 border border-slate-200 rounded-2xl text-sm bg-white focus:ring-2 focus:ring-[#F5A623] focus:border-[#F5A623] shadow-sm"
         />
       </div>
 
@@ -177,12 +177,12 @@ export function JobBoard({ jobs }: JobBoardProps) {
                             'font-bold text-sm leading-snug flex-1',
                             priority === 'emergency' ? 'text-red-900' :
                             priority === 'urgent' ? 'text-amber-900' :
-                            'text-slate-900 group-hover:text-amber-700'
+                            'text-slate-900 group-hover:text-[#E8862A]'
                           )}>
                             {isUrgent && <AlertTriangle className="w-3.5 h-3.5 inline mr-1 -mt-0.5" />}
                             {job.title || 'Untitled Job'}
                           </h3>
-                          <ChevronRight className="w-5 h-5 text-slate-300 shrink-0 group-hover:text-amber-500 transition-colors mt-0.5" />
+                          <ChevronRight className="w-5 h-5 text-slate-300 shrink-0 group-hover:text-[#F5A623] transition-colors mt-0.5" />
                         </div>
 
                         {/* Address */}
@@ -225,10 +225,10 @@ export function JobBoard({ jobs }: JobBoardProps) {
                               <span className="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-md">PAID</span>
                             )}
                             {job.paymentStatus === 'pending' && job.paymentLinkUrl && (
-                              <span className="bg-amber-100 text-amber-700 text-[10px] font-bold px-2 py-0.5 rounded-md">$ DUE</span>
+                              <span className="bg-amber-100 text-[#E8862A] text-[10px] font-bold px-2 py-0.5 rounded-md">$ DUE</span>
                             )}
                             {job.aiNeedsReview && (
-                              <span className="bg-amber-100 text-amber-700 text-[10px] font-bold px-2 py-0.5 rounded-md">AI</span>
+                              <span className="bg-amber-100 text-[#E8862A] text-[10px] font-bold px-2 py-0.5 rounded-md">AI</span>
                             )}
                             {job.hasFollowUpEmail && (
                               <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-md">F/UP</span>

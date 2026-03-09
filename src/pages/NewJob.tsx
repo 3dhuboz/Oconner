@@ -227,7 +227,7 @@ export function NewJob({ electricians }: NewJobProps) {
           {/* Section: Scheduling (optional) */}
           <div>
             <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
-              <span className="w-5 h-5 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-xs font-bold">3</span>
+              <span className="w-5 h-5 rounded-full bg-amber-100 text-[#E8862A] flex items-center justify-center text-xs font-bold">3</span>
               Scheduling <span className="text-xs font-normal text-slate-400 normal-case tracking-normal ml-1">(optional — can be set later)</span>
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
