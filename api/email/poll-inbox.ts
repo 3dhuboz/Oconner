@@ -389,23 +389,52 @@ async function getGmailAccessToken(): Promise<string> {
 
 // ─── Main handler ───────────────────────────────────────────────
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // GET = diagnostic
+  // GET = diagnostic (with live Gmail test)
   if (req.method === 'GET') {
+    const checks: any = {
+      GMAIL_ADDRESS: process.env.GMAIL_ADDRESS ? `✅ ${process.env.GMAIL_ADDRESS}` : '❌ MISSING',
+      GMAIL_CLIENT_ID: process.env.GMAIL_CLIENT_ID ? '✅ set' : '❌ MISSING',
+      GMAIL_CLIENT_SECRET: process.env.GMAIL_CLIENT_SECRET ? '✅ set' : '❌ MISSING',
+      GMAIL_REFRESH_TOKEN: process.env.GMAIL_REFRESH_TOKEN ? '✅ set' : '❌ MISSING',
+      OPENAI_API_KEY: process.env.OPENAI_API_KEY ? '✅ set (AI enabled)' : '⚠️ missing (regex-only parsing)',
+      VITE_FIREBASE_PROJECT_ID: process.env.VITE_FIREBASE_PROJECT_ID ? '✅ set' : '❌ MISSING',
+      VITE_FIREBASE_API_KEY: (process.env.VITE_FIREBASE_API_KEY || process.env.VITE_FB_API_KEY) ? '✅ set' : '❌ MISSING',
+    };
+    let gmailLiveTest: any = null;
+    try {
+      const accessToken = await getGmailAccessToken();
+      // Count ALL unread messages
+      const unreadRes = await fetch(
+        'https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=20&q=is:unread',
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      const unreadData = await unreadRes.json();
+      // Count unread in inbox specifically
+      const inboxRes = await fetch(
+        'https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=5&q=is:unread+in:inbox',
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      const inboxData = await inboxRes.json();
+      // Count unread in spam
+      const spamRes = await fetch(
+        'https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=5&q=is:unread+in:spam',
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      const spamData = await spamRes.json();
+      gmailLiveTest = {
+        tokenOk: true,
+        unreadTotal: unreadData.messages?.length ?? 0,
+        unreadInbox: inboxData.messages?.length ?? 0,
+        unreadSpam: spamData.messages?.length ?? 0,
+        resultSizeEstimate: unreadData.resultSizeEstimate ?? 0,
+      };
+    } catch (e: any) {
+      gmailLiveTest = { tokenOk: false, error: e.message };
+    }
     return res.status(200).json({
       status: 'Email Polling Endpoint',
-      checks: {
-        GMAIL_ADDRESS: process.env.GMAIL_ADDRESS ? `✅ ${process.env.GMAIL_ADDRESS}` : '❌ MISSING',
-        GMAIL_CLIENT_ID: process.env.GMAIL_CLIENT_ID ? '✅ set' : '❌ MISSING',
-        GMAIL_CLIENT_SECRET: process.env.GMAIL_CLIENT_SECRET ? '✅ set' : '❌ MISSING',
-        GMAIL_REFRESH_TOKEN: process.env.GMAIL_REFRESH_TOKEN ? '✅ set' : '❌ MISSING',
-        OPENAI_API_KEY: process.env.OPENAI_API_KEY ? '✅ set (AI enabled)' : '⚠️ missing (regex-only parsing)',
-        VITE_FIREBASE_PROJECT_ID: process.env.VITE_FIREBASE_PROJECT_ID ? '✅ set' : '❌ MISSING',
-        VITE_FIREBASE_API_KEY: (process.env.VITE_FIREBASE_API_KEY || process.env.VITE_FB_API_KEY) ? '✅ set' : '❌ MISSING',
-      },
-      softwareDetection: [
-        'PropertyMe', 'Console Cloud', 'PropertyTree', 'Palace', 'Rex PM',
-        'ManagedApp', 'Inspection Express', 'MRI Software', 'Manual/Direct Email',
-      ],
+      checks,
+      gmailLiveTest,
       usage: 'POST to poll inbox. Set up a Vercel Cron to call this every 2-5 minutes.',
     });
   }
