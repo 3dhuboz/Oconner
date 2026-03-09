@@ -379,7 +379,9 @@ async function getGmailAccessToken(): Promise<string> {
       const data = await tokenRes.json();
       return data.access_token;
     }
-    throw new Error(`OAuth token refresh failed: ${tokenRes.status}`);
+    const errBody = await tokenRes.text();
+    console.error('[Poll Inbox] OAuth refresh error:', errBody);
+    throw new Error(`OAuth token refresh failed: ${tokenRes.status} — ${errBody}`);
   }
   
   throw new Error('Missing GMAIL_REFRESH_TOKEN, GMAIL_CLIENT_ID, or GMAIL_CLIENT_SECRET');
