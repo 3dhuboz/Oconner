@@ -409,6 +409,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let gmailLiveTest: any = null;
     try {
       const accessToken = await getGmailAccessToken();
+      // Verify which account this token belongs to
+      const profileRes = await fetch(
+        'https://gmail.googleapis.com/gmail/v1/users/me/profile',
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      const profileData = profileRes.ok ? await profileRes.json() : {};
       // Count ALL unread messages
       const unreadRes = await fetch(
         'https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=20&q=is:unread',
@@ -449,6 +455,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       gmailLiveTest = {
         tokenOk: true,
+        authenticatedAs: profileData.emailAddress ?? 'unknown',
+        totalMessages: profileData.messagesTotal ?? 0,
         unreadTotal: unreadData.messages?.length ?? 0,
         unreadInbox: inboxData.messages?.length ?? 0,
         unreadSpam: spamData.messages?.length ?? 0,
