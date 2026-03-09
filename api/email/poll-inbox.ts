@@ -487,6 +487,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const { subject, from, body, html } = extractGmailBody(message);
         const combined = `${subject}\n${body}`;
         
+        // ── Skip non-work-order emails ──
+        const fromLower = from.toLowerCase();
+        const subjectLower = subject.toLowerCase();
+        const skipPatterns = [
+          // Automated / noreply senders
+          /noreply|no-reply|no\.reply|donotreply|mailer-daemon/i,
+          // Known system senders
+          /google\.com|firebase|onesignal|usercentrics|courier\.com|mailchimp|sendgrid/i,
+          // Marketing / newsletters
+          /unsubscribe|newsletter|promo|marketing|@ads\./i,
+        ];
+        const skipSubjectPatterns = [
+          /verify your email|confirm your|welcome to|get started|getting started/i,
+          /your .* account|password reset|security alert|sign-in|login/i,
+          /indexed on site|google presence|search console/i,
+        ];
+        const isSkippable = skipPatterns.some(p => p.test(fromLower)) ||
+          skipSubjectPatterns.some(p => p.test(subjectLower));
+        
+        if (isSkippable) {
+          // Mark as read so we don't re-check it
+          await markAsRead(accessToken, message.id);
+          console.log(`[EmailPoll] Skipped non-WO email: "${subject}" from ${from}`);
+          continue;
+        }
+        
         // Detect source software
         const detected = detectRealEstateSoftware(subject, body, from);
         console.log(`[EmailPoll] Processing: "${subject}" from ${from} — detected: ${detected.software}`);
