@@ -490,21 +490,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // ── Skip non-work-order emails ──
         const fromLower = from.toLowerCase();
         const subjectLower = subject.toLowerCase();
-        const skipPatterns = [
-          // Automated / noreply senders
+        const skipSenderPatterns = [
           /noreply|no-reply|no\.reply|donotreply|mailer-daemon/i,
-          // Known system senders
-          /google\.com|firebase|onesignal|usercentrics|courier\.com|mailchimp|sendgrid/i,
-          // Marketing / newsletters
-          /unsubscribe|newsletter|promo|marketing|@ads\./i,
+          /google\.com|firebase|onesignal|usercentrics|courier\.com/i,
+          /mailchimp|sendgrid|twilio|base44|hubspot|intercom/i,
+          /zendesk|freshdesk|slack|github|gitlab|bitbucket/i,
+          /team@|news@|info@|hello@|support@|digest@|updates@/i,
         ];
         const skipSubjectPatterns = [
           /verify your email|confirm your|welcome to|get started|getting started/i,
           /your .* account|password reset|security alert|sign-in|login/i,
           /indexed on site|google presence|search console/i,
+          /unlock .* features|expires soon|quick wins|level up|off your|discount/i,
+          /missed this|don.t miss|act now|limited time|free trial/i,
         ];
-        const isSkippable = skipPatterns.some(p => p.test(fromLower)) ||
-          skipSubjectPatterns.some(p => p.test(subjectLower));
+        const bodyLower = body.toLowerCase();
+        const hasUnsubscribe = /unsubscribe|opt.out|email preferences|manage.*subscription/i.test(bodyLower);
+        const isSkippable = skipSenderPatterns.some(p => p.test(fromLower)) ||
+          skipSubjectPatterns.some(p => p.test(subjectLower)) ||
+          hasUnsubscribe;
         
         if (isSkippable) {
           // Mark as read so we don't re-check it
