@@ -427,12 +427,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         { headers: { Authorization: `Bearer ${accessToken}` } }
       );
       const spamData = await spamRes.json();
+      // Check all mail from last hour (read or unread)
+      const recentRes = await fetch(
+        'https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=10&q=newer_than:1h',
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      const recentData = await recentRes.json();
+      // Get subjects of recent messages for debugging
+      const recentSubjects: string[] = [];
+      for (const msg of (recentData.messages || []).slice(0, 5)) {
+        const mRes = await fetch(
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        if (mRes.ok) {
+          const mData = await mRes.json();
+          const subj = mData.payload?.headers?.find((h: any) => h.name === 'Subject')?.value || '(no subject)';
+          const from = mData.payload?.headers?.find((h: any) => h.name === 'From')?.value || '';
+          recentSubjects.push(`${subj} | from: ${from}`);
+        }
+      }
       gmailLiveTest = {
         tokenOk: true,
         unreadTotal: unreadData.messages?.length ?? 0,
         unreadInbox: inboxData.messages?.length ?? 0,
         unreadSpam: spamData.messages?.length ?? 0,
-        resultSizeEstimate: unreadData.resultSizeEstimate ?? 0,
+        recentLast1h: recentData.messages?.length ?? 0,
+        recentSubjects,
       };
     } catch (e: any) {
       gmailLiveTest = { tokenOk: false, error: e.message };
