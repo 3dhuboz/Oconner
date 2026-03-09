@@ -21,6 +21,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const authData = await authRes.json();
     if (authData.idToken) idToken = authData.idToken;
   }
+  if (!idToken) {
+    const anonRes = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ returnSecureToken: true }),
+    });
+    const anonData = await anonRes.json();
+    if (anonData.idToken) idToken = anonData.idToken;
+  }
   if (!idToken) return res.status(500).json({ error: 'Firebase auth failed' });
 
   // Query all INTAKE jobs
