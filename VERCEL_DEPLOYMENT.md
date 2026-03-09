@@ -32,19 +32,20 @@ NODE_ENV=production
 # OpenAI — powers AI extraction of work orders from any PM software
 OPENAI_API_KEY=sk-...
 
-# CloudMailin — inbound email catch-all
-VITE_CLOUDMAILIN_EMAIL=e35a378a68a971a219eb@cloudmailin.net
+# Gmail OAuth — polls inbox for inbound work orders
+GMAIL_ADDRESS=wirezrusjobs@gmail.com
+GMAIL_CLIENT_ID=your_google_oauth_client_id
+GMAIL_CLIENT_SECRET=your_google_oauth_client_secret
+GMAIL_REFRESH_TOKEN=your_gmail_refresh_token
 
 # Firebase webhook auth (create a dedicated user in Firebase Auth for this)
 WEBHOOK_AUTH_EMAIL=webhook@wireznrus.com.au
 WEBHOOK_AUTH_PASSWORD=a_strong_random_password
 ```
 
-> **CloudMailin webhook URL** must be set to:
-> `https://YOUR-APP.vercel.app/api/webhooks/email`
-> Format: JSON (HTTP POST)
+> **Gmail polling** runs via Vercel Cron every 5 minutes at `/api/email/poll-inbox`.
 >
-> **Test it**: Visit `https://YOUR-APP.vercel.app/api/webhooks/email` in a browser — you'll see a diagnostic page showing which env vars are configured.
+> **Test it**: Visit `https://YOUR-APP.vercel.app/api/email/poll-inbox` in a browser — you'll see a diagnostic page showing which env vars are configured.
 
 ### Optional Integration Variables
 

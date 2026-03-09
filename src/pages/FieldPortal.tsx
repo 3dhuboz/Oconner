@@ -565,11 +565,13 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
       doc.text(`Online Payment: ${job.paymentLinkUrl}`, 20, y);
       y += 6;
     }
+    // TODO: Replace with real business bank details
     doc.text("Bank: Wirez R Us Electrical | BSB: XXX-XXX | Acc: XXXXXXXX", 20, y);
 
     // Footer
     doc.setFontSize(7);
     doc.setTextColor(150, 150, 150);
+    // TODO: Replace with real ABN
     doc.text("Wirez R Us Electrical Services | ABN: XX XXX XXX XXX | Ph: 1300 WIREZ US | jobs@wireznrus.com.au", 105, 285, { align: "center" });
 
     doc.save(`Invoice_${job.id}.pdf`);

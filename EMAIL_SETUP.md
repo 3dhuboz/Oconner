@@ -125,7 +125,7 @@ Your app already has the webhook endpoint at `/api/email/inbound` in `server.ts`
 ### What You Need:
 
 The code is ready - you just need to:
-1. Choose an email service (SendGrid, Mailgun, or CloudMailin)
+1. Choose an email service (SendGrid, Mailgun, or Gmail OAuth polling)
 2. Configure DNS for `wirezrus.com`
 3. Set up the inbound email routing
 4. Point it to your deployed webhook URL
@@ -139,12 +139,12 @@ The code is ready - you just need to:
 Change the email format in your app to use a domain you control:
 - `jobs-8f92a@inbound.yourdomain.com`
 
-### Option B: Use CloudMailin's Temporary Address
+### Option B: Use Gmail OAuth Polling (Current Approach)
 
-1. Sign up for CloudMailin free tier
-2. Use their provided address: `abc123@cloudmailin.net`
-3. Configure webhook to your app
-4. Update the email address shown in your Integrations page
+1. Set up a Gmail address (e.g. `wirezrusjobs@gmail.com`)
+2. Configure Gmail OAuth credentials (Client ID, Client Secret, Refresh Token)
+3. The Vercel cron at `/api/email/poll-inbox` polls every 5 minutes
+4. Emails are parsed and jobs created automatically
 
 ### Option C: Buy the Domain
 
@@ -185,7 +185,7 @@ Once configured, test by:
 ## Recommended Approach
 
 **For Development/Testing:**
-- Use CloudMailin free tier with their temporary address
+- Use Gmail OAuth polling with a test Gmail address
 - No DNS configuration needed
 - Works immediately
 
@@ -203,6 +203,6 @@ Once configured, test by:
 |---------|-----------|------------|
 | SendGrid | 100 emails/day | $19.95/mo (40k emails) |
 | Mailgun | 100 emails/day | $35/mo (50k emails) |
-| CloudMailin | 200 emails/mo | $9/mo (10k emails) |
+| Gmail OAuth | Free (polling) | Free (Google Workspace for custom domain) |
 
 All are sufficient for your use case. SendGrid is recommended as you may already use it for outbound emails.

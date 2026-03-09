@@ -12,7 +12,7 @@
 *Get the basic email→job→invoice→close flow bulletproof*
 
 ### 1.1 Email-to-Job Pipeline 🔧
-- ✅ CloudMailin catch-all receives emails
+- ✅ Gmail OAuth polling receives emails
 - ✅ AI agent (GPT-4o-mini) extracts fields from any PM software format
 - ✅ Admin review panel with confidence scoring
 - 🆕 **Duplicate detection**: before creating a job, check if an active (non-CLOSED) job exists at the same address. If yes, flag it and offer merge option instead of creating a new job.
