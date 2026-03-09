@@ -48,6 +48,16 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
   const [miscCharges, setMiscCharges] = useState<Array<{ id: string; description: string; amount: number }>>([]);
   const isAdmin = user?.role === 'admin' || user?.role === 'dev';
 
+  // ─── Tab-based workflow ───
+  type WorkflowTab = 'details' | 'schedule' | 'fieldwork' | 'invoice';
+  const statusToTab = (s: string): WorkflowTab => {
+    if (s === 'INTAKE') return 'details';
+    if (s === 'SCHEDULING' || s === 'DISPATCHED') return 'schedule';
+    if (s === 'EXECUTION') return 'fieldwork';
+    return 'invoice'; // REVIEW, CLOSED
+  };
+  const [activeTab, setActiveTab] = useState<WorkflowTab>(statusToTab(job?.status || 'INTAKE'));
+
   // ─── AI Parse Review state ───
   const [reviewFields, setReviewFields] = useState({
     tenantName: '',
@@ -56,6 +66,7 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
     propertyAddress: '',
     description: '',
     urgency: '',
+    jobType: '',
     accessCodes: '',
     propertyManagerEmail: '',
     propertyManagerName: '',
@@ -72,6 +83,7 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
         propertyAddress: job.propertyAddress || '',
         description: job.description || '',
         urgency: job.urgency || 'NORMAL',
+        jobType: job.type || 'GENERAL_REPAIR',
         accessCodes: job.accessCodes || '',
         propertyManagerEmail: job.propertyManagerEmail || '',
         propertyManagerName: (job as any).propertyManagerName || '',
@@ -136,6 +148,7 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
         propertyAddress: reviewFields.propertyAddress,
         description: reviewFields.description,
         urgency: reviewFields.urgency,
+        type: reviewFields.jobType,
         accessCodes: reviewFields.accessCodes,
         propertyManagerEmail: reviewFields.propertyManagerEmail,
         propertyManagerName: reviewFields.propertyManagerName,
@@ -1067,6 +1080,27 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
                   />
                 </div>
 
+                {/* Job Type */}
+                <div className="rounded-xl border bg-white border-slate-200 p-3">
+                  <label className="text-xs font-bold text-slate-600 uppercase tracking-wide block mb-1.5">Job Type</label>
+                  <select
+                    value={reviewFields.jobType}
+                    onChange={e => setReviewFields(f => ({ ...f, jobType: e.target.value }))}
+                    className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  >
+                    <option value="SMOKE_ALARM">🔥 Smoke Alarm</option>
+                    <option value="SAFETY_SWITCH">⚡ Safety Switch</option>
+                    <option value="LIGHTING">💡 Lighting</option>
+                    <option value="POWER_POINT">🔌 Power Point</option>
+                    <option value="HOT_WATER">🚿 Hot Water</option>
+                    <option value="FAN">🌀 Fan / Ventilation</option>
+                    <option value="APPLIANCE">🍳 Appliance</option>
+                    <option value="EMERGENCY">🚨 Emergency</option>
+                    <option value="SWITCHBOARD">⚙️ Switchboard</option>
+                    <option value="GENERAL_REPAIR">🔧 General Repair</option>
+                  </select>
+                </div>
+
                 {/* Urgency */}
                 <div className="rounded-xl border bg-white border-slate-200 p-3">
                   <label className="text-xs font-bold text-slate-600 uppercase tracking-wide block mb-1.5">Urgency</label>
@@ -1201,13 +1235,68 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
           );
         })()}
 
-        <div className="grid grid-cols-1 md:grid-cols-3 items-start divide-y md:divide-y-0 md:divide-x divide-slate-200">
-          {/* Phase 1: Intake & Coordination */}
-          <div className={cn("p-6 sm:p-8", job.status === 'INTAKE' ? "bg-blue-50/30" : "")}>
-            <div className="flex items-center gap-2 mb-6">
-              <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold">1</div>
-              <h2 className="text-lg font-semibold text-slate-900">Intake & Contact</h2>
-            </div>
+        {/* ─── Compact Job Summary ─── */}
+        <div className="px-6 py-3 border-b border-slate-200 bg-slate-50/50 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+          <div className="flex items-center gap-2">
+            <MapPin className="w-4 h-4 text-slate-400" />
+            <span className="font-medium text-slate-700">{job.propertyAddress || 'No address'}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <User className="w-4 h-4 text-slate-400" />
+            <span className="text-slate-600">{job.tenantName || 'No tenant'}</span>
+          </div>
+          {job.tenantPhone && (
+            <a href={`tel:${job.tenantPhone}`} className="text-blue-600 hover:underline text-sm">{job.tenantPhone}</a>
+          )}
+          <span className={cn(
+            "px-2 py-0.5 rounded text-xs font-bold",
+            job.type === 'SMOKE_ALARM' ? 'bg-red-100 text-red-700' :
+            job.type === 'EMERGENCY' ? 'bg-rose-100 text-rose-700' :
+            'bg-slate-100 text-slate-600'
+          )}>
+            {job.type?.replace(/_/g, ' ') || 'GENERAL'}
+          </span>
+        </div>
+
+        {/* ─── Workflow Tabs ─── */}
+        <div className="border-b border-slate-200">
+          <div className="flex px-4 sm:px-6 gap-1 overflow-x-auto">
+            {([
+              { id: 'details' as WorkflowTab, label: 'Details' },
+              { id: 'schedule' as WorkflowTab, label: 'Schedule & Dispatch' },
+              { id: 'fieldwork' as WorkflowTab, label: 'Field Work' },
+              { id: 'invoice' as WorkflowTab, label: 'Close Out' },
+            ]).map(tab => {
+              const isActive = activeTab === tab.id;
+              const isCurrentPhase = statusToTab(job.status) === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  title={tab.label}
+                  className={cn(
+                    "px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex items-center gap-2",
+                    isActive
+                      ? "border-slate-900 text-slate-900"
+                      : isCurrentPhase
+                        ? "border-amber-400 text-amber-600 hover:text-amber-700"
+                        : "border-transparent text-slate-400 hover:text-slate-600"
+                  )}
+                >
+                  {tab.label}
+                  {isCurrentPhase && !isActive && (
+                    <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ─── Tab Content ─── */}
+        <div>
+          {activeTab === 'details' && (
+          <div className="p-6 sm:p-8 max-w-4xl">
             
             <div className="space-y-6">
               <div>
@@ -1786,12 +1875,10 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
             </div>
           </div>
 
-          {/* Phase 2: Scheduling & Dispatch */}
-          <div className={cn("p-6 sm:p-8", ['SCHEDULING', 'DISPATCHED'].includes(job.status) ? "bg-purple-50/30" : "")}>
-            <div className="flex items-center gap-2 mb-6">
-              <div className="w-8 h-8 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center font-bold">2</div>
-              <h2 className="text-lg font-semibold text-slate-900">Schedule & Dispatch</h2>
-            </div>
+          )}
+
+          {activeTab === 'schedule' && (
+          <div className="p-6 sm:p-8 max-w-4xl">
 
             <div className="space-y-6">
               <div>
@@ -1990,12 +2077,10 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
             </div>
           </div>
 
-          {/* Phase 3 & 4: Execution & Review */}
-          <div className={cn("p-6 sm:p-8", ['EXECUTION', 'REVIEW'].includes(job.status) ? "bg-orange-50/30" : "")}>
-            <div className="flex items-center gap-2 mb-6">
-              <div className="w-8 h-8 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center font-bold">3</div>
-              <h2 className="text-lg font-semibold text-slate-900">Execution & Review</h2>
-            </div>
+          )}
+
+          {(activeTab === 'fieldwork' || activeTab === 'invoice') && (
+          <div className="p-6 sm:p-8 max-w-4xl">
 
             <div className="space-y-6">
               {/* Field Data */}
@@ -2359,6 +2444,7 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
               )}
             </div>
           </div>
+          )}
         </div>
       </div>
 
