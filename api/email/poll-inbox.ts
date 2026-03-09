@@ -288,22 +288,28 @@ function toFirestoreValue(val: any): any {
 
 // ─── Gmail API helpers ──────────────────────────────────────────
 async function fetchGmailMessages(accessToken: string, maxResults = 10): Promise<any[]> {
-  // Fetch unread messages from inbox
-  const listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${maxResults}&q=is:unread`;
-  const listRes = await fetch(listUrl, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-  
-  if (!listRes.ok) {
-    throw new Error(`Gmail API list failed: ${listRes.status} ${await listRes.text()}`);
+  // Fetch unread messages — query inbox AND spam separately (spam is excluded from default is:unread)
+  const queries = ['is:unread', 'is:unread+in:spam'];
+  const seen = new Set<string>();
+  const allMessages: any[] = [];
+
+  for (const q of queries) {
+    const listRes = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${maxResults}&q=${q}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    if (!listRes.ok) throw new Error(`Gmail API list failed: ${listRes.status} ${await listRes.text()}`);
+    const listData = await listRes.json();
+    for (const msg of (listData.messages || [])) {
+      if (!seen.has(msg.id)) { seen.add(msg.id); allMessages.push(msg); }
+    }
   }
-  
-  const listData = await listRes.json();
-  if (!listData.messages?.length) return [];
+
+  if (!allMessages.length) return [];
   
   // Fetch each message's full content
   const messages = [];
-  for (const msg of listData.messages.slice(0, maxResults)) {
+  for (const msg of allMessages.slice(0, maxResults)) {
     const msgUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`;
     const msgRes = await fetch(msgUrl, {
       headers: { Authorization: `Bearer ${accessToken}` },
