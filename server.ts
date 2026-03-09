@@ -131,7 +131,7 @@ async function startServer() {
         status: 'DRAFT' as const
       };
 
-      const response = await xero.accountingApi.createInvoices(xeroTenantId, { invoices: [invoice] });
+      const response = await xero.accountingApi.createInvoices(xeroTenantId, { invoices: [invoice as any] });
       
       res.json({ 
         success: true, 
@@ -285,16 +285,19 @@ async function startServer() {
       return res.sendStatus(400);
     }
 
-    // Handle the event
+    // Handle the event (production handler is api/stripe/webhook.ts which updates Firestore)
     switch (event.type) {
       case 'checkout.session.completed':
-        const session = event.data.object;
-        // TODO: Fulfill the purchase, e.g., activate a license in your database
-        console.log('Payment was successful for session:', session.id);
+        console.log('[Stripe] Payment successful for session:', event.data.object.id);
         break;
-      // ... handle other event types
+      case 'charge.refunded':
+        console.log('[Stripe] Charge refunded:', event.data.object.id);
+        break;
+      case 'payment_intent.payment_failed':
+        console.log('[Stripe] Payment failed:', event.data.object.id);
+        break;
       default:
-        console.log(`Unhandled event type ${event.type}`);
+        console.log(`[Stripe] Unhandled event type ${event.type}`);
     }
 
     res.json({ received: true });

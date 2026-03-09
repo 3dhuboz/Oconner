@@ -3,7 +3,7 @@ import Stripe from 'stripe';
 const stripeKey = process.env.STRIPE_SECRET_KEY;
 
 export const stripe = stripeKey
-  ? new Stripe(stripeKey, { apiVersion: '2024-12-18.acacia' })
+  ? new Stripe(stripeKey, { apiVersion: '2026-01-28.clover' as any })
   : null;
 
 export function requireStripe(): Stripe {

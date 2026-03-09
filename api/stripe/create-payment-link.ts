@@ -11,7 +11,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: 'Stripe not configured - set STRIPE_SECRET_KEY' });
   }
 
-  const stripe = new Stripe(stripeKey, { apiVersion: '2024-12-18.acacia' });
+  const stripe = new Stripe(stripeKey, { apiVersion: '2026-01-28.clover' as any });
 
   try {
     const { jobId, amount, description, customerEmail } = req.body;
