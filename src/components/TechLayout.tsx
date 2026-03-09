@@ -29,7 +29,12 @@ export function TechLayout({ children }: TechLayoutProps) {
       {/* Top header — compact, branded */}
       <header className="bg-[#1a1a2e] text-white px-4 py-3 flex items-center justify-between shrink-0 safe-top">
         <div className="flex items-center gap-2.5">
-          <img src="/logo.png" alt="Wirez R Us" className="w-8 h-8 object-contain" />
+          <img
+            src="/logo.png"
+            alt="Wirez R Us"
+            className="w-10 h-10 object-contain"
+            style={{ filter: 'drop-shadow(0 0 8px #F5A623) drop-shadow(0 0 3px #F5A623)' }}
+          />
           <div>
             <span className="text-sm font-bold tracking-tight">Wirez R Us</span>
             <span className="text-[10px] text-slate-400 ml-2">Tech Portal</span>

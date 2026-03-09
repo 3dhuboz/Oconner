@@ -62,10 +62,18 @@ export function Layout({ children, jobs = [] }: LayoutProps) {
         "fixed inset-y-0 left-0 z-50 w-64 bg-[#1a1a2e] text-white flex flex-col shrink-0 transition-transform duration-300 ease-in-out lg:relative lg:translate-x-0",
         sidebarOpen ? "translate-x-0" : "-translate-x-full"
       )}>
-        <div className="p-4 sm:p-6 flex items-center justify-between">
+        <div className="px-4 sm:px-6 pt-5 pb-4 flex items-center justify-between border-b border-white/10">
           <div className="flex items-center gap-3">
-            <img src="/logo.png" alt="Wirez R Us" className="w-9 h-9 sm:w-10 sm:h-10 object-contain" />
-            <span className="text-lg sm:text-xl font-bold tracking-tight">Wirez R Us</span>
+            <img
+              src="/logo.png"
+              alt="Wirez R Us"
+              className="w-12 h-12 sm:w-14 sm:h-14 object-contain drop-shadow-lg"
+              style={{ filter: 'drop-shadow(0 0 10px #F5A623) drop-shadow(0 0 4px #F5A623)' }}
+            />
+            <div className="flex flex-col">
+              <span className="text-lg sm:text-xl font-bold tracking-tight leading-tight">Wirez R Us</span>
+              <span className="text-[10px] text-[#F5A623]/70 font-medium tracking-widest uppercase">Field Management</span>
+            </div>
           </div>
           {/* Close button on mobile */}
           <button
