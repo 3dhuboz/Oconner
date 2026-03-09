@@ -496,6 +496,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           /mailchimp|sendgrid|twilio|base44|hubspot|intercom/i,
           /zendesk|freshdesk|slack|github|gitlab|bitbucket/i,
           /team@|news@|info@|hello@|support@|digest@|updates@/i,
+          /stripe\.com|paypal\.com|xero\.com|quickbooks|invoiced\.com/i,
+          /failed-payments|invoice\+|billing@|accounts@|payments@/i,
+          /microsoft|outlook\.com|office365|apple\.com|amazon/i,
         ];
         const skipSubjectPatterns = [
           /verify your email|confirm your|welcome to|get started|getting started/i,
@@ -503,6 +506,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           /indexed on site|google presence|search console/i,
           /unlock .* features|expires soon|quick wins|level up|off your|discount/i,
           /missed this|don.t miss|act now|limited time|free trial/i,
+          /payment .* unsuccessful|payment failed|invoice|receipt|your receipt|billing/i,
+          /test message|outlook test|email test/i,
+          /\$[0-9]+\.?[0-9]* payment|subscription renewal|auto-renew/i,
         ];
         const bodyLower = body.toLowerCase();
         const hasUnsubscribe = /unsubscribe|opt.out|email preferences|manage.*subscription/i.test(bodyLower);
