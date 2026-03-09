@@ -289,7 +289,7 @@ function toFirestoreValue(val: any): any {
 // ─── Gmail API helpers ──────────────────────────────────────────
 async function fetchGmailMessages(accessToken: string, maxResults = 10): Promise<any[]> {
   // Fetch unread messages from inbox
-  const listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${maxResults}&q=is:unread+in:inbox`;
+  const listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${maxResults}&q=is:unread`;
   const listRes = await fetch(listUrl, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
