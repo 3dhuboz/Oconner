@@ -3,7 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { doc, onSnapshot, updateDoc, Timestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import type { Stop, StopStatus } from '@butcher/shared';
-import { ArrowLeft, MapPin, Phone, Navigation, CheckCircle, Camera, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, MapPin, Phone, Navigation, CheckCircle, Camera, AlertTriangle, Image } from 'lucide-react';
+import { useRef } from 'react';
 
 export default function StopDetailPage() {
   const { stopId } = useParams<{ stopId: string }>();
@@ -11,6 +12,9 @@ export default function StopDetailPage() {
   const [stop, setStop] = useState<Stop | null>(null);
   const [updating, setUpdating] = useState(false);
   const [note, setNote] = useState('');
+  const [proofUrl, setProofUrl] = useState<string | null>(null);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!stopId) return;
@@ -18,6 +22,24 @@ export default function StopDetailPage() {
       if (snap.exists()) setStop({ id: snap.id, ...snap.data() } as Stop);
     });
   }, [stopId]);
+
+  const handlePhotoCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !stopId) return;
+    setUploadingPhoto(true);
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      const dataUrl = reader.result as string;
+      await updateDoc(doc(db, 'stops', stopId), {
+        proofUrl: dataUrl,
+        proofTakenAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      });
+      setProofUrl(dataUrl);
+      setUploadingPhoto(false);
+    };
+    reader.readAsDataURL(file);
+  };
 
   const updateStatus = async (status: StopStatus, extra?: Record<string, unknown>) => {
     if (!stopId) return;
@@ -112,8 +134,54 @@ export default function StopDetailPage() {
           </div>
         </div>
 
+        <div className="bg-white rounded-xl border p-4 space-y-3">
+          <h2 className="font-semibold text-sm text-gray-500 uppercase tracking-wide">Proof of Delivery</h2>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={handlePhotoCapture}
+            className="hidden"
+          />
+          {proofUrl || stop.proofUrl ? (
+            <div className="space-y-2">
+              <img
+                src={proofUrl ?? stop.proofUrl ?? ''}
+                alt="Proof of delivery"
+                className="w-full rounded-xl object-cover max-h-48"
+              />
+              <p className="text-xs text-green-700 flex items-center gap-1">
+                <CheckCircle className="h-3 w-3" /> Photo saved
+              </p>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="text-xs text-brand underline"
+              >
+                Retake photo
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadingPhoto}
+              className="w-full border-2 border-dashed border-brand/30 rounded-xl py-6 flex flex-col items-center gap-2 text-brand/60 hover:border-brand/60 transition-colors disabled:opacity-50"
+            >
+              {uploadingPhoto ? (
+                <div className="animate-spin rounded-full h-6 w-6 border-2 border-brand border-t-transparent" />
+              ) : (
+                <>
+                  <Camera className="h-8 w-8" />
+                  <span className="text-sm font-medium">Take delivery photo</span>
+                  <span className="text-xs">Photo is sent to the customer</span>
+                </>
+              )}
+            </button>
+          )}
+        </div>
+
         <div className="bg-white rounded-xl border p-4">
-          <h2 className="font-semibold text-sm text-gray-500 uppercase tracking-wide mb-3">Delivery Notes</h2>
+          <h2 className="font-semibold text-sm text-gray-500 uppercase tracking-wide mb-3">Driver Notes</h2>
           <textarea
             placeholder="Add a note about this delivery (optional)…"
             value={note} onChange={(e) => setNote(e.target.value)}

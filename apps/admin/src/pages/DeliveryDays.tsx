@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react';
 import { collection, query, orderBy, onSnapshot, addDoc, updateDoc, doc, Timestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import type { DeliveryDay } from '@butcher/shared';
-import { Plus, X, CalendarDays } from 'lucide-react';
+import { Plus, X, CalendarDays, ClipboardList } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 export default function DeliveryDaysPage() {
+  const navigate = useNavigate();
   const [days, setDays] = useState<DeliveryDay[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ date: '', maxOrders: 20, notes: '' });
@@ -66,10 +68,16 @@ export default function DeliveryDaysPage() {
                   {day.notes && ` · ${day.notes}`}
                 </p>
               </div>
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
                 <div className="w-24 bg-gray-200 rounded-full h-1.5">
                   <div className="bg-brand h-1.5 rounded-full" style={{ width: `${Math.min(100, ((day.orderCount ?? 0) / (day.maxOrders ?? 1)) * 100)}%` }} />
                 </div>
+                <button
+                  onClick={() => navigate(`/delivery-days/${day.id}`)}
+                  className="flex items-center gap-1 text-xs text-brand border border-brand/30 px-2 py-1 rounded-lg hover:bg-brand/5"
+                >
+                  <ClipboardList className="h-3.5 w-3.5" /> Manifest
+                </button>
                 <button onClick={() => toggleActive(day)} className={`w-10 h-5 rounded-full transition-colors ${day.active ? 'bg-brand' : 'bg-gray-300'}`}>
                   <span className={`block w-4 h-4 rounded-full bg-white shadow transition-transform mx-0.5 ${day.active ? 'translate-x-5' : 'translate-x-0'}`} />
                 </button>

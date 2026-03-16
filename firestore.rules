@@ -102,5 +102,28 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isAdmin();
     }
+
+    // Subscriptions — anyone can create (sign-up form), admin can read all
+    match /subscriptions/{id} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin();
+    }
+
+    // Stops (flat collection) — driver can read + update their own day's stops
+    match /stops/{stopId} {
+      allow read: if isAdmin() || isDriver();
+      allow update: if isDriver() &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status','deliveredAt','failedAt','proofUrl','proofTakenAt','driverNote','failReason','updatedAt','lat','lng']);
+      allow create, delete: if isAdmin();
+    }
+
+    // Driver sessions — driver write own, admin read all
+    match /driverSessions/{id} {
+      allow read: if isAdmin() || isDriver();
+      allow create: if isDriver();
+      allow update: if isDriver();
+      allow delete: if false;
+    }
   }
 }

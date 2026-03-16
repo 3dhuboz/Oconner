@@ -7,6 +7,9 @@ import OrdersPage from './pages/Orders';
 import OrderDetailPage from './pages/OrderDetail';
 import ProductsPage from './pages/Products';
 import DeliveryDaysPage from './pages/DeliveryDays';
+import DeliveryManifestPage from './pages/DeliveryManifest';
+import DriversPage from './pages/Drivers';
+import SubscriptionsPage from './pages/Subscriptions';
 import StockPage from './pages/Stock';
 import CustomersPage from './pages/Customers';
 import AuditLogPage from './pages/AuditLog';
@@ -32,6 +35,9 @@ export default function App() {
         <Route path="orders/:orderId" element={<OrderDetailPage />} />
         <Route path="products" element={<ProductsPage />} />
         <Route path="delivery-days" element={<DeliveryDaysPage />} />
+        <Route path="delivery-days/:dayId" element={<DeliveryManifestPage />} />
+        <Route path="drivers" element={<DriversPage />} />
+        <Route path="subscriptions" element={<SubscriptionsPage />} />
         <Route path="stock" element={<StockPage />} />
         <Route path="customers" element={<CustomersPage />} />
         <Route path="map" element={<MapPage />} />

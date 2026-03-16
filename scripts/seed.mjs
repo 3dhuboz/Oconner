@@ -354,6 +354,107 @@ async function seedConfig() {
   console.log('✅ Seeded config/storefront');
 }
 
+// ─── Delivery Days ────────────────────────────────────────────────────────────
+
+function nextNSaturdays(n) {
+  const days = [];
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  while (days.length < n) {
+    d.setDate(d.getDate() + 1);
+    if (d.getDay() === 6) days.push(new Date(d));
+  }
+  return days;
+}
+
+async function seedDeliveryDays() {
+  const existing = await db.collection('deliveryDays').get();
+  if (!existing.empty) {
+    console.log(`⚠️  deliveryDays already has ${existing.size} docs — skipping.`);
+    return [];
+  }
+  const saturdays = nextNSaturdays(6);
+  const ids = [];
+  for (let i = 0; i < saturdays.length; i++) {
+    const ref = db.collection('deliveryDays').doc();
+    await ref.set({
+      date: admin.firestore.Timestamp.fromDate(saturdays[i]),
+      maxOrders: 20,
+      orderCount: 0,
+      active: true,
+      notes: i === 0 ? 'Gladstone & Calliope run' : '',
+      createdAt: admin.firestore.Timestamp.now(),
+    });
+    ids.push({ id: ref.id, date: saturdays[i] });
+    console.log(`✅ Delivery day: ${saturdays[i].toDateString()}`);
+  }
+  return ids;
+}
+
+// ─── Sample Orders + Stops ────────────────────────────────────────────────────
+
+const SAMPLE_CUSTOMERS = [
+  { name: 'Sarah Mitchell', email: 'sarah.m@example.com', phone: '0412 345 678', line1: '14 Dawson Rd', suburb: 'Calliope', state: 'QLD', postcode: '4680', note: 'Leave at front door. Beware of dog.' },
+  { name: 'Tom Brennan', email: 'tom.b@example.com', phone: '0423 456 789', line1: '8 Roseberry St', suburb: 'Gladstone', state: 'QLD', postcode: '4680', note: '' },
+  { name: 'Kylie Ross', email: 'kylie.r@example.com', phone: '0434 567 890', line1: '21 Pacific Dr', suburb: 'Boyne Island', state: 'QLD', postcode: '4680', note: 'Side gate is unlocked.' },
+  { name: 'James Nguyen', email: 'james.n@example.com', phone: '0445 678 901', line1: '5 Barolin St', suburb: 'Tannum Sands', state: 'QLD', postcode: '4680', note: '' },
+  { name: 'Lisa Carpenter', email: 'lisa.c@example.com', phone: '0456 789 012', line1: '33 Flynn St', suburb: 'Agnes Water', state: 'QLD', postcode: '4677', note: 'Call on arrival.' },
+];
+
+const SAMPLE_ITEMS = [
+  [{ productId: 'bbx', productName: 'BBQ Box', isMeatPack: true, quantity: 1, weight: 0, unitPrice: 29000 }],
+  [{ productId: 'fam', productName: 'Family Box', isMeatPack: true, quantity: 1, weight: 0, unitPrice: 29000 }],
+  [{ productId: 'dbl', productName: 'Double Box', isMeatPack: true, quantity: 1, weight: 0, unitPrice: 55000 }],
+  [{ productId: 'val', productName: 'Value Box', isMeatPack: true, quantity: 1, weight: 0, unitPrice: 22000 }],
+  [{ productId: 'bbx', productName: 'BBQ Box', isMeatPack: true, quantity: 2, weight: 0, unitPrice: 58000 }],
+];
+
+async function seedSampleOrders(deliveryDayId) {
+  const existing = await db.collection('orders').get();
+  if (!existing.empty) {
+    console.log(`⚠️  orders already has ${existing.size} docs — skipping.`);
+    return;
+  }
+  for (let i = 0; i < SAMPLE_CUSTOMERS.length; i++) {
+    const c = SAMPLE_CUSTOMERS[i];
+    const items = SAMPLE_ITEMS[i];
+    const total = items.reduce((s, it) => s + it.unitPrice, 0);
+    const orderRef = db.collection('orders').doc();
+    await orderRef.set({
+      deliveryDayId,
+      customerName: c.name,
+      customerEmail: c.email,
+      customerPhone: c.phone,
+      customerId: '',
+      address: { line1: c.line1, line2: '', suburb: c.suburb, state: c.state, postcode: c.postcode },
+      items,
+      total,
+      status: 'confirmed',
+      customerNote: c.note,
+      createdAt: admin.firestore.Timestamp.now(),
+      updatedAt: admin.firestore.Timestamp.now(),
+    });
+    const stopRef = db.collection('stops').doc();
+    await stopRef.set({
+      orderId: orderRef.id,
+      deliveryDayId,
+      customerName: c.name,
+      customerEmail: c.email,
+      customerPhone: c.phone,
+      address: { line1: c.line1, line2: '', suburb: c.suburb, state: c.state, postcode: c.postcode },
+      customerNote: c.note,
+      items,
+      sequence: i + 1,
+      status: 'pending',
+      proofUrl: null,
+      driverNote: null,
+      createdAt: admin.firestore.Timestamp.now(),
+      updatedAt: admin.firestore.Timestamp.now(),
+    });
+    console.log(`✅ Order + stop: ${c.name}`);
+  }
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -369,6 +470,10 @@ async function main() {
   }
   await seedProducts();
   await seedConfig();
+  const dayIds = await seedDeliveryDays();
+  if (dayIds.length > 0) {
+    await seedSampleOrders(dayIds[0].id);
+  }
   console.log('\n✅ Seed complete!\n');
   process.exit(0);
 }

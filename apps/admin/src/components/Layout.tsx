@@ -4,7 +4,7 @@ import { auth } from '../lib/firebase';
 import {
   LayoutDashboard, ShoppingBag, Package, CalendarDays,
   BarChart2, Users, Map, FileText, LogOut, Menu, X, Settings, Sparkles,
-  ExternalLink, Store, Truck,
+  ExternalLink, Store, Truck, UserCog, RefreshCcw,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -18,6 +18,8 @@ const NAV_ITEMS = [
   { to: '/delivery-days', icon: CalendarDays, label: 'Delivery Days' },
   { to: '/stock', icon: BarChart2, label: 'Stock' },
   { to: '/customers', icon: Users, label: 'Customers' },
+  { to: '/drivers', icon: UserCog, label: 'Drivers' },
+  { to: '/subscriptions', icon: RefreshCcw, label: 'Subscriptions' },
   { to: '/map', icon: Map, label: 'Driver Map' },
   { to: '/audit', icon: FileText, label: 'Audit Log' },
   { to: '/settings', icon: Settings, label: 'Site Settings' },
