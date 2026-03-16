@@ -65,7 +65,9 @@ export interface Order {
   paymentIntentId: string;
   paymentProvider: PaymentProvider;
   paymentStatus: PaymentStatus;
-  internalNotes: string;
+  notes?: string;
+  internalNotes?: string;
+  proofUrl?: string;
   packedAt?: Timestamp;
   packedBy?: string;
   createdAt: Timestamp;

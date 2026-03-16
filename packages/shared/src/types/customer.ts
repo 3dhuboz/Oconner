@@ -10,7 +10,7 @@ export interface Customer {
   accountType: 'registered' | 'guest';
   orderCount: number;
   /** cents */
-  totalSpend: number;
+  totalSpent: number;
   blacklisted: boolean;
   blacklistReason?: string;
   notes: string;
