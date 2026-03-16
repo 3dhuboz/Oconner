@@ -5,7 +5,7 @@ import Footer from '@/components/Footer';
 import Link from 'next/link';
 import type { DeliveryDay } from '@butcher/shared';
 
-export const revalidate = 300;
+export const dynamic = 'force-dynamic';
 
 async function getDeliveryDays(): Promise<DeliveryDay[]> {
   const now = new Date();
