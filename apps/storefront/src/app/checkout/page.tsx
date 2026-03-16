@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { collection, query, where, orderBy, getDocs, addDoc, doc, updateDoc, increment, Timestamp } from 'firebase/firestore';
+import { collection, query, where, orderBy, getDocs, addDoc, doc, updateDoc, increment, runTransaction, Timestamp } from 'firebase/firestore';
 import { db, auth } from '@/lib/firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import { useCart } from '@/lib/cart';
@@ -100,6 +100,23 @@ export default function CheckoutPage() {
       await updateDoc(doc(db, 'deliveryDays', selectedDayId), {
         orderCount: increment(1),
       });
+
+      // Reduce stock for each ordered item
+      await Promise.all(
+        items.map((item) =>
+          runTransaction(db, async (tx) => {
+            const pRef = doc(db, 'products', item.productId);
+            const pSnap = await tx.get(pRef);
+            if (!pSnap.exists()) return;
+            const current: number = pSnap.data().stockOnHand ?? 0;
+            const qty = item.weight ?? 1;
+            tx.update(pRef, {
+              stockOnHand: Math.max(0, current - qty),
+              updatedAt: Timestamp.now(),
+            });
+          })
+        )
+      );
 
       clearCart();
       router.push(`/checkout/success?orderId=${orderRef.id}`);

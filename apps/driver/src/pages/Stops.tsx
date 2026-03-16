@@ -3,7 +3,7 @@ import { collection, query, where, orderBy, onSnapshot, doc, updateDoc, addDoc, 
 import { db, auth } from '../lib/firebase';
 import { useNavigate } from 'react-router-dom';
 import type { Stop, DeliveryDay } from '@butcher/shared';
-import { useGPS } from '../hooks/useGPS';
+import { useGPS, type GPSStatus } from '../hooks/useGPS';
 import { MapPin, Navigation, User, CheckCircle, Clock, Truck } from 'lucide-react';
 
 export default function StopsPage() {
@@ -13,8 +13,8 @@ export default function StopsPage() {
   const [stops, setStops] = useState<Stop[]>([]);
   const [trackingEnabled, setTrackingEnabled] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const { tracking, error: gpsError } = useGPS({
-    deliveryDayId: deliveryDay?.id ?? '',
+  const { status: gpsStatus, error: gpsError, tracking } = useGPS({
+    sessionId,
     enabled: trackingEnabled,
   });
 
@@ -55,11 +55,13 @@ export default function StopsPage() {
     if (!deliveryDay?.id || !user) return;
     const ref = await addDoc(collection(db, 'driverSessions'), {
       driverId: user.uid,
+      driverUid: user.uid,
       driverName: user.displayName ?? user.email,
       deliveryDayId: deliveryDay.id,
       active: true,
+      gpsStatus: 'idle',
       startedAt: Timestamp.now(),
-      currentLocation: null,
+      updatedAt: Timestamp.now(),
     });
     setSessionId(ref.id);
     setTrackingEnabled(true);
@@ -117,16 +119,24 @@ export default function StopsPage() {
               </button>
             ) : (
               <div className="flex gap-2">
-                <div className="flex-1 bg-green-500/20 border border-green-400/30 rounded-xl px-3 py-2 flex items-center gap-2 text-sm">
-                  <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-                  GPS Active
-                </div>
+                <GPSStatusBadge status={gpsStatus} />
                 <button onClick={handleEndDay} className="bg-white/10 border border-white/20 rounded-xl px-4 py-2 text-sm">
                   End Day
                 </button>
               </div>
             )}
-            {gpsError && <p className="text-red-300 text-xs mt-1">{gpsError}</p>}
+            {(gpsStatus === 'unavailable' || gpsStatus === 'permission_denied') && (
+              <p className="text-amber-200 text-xs mt-1 bg-amber-500/20 rounded-lg px-2 py-1">
+                {gpsStatus === 'permission_denied'
+                  ? '⚠ Location permission denied — enable in browser settings'
+                  : `⚠ GPS signal lost — ${gpsError ?? 'retrying…'}`}
+              </p>
+            )}
+            {gpsStatus === 'stale' && (
+              <p className="text-yellow-200 text-xs mt-1 bg-yellow-500/20 rounded-lg px-2 py-1">
+                ⚠ GPS signal weak — last location may be outdated
+              </p>
+            )}
           </>
         )}
       </header>
@@ -146,6 +156,23 @@ export default function StopsPage() {
           </div>
         )}
       </main>
+    </div>
+  );
+}
+
+function GPSStatusBadge({ status }: { status: GPSStatus }) {
+  const cfg = {
+    idle:             { dot: 'bg-gray-400', text: 'GPS Idle' },
+    active:           { dot: 'bg-green-400 animate-pulse', text: 'GPS Active' },
+    stale:            { dot: 'bg-yellow-400 animate-pulse', text: 'GPS Weak' },
+    unavailable:      { dot: 'bg-red-400', text: 'GPS Lost' },
+    permission_denied:{ dot: 'bg-red-500', text: 'GPS Denied' },
+    unsupported:      { dot: 'bg-gray-400', text: 'No GPS' },
+  }[status] ?? { dot: 'bg-gray-400', text: 'GPS Idle' };
+  return (
+    <div className="flex-1 bg-white/10 border border-white/20 rounded-xl px-3 py-2 flex items-center gap-2 text-sm">
+      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${cfg.dot}`} />
+      {cfg.text}
     </div>
   );
 }

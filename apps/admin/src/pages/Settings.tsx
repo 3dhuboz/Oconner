@@ -1,12 +1,31 @@
 import { useState, useEffect } from 'react';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { Save, RefreshCw, Image, Type, Phone, Layout, ChevronDown, ChevronUp } from 'lucide-react';
+import { Save, RefreshCw, Image, Type, Phone, Layout, ChevronDown, ChevronUp, CreditCard, Mail } from 'lucide-react';
 
 interface Feature {
   icon: string;
   title: string;
   description: string;
+}
+
+interface PaymentConfig {
+  provider: 'stripe';
+  mode: 'test' | 'live';
+  publishableKey: string;
+  webhookSecret: string;
+  statementDescriptor: string;
+}
+
+interface EmailConfig {
+  provider: 'sendgrid' | 'smtp' | 'resend';
+  apiKey: string;
+  fromName: string;
+  fromEmail: string;
+  smtpHost: string;
+  smtpPort: string;
+  smtpUser: string;
+  smtpPass: string;
 }
 
 interface StorefrontConfig {
@@ -33,6 +52,25 @@ interface StorefrontConfig {
     location: string;
   };
 }
+
+const PAYMENT_DEFAULTS: PaymentConfig = {
+  provider: 'stripe',
+  mode: 'test',
+  publishableKey: '',
+  webhookSecret: '',
+  statementDescriptor: "O'Connor Agriculture",
+};
+
+const EMAIL_DEFAULTS: EmailConfig = {
+  provider: 'sendgrid',
+  apiKey: '',
+  fromName: "O'Connor Agriculture",
+  fromEmail: 'orders@oconnoragriculture.com.au',
+  smtpHost: '',
+  smtpPort: '587',
+  smtpUser: '',
+  smtpPass: '',
+};
 
 const DEFAULTS: StorefrontConfig = {
   hero: {
@@ -97,6 +135,8 @@ const textareaCls = `${inputCls} resize-none`;
 
 export default function SettingsPage() {
   const [config, setConfig] = useState<StorefrontConfig>(DEFAULTS);
+  const [payment, setPayment] = useState<PaymentConfig>(PAYMENT_DEFAULTS);
+  const [email, setEmail] = useState<EmailConfig>(EMAIL_DEFAULTS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -104,10 +144,14 @@ export default function SettingsPage() {
   useEffect(() => {
     (async () => {
       try {
-        const snap = await getDoc(doc(db, 'config', 'storefront'));
-        if (snap.exists()) {
-          setConfig({ ...DEFAULTS, ...(snap.data() as StorefrontConfig) });
-        }
+        const [sfSnap, paySnap, emailSnap] = await Promise.all([
+          getDoc(doc(db, 'config', 'storefront')),
+          getDoc(doc(db, 'config', 'payment')),
+          getDoc(doc(db, 'config', 'email')),
+        ]);
+        if (sfSnap.exists()) setConfig({ ...DEFAULTS, ...(sfSnap.data() as StorefrontConfig) });
+        if (paySnap.exists()) setPayment({ ...PAYMENT_DEFAULTS, ...(paySnap.data() as PaymentConfig) });
+        if (emailSnap.exists()) setEmail({ ...EMAIL_DEFAULTS, ...(emailSnap.data() as EmailConfig) });
       } catch (e) {
         console.error('Failed to load settings:', e);
       } finally {
@@ -115,6 +159,11 @@ export default function SettingsPage() {
       }
     })();
   }, []);
+
+  const setPay = <K extends keyof PaymentConfig>(k: K, v: PaymentConfig[K]) =>
+    setPayment((p) => ({ ...p, [k]: v }));
+  const setEmailField = <K extends keyof EmailConfig>(k: K, v: EmailConfig[K]) =>
+    setEmail((e) => ({ ...e, [k]: v }));
 
   const setHero = (key: keyof StorefrontConfig['hero'], val: string) =>
     setConfig((c) => ({ ...c, hero: { ...c.hero, [key]: val } }));
@@ -135,7 +184,11 @@ export default function SettingsPage() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await setDoc(doc(db, 'config', 'storefront'), { ...config, updatedAt: serverTimestamp() }, { merge: true });
+      await Promise.all([
+        setDoc(doc(db, 'config', 'storefront'), { ...config, updatedAt: serverTimestamp() }, { merge: true }),
+        setDoc(doc(db, 'config', 'payment'), { ...payment, updatedAt: serverTimestamp() }, { merge: true }),
+        setDoc(doc(db, 'config', 'email'), { ...email, updatedAt: serverTimestamp() }, { merge: true }),
+      ]);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (e) {
@@ -281,6 +334,124 @@ export default function SettingsPage() {
         <Field label="Button text">
           <input className={inputCls} value={config.cta.buttonText} onChange={(e) => setCta('buttonText', e.target.value)} />
         </Field>
+      </Section>
+
+      <Section title="Payment Gateway" icon={CreditCard}>
+        <Field label="Provider">
+          <div className="flex items-center gap-3 py-1.5">
+            <span className="text-sm font-medium">Stripe</span>
+            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">Supported</span>
+          </div>
+        </Field>
+        <Field label="Mode">
+          <div className="flex gap-3">
+            {(['test', 'live'] as const).map((m) => (
+              <label key={m} className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="payMode"
+                  value={m}
+                  checked={payment.mode === m}
+                  onChange={() => setPay('mode', m)}
+                  className="accent-brand"
+                />
+                <span className={`text-sm font-medium ${m === 'live' ? 'text-green-700' : 'text-amber-700'}`}>
+                  {m === 'live' ? 'Live (real payments)' : 'Test mode'}
+                </span>
+              </label>
+            ))}
+          </div>
+        </Field>
+        <Field
+          label="Stripe Publishable Key"
+          hint={`Starts with pk_${payment.mode === 'live' ? 'live' : 'test'}_…`}
+        >
+          <input
+            className={inputCls}
+            placeholder={`pk_${payment.mode === 'live' ? 'live' : 'test'}_…`}
+            value={payment.publishableKey}
+            onChange={(e) => setPay('publishableKey', e.target.value)}
+          />
+        </Field>
+        <Field
+          label="Stripe Webhook Secret"
+          hint="From Stripe dashboard → Webhooks. Stored server-side only."
+        >
+          <input
+            className={inputCls}
+            type="password"
+            placeholder="whsec_…"
+            value={payment.webhookSecret}
+            onChange={(e) => setPay('webhookSecret', e.target.value)}
+          />
+        </Field>
+        <Field label="Statement descriptor (shows on bank statements)">
+          <input
+            className={inputCls}
+            maxLength={22}
+            value={payment.statementDescriptor}
+            onChange={(e) => setPay('statementDescriptor', e.target.value)}
+          />
+        </Field>
+        {payment.mode === 'live' && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-700">
+            ⚠ You are in <strong>live mode</strong>. Real customer cards will be charged.
+          </div>
+        )}
+      </Section>
+
+      <Section title="Email Routing" icon={Mail}>
+        <Field label="Email provider">
+          <select
+            className={inputCls}
+            value={email.provider}
+            onChange={(e) => setEmailField('provider', e.target.value as EmailConfig['provider'])}
+          >
+            <option value="sendgrid">SendGrid</option>
+            <option value="resend">Resend</option>
+            <option value="smtp">SMTP (custom)</option>
+          </select>
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="From name">
+            <input className={inputCls} value={email.fromName} onChange={(e) => setEmailField('fromName', e.target.value)} />
+          </Field>
+          <Field label="From email">
+            <input className={inputCls} type="email" value={email.fromEmail} onChange={(e) => setEmailField('fromEmail', e.target.value)} />
+          </Field>
+        </div>
+
+        {email.provider !== 'smtp' ? (
+          <Field
+            label={`${email.provider === 'sendgrid' ? 'SendGrid' : 'Resend'} API Key`}
+            hint="Stored encrypted in Firestore. Used by Cloudflare Worker to send order confirmations."
+          >
+            <input
+              className={inputCls}
+              type="password"
+              placeholder={email.provider === 'sendgrid' ? 'SG.…' : 're_…'}
+              value={email.apiKey}
+              onChange={(e) => setEmailField('apiKey', e.target.value)}
+            />
+          </Field>
+        ) : (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="SMTP Host">
+                <input className={inputCls} placeholder="smtp.example.com" value={email.smtpHost} onChange={(e) => setEmailField('smtpHost', e.target.value)} />
+              </Field>
+              <Field label="SMTP Port">
+                <input className={inputCls} type="number" value={email.smtpPort} onChange={(e) => setEmailField('smtpPort', e.target.value)} />
+              </Field>
+            </div>
+            <Field label="SMTP Username">
+              <input className={inputCls} value={email.smtpUser} onChange={(e) => setEmailField('smtpUser', e.target.value)} />
+            </Field>
+            <Field label="SMTP Password">
+              <input className={inputCls} type="password" value={email.smtpPass} onChange={(e) => setEmailField('smtpPass', e.target.value)} />
+            </Field>
+          </div>
+        )}
       </Section>
 
       <Section title="Contact Details" icon={Phone}>
