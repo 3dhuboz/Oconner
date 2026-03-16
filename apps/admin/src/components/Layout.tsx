@@ -3,7 +3,7 @@ import { signOut } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 import {
   LayoutDashboard, ShoppingBag, Package, CalendarDays,
-  BarChart2, Users, Map, FileText, LogOut, Menu, X,
+  BarChart2, Users, Map, FileText, LogOut, Menu, X, Settings,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -16,6 +16,7 @@ const NAV_ITEMS = [
   { to: '/customers', icon: Users, label: 'Customers' },
   { to: '/map', icon: Map, label: 'Driver Map' },
   { to: '/audit', icon: FileText, label: 'Audit Log' },
+  { to: '/settings', icon: Settings, label: 'Site Settings' },
 ];
 
 export default function Layout() {

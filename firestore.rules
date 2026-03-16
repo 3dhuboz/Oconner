@@ -88,9 +88,9 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Config — all authenticated read, admin write
+    // Config/Site settings — public read, admin write
     match /config/{id} {
-      allow read: if isCustomer();
+      allow read: if true;
       allow write: if isAdmin();
     }
   }

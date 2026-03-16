@@ -10,7 +10,7 @@ import type { Product } from '@butcher/shared';
 import { formatCurrency, formatWeight } from '@butcher/shared';
 import { ShoppingCart, Plus, Minus } from 'lucide-react';
 
-const CATEGORIES = ['All', 'beef', 'lamb', 'pork', 'chicken', 'seafood', 'deli', 'pack', 'other'];
+const CATEGORIES = ['All', 'packs', 'beef', 'lamb', 'pork', 'chicken', 'other'];
 
 export default function ShopPage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -44,7 +44,7 @@ export default function ShopPage() {
     <>
       <Navbar />
       <main className="flex-1 max-w-6xl mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold text-brand mb-8">Our Products</h1>
+        <h1 className="text-3xl font-black uppercase tracking-wide text-brand mb-8" style={{fontFamily:'var(--font-heading)'}}>Our Products</h1>
 
         <div className="flex gap-2 flex-wrap mb-8">
           {CATEGORIES.map((cat) => (
