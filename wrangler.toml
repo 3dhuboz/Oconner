@@ -1,0 +1,37 @@
+name = "butcher-workers"
+compatibility_date = "2024-09-01"
+
+# GPS Relay Worker
+[[workers]]
+name = "butcher-gps-relay"
+main = "workers/gps-relay/src/index.ts"
+compatibility_date = "2024-09-01"
+
+[workers.vars]
+FIREBASE_PROJECT_ID = ""
+
+[[workers.kv_namespaces]]
+binding = "KV"
+id = ""
+
+# Payment Handler Worker
+[[workers]]
+name = "butcher-payment-handler"
+main = "workers/payment-handler/src/index.ts"
+compatibility_date = "2024-09-01"
+
+# Route Proxy Worker
+[[workers]]
+name = "butcher-route-proxy"
+main = "workers/route-proxy/src/index.ts"
+compatibility_date = "2024-09-01"
+
+[[workers.kv_namespaces]]
+binding = "GEOCODE_KV"
+id = ""
+
+# PDF Generator Worker
+[[workers]]
+name = "butcher-pdf-generator"
+main = "workers/pdf-generator/src/index.ts"
+compatibility_date = "2024-09-01"

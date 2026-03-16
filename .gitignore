@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+functions/lib/
+.vercel/
+
+# Environment
+.env
+.env.local
+.env.*.local
+.dev.vars
+
+# Turborepo
+.turbo/
+
+# Cloudflare
+.wrangler/
+worker-configuration.d.ts
+
+# Firebase
+.firebase/
+firebase-debug.log
+firestore-debug.log
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*

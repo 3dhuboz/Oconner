@@ -1,0 +1,97 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAdmin() {
+      return request.auth != null && request.auth.token.role == 'admin';
+    }
+    function isDriver() {
+      return request.auth != null && request.auth.token.role == 'driver';
+    }
+    function isCustomer() {
+      return request.auth != null;
+    }
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    // Products — public read (active only), admin write
+    match /products/{id} {
+      allow read: if resource.data.active == true || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // Orders — customer can create own, read own; admin full access
+    match /orders/{id} {
+      allow read: if isAdmin() ||
+        (isCustomer() && resource.data.customerId == request.auth.uid) ||
+        (isCustomer() && resource.data.customerEmail == request.auth.token.email);
+      allow create: if isCustomer();
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+
+    // Delivery days — public read; admin write
+    match /deliveryDays/{dayId} {
+      allow read: if true;
+      allow write: if isAdmin();
+
+      // Stops — driver can read assigned day stops + update status fields only
+      match /stops/{stopId} {
+        allow read: if isAdmin() ||
+          (isDriver() && get(/databases/$(database)/documents/deliveryDays/$(dayId)).data.driverUid == request.auth.uid);
+        allow update: if isDriver() &&
+          get(/databases/$(database)/documents/deliveryDays/$(dayId)).data.driverUid == request.auth.uid &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['status','completedAt','proofUrl','driverNote','flagReason','lat','lng']);
+        allow create, delete: if isAdmin();
+      }
+    }
+
+    // Driver sessions — driver write own, admin read all
+    match /driverSessions/{id} {
+      allow read: if isAdmin();
+      allow create, update: if isDriver() && request.resource.data.driverUid == request.auth.uid;
+      allow delete: if false;
+    }
+
+    // Customers — own read/write, admin full
+    match /customers/{id} {
+      allow read, update: if isAdmin() || isOwner(id);
+      allow create: if isCustomer();
+      allow delete: if false;
+    }
+
+    // Stock — admin only
+    match /stockMovements/{id} {
+      allow read, create: if isAdmin();
+      allow update, delete: if false;
+    }
+
+    match /stocktakeSessions/{id} {
+      allow read, write: if isAdmin();
+    }
+
+    match /suppliers/{id} {
+      allow read, write: if isAdmin();
+    }
+
+    // Notifications — admin read only, no client write
+    match /notifications/{id} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // Audit log — insert only via Cloud Functions (service account)
+    match /auditLog/{id} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // Config — all authenticated read, admin write
+    match /config/{id} {
+      allow read: if isCustomer();
+      allow write: if isAdmin();
+    }
+  }
+}

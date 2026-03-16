@@ -1,0 +1,11 @@
+name = "butcher-route-proxy"
+main = "src/index.ts"
+compatibility_date = "2024-09-01"
+
+[vars]
+FIREBASE_PROJECT_ID = ""
+GOOGLE_MAPS_API_KEY = ""
+
+[[kv_namespaces]]
+binding = "GEOCODE_KV"
+id = ""

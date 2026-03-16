@@ -1,0 +1,88 @@
+import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { signOut } from 'firebase/auth';
+import { auth } from '../lib/firebase';
+import {
+  LayoutDashboard, ShoppingBag, Package, CalendarDays,
+  BarChart2, Users, Map, FileText, LogOut, Menu, X,
+} from 'lucide-react';
+import { useState } from 'react';
+
+const NAV_ITEMS = [
+  { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/orders', icon: ShoppingBag, label: 'Orders' },
+  { to: '/products', icon: Package, label: 'Products' },
+  { to: '/delivery-days', icon: CalendarDays, label: 'Delivery Days' },
+  { to: '/stock', icon: BarChart2, label: 'Stock' },
+  { to: '/customers', icon: Users, label: 'Customers' },
+  { to: '/map', icon: Map, label: 'Driver Map' },
+  { to: '/audit', icon: FileText, label: 'Audit Log' },
+];
+
+export default function Layout() {
+  const navigate = useNavigate();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const handleSignOut = async () => {
+    await signOut(auth);
+    navigate('/login');
+  };
+
+  const sidebar = (
+    <aside className="flex flex-col h-full bg-brand text-white w-64 flex-shrink-0">
+      <div className="p-6 border-b border-white/10">
+        <h1 className="font-bold text-lg">🥩 Admin</h1>
+        <p className="text-xs text-white/60 mt-0.5">The Butcher Online</p>
+      </div>
+      <nav className="flex-1 py-4 overflow-y-auto">
+        {NAV_ITEMS.map(({ to, icon: Icon, label }) => (
+          <NavLink
+            key={to}
+            to={to}
+            onClick={() => setSidebarOpen(false)}
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-6 py-3 text-sm font-medium transition-colors ${
+                isActive ? 'bg-white/15 text-white' : 'text-white/70 hover:bg-white/10 hover:text-white'
+              }`
+            }
+          >
+            <Icon className="h-4 w-4 flex-shrink-0" />
+            {label}
+          </NavLink>
+        ))}
+      </nav>
+      <div className="p-4 border-t border-white/10">
+        <button
+          onClick={handleSignOut}
+          className="flex items-center gap-2 text-white/70 hover:text-white text-sm transition-colors w-full px-2 py-1.5"
+        >
+          <LogOut className="h-4 w-4" />
+          Sign Out
+        </button>
+      </div>
+    </aside>
+  );
+
+  return (
+    <div className="flex h-screen overflow-hidden">
+      <div className="hidden md:flex">{sidebar}</div>
+
+      {sidebarOpen && (
+        <div className="fixed inset-0 z-50 md:hidden flex">
+          <div className="flex-shrink-0">{sidebar}</div>
+          <div className="flex-1 bg-black/50" onClick={() => setSidebarOpen(false)} />
+        </div>
+      )}
+
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <header className="md:hidden bg-brand text-white px-4 h-14 flex items-center justify-between flex-shrink-0">
+          <button onClick={() => setSidebarOpen(true)} className="p-1"><Menu className="h-5 w-5" /></button>
+          <span className="font-semibold">Admin</span>
+          <div className="w-7" />
+        </header>
+        <main className="flex-1 overflow-y-auto p-6">
+          <Outlet />
+        </main>
+      </div>
+    </div>
+  );
+}
