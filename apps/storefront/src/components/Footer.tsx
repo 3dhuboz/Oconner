@@ -5,8 +5,14 @@ export default function Footer() {
     <footer className="bg-brand text-white py-10 px-4 mt-auto">
       <div className="max-w-6xl mx-auto grid md:grid-cols-3 gap-8 text-sm">
         <div>
-          <h3 className="font-bold text-lg mb-3">The Butcher Online</h3>
-          <p className="text-brand-light">Premium quality meat delivered fresh across Western Australia.</p>
+          <div className="flex items-center gap-2 mb-3">
+            <span className="bg-white rounded px-1.5 py-0.5">
+              <span className="text-brand font-black text-xs tracking-widest">OC.</span>
+            </span>
+            <h3 className="font-black text-lg tracking-wider uppercase">O'Connor Agriculture</h3>
+          </div>
+          <p className="text-brand-light text-sm">Locally raised, grass fed, naturally healthy beef from the Boyne Valley, QLD.</p>
+          <p className="text-brand-light/70 text-xs mt-2 italic">"Good for the land. Good for the community. Good for you."</p>
         </div>
         <div>
           <h4 className="font-semibold mb-3">Quick Links</h4>
@@ -20,14 +26,14 @@ export default function Footer() {
         <div>
           <h4 className="font-semibold mb-3">Contact</h4>
           <ul className="space-y-2 text-brand-light">
-            <li>📧 orders@thebutcheronline.com.au</li>
-            <li>📞 (08) 0000 0000</li>
-            <li>📍 Perth, Western Australia</li>
+            <li>📧 orders@oconnoragriculture.com.au</li>
+            <li>� Message us on Facebook</li>
+            <li>📍 Calliope & Boyne Valley, QLD</li>
           </ul>
         </div>
       </div>
       <div className="max-w-6xl mx-auto mt-8 pt-6 border-t border-white/20 text-center text-xs text-brand-light">
-        © {new Date().getFullYear()} The Butcher Online. All rights reserved. ABN 00 000 000 000
+        © {new Date().getFullYear()} O'Connor Agriculture. All rights reserved.
       </div>
     </footer>
   );

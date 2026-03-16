@@ -1,21 +1,26 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import { Inter, Barlow_Condensed } from 'next/font/google';
 import './globals.css';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
+const barlowCondensed = Barlow_Condensed({
+  subsets: ['latin'],
+  weight: ['600', '700', '800'],
+  variable: '--font-heading',
+});
 
 export const metadata: Metadata = {
-  title: { default: 'The Butcher Online', template: '%s | The Butcher Online' },
-  description: 'Premium quality meat delivered fresh to your door across Western Australia.',
+  title: { default: 'O\'Connor Agriculture', template: '%s | O\'Connor Agriculture' },
+  description: 'Local grass fed beef from the Boyne Valley, QLD. Locally raised, grass fed, naturally healthy. Delivered to your door.',
   openGraph: {
-    siteName: 'The Butcher Online',
+    siteName: 'O\'Connor Agriculture',
     type: 'website',
   },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang="en" className={`${inter.variable} ${barlowCondensed.variable}`}>
       <body className="min-h-screen flex flex-col">{children}</body>
     </html>
   );

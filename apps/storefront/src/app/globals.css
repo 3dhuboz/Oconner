@@ -5,4 +5,5 @@
 @layer base {
   html { scroll-behavior: smooth; }
   body { @apply font-sans text-gray-900 bg-white; }
+  h1, h2, h3 { font-family: var(--font-heading), system-ui, sans-serif; }
 }

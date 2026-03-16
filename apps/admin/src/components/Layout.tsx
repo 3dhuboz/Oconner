@@ -30,8 +30,13 @@ export default function Layout() {
   const sidebar = (
     <aside className="flex flex-col h-full bg-brand text-white w-64 flex-shrink-0">
       <div className="p-6 border-b border-white/10">
-        <h1 className="font-bold text-lg">🥩 Admin</h1>
-        <p className="text-xs text-white/60 mt-0.5">The Butcher Online</p>
+        <div className="flex items-center gap-2 mb-0.5">
+          <span className="bg-white rounded px-1.5 py-0.5">
+            <span className="text-brand font-black text-xs tracking-widest">OC.</span>
+          </span>
+          <h1 className="font-black text-sm tracking-wider uppercase">O'Connor</h1>
+        </div>
+        <p className="text-xs text-white/60">Agriculture — Admin</p>
       </div>
       <nav className="flex-1 py-4 overflow-y-auto">
         {NAV_ITEMS.map(({ to, icon: Icon, label }) => (

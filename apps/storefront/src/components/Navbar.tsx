@@ -13,8 +13,15 @@ export default function Navbar() {
   return (
     <nav className="bg-brand text-white sticky top-0 z-50 shadow-md">
       <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
-        <Link href="/" className="font-bold text-xl tracking-tight">
-          🥩 The Butcher Online
+        <Link href="/" className="flex items-center gap-2.5 group">
+          <span className="bg-white rounded px-2 py-1 flex flex-col items-center leading-none">
+            <span className="text-brand font-black text-xs tracking-widest" style={{fontFamily:'var(--font-heading)'}}>
+              OC.
+            </span>
+          </span>
+          <span className="font-black text-base tracking-wider uppercase" style={{fontFamily:'var(--font-heading)'}}>
+            O'Connor
+          </span>
         </Link>
 
         <div className="hidden md:flex items-center gap-6 text-sm font-medium">
