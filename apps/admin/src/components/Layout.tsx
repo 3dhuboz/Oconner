@@ -4,8 +4,12 @@ import { auth } from '../lib/firebase';
 import {
   LayoutDashboard, ShoppingBag, Package, CalendarDays,
   BarChart2, Users, Map, FileText, LogOut, Menu, X, Settings, Sparkles,
+  ExternalLink, Store, Truck,
 } from 'lucide-react';
 import { useState } from 'react';
+
+const STOREFRONT_URL = (import.meta as any).env?.VITE_STOREFRONT_URL ?? 'https://butcher-storefront.pages.dev';
+const DRIVER_URL = (import.meta as any).env?.VITE_DRIVER_URL ?? 'https://butcher-driver.pages.dev';
 
 const NAV_ITEMS = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -57,10 +61,30 @@ export default function Layout() {
           </NavLink>
         ))}
       </nav>
-      <div className="p-4 border-t border-white/10">
+      <div className="p-4 border-t border-white/10 space-y-1">
+        <a
+          href={STOREFRONT_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-2 text-white/70 hover:text-white text-sm transition-colors w-full px-2 py-1.5"
+        >
+          <Store className="h-4 w-4" />
+          View Storefront
+          <ExternalLink className="h-3 w-3 ml-auto" />
+        </a>
+        <a
+          href={DRIVER_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-2 text-white/70 hover:text-white text-sm transition-colors w-full px-2 py-1.5"
+        >
+          <Truck className="h-4 w-4" />
+          Driver App
+          <ExternalLink className="h-3 w-3 ml-auto" />
+        </a>
         <button
           onClick={handleSignOut}
-          className="flex items-center gap-2 text-white/70 hover:text-white text-sm transition-colors w-full px-2 py-1.5"
+          className="flex items-center gap-2 text-white/70 hover:text-white text-sm transition-colors w-full px-2 py-1.5 mt-2 pt-2 border-t border-white/10"
         >
           <LogOut className="h-4 w-4" />
           Sign Out
