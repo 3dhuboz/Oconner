@@ -24,19 +24,23 @@ try {
 
 import { readFileSync, existsSync } from 'fs';
 
-// Load service account
-let serviceAccount;
+// Load credentials — three options in order of priority:
+//  1. FIREBASE_SERVICE_ACCOUNT env var (JSON string)
+//  2. service-account.json file in repo root
+//  3. Application Default Credentials (gcloud auth application-default login)
+let appCredential;
 if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-  serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+  appCredential = admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT));
+  console.log('✓ Using FIREBASE_SERVICE_ACCOUNT env var');
 } else if (existsSync('./service-account.json')) {
-  serviceAccount = JSON.parse(readFileSync('./service-account.json', 'utf8'));
+  appCredential = admin.credential.cert(JSON.parse(readFileSync('./service-account.json', 'utf8')));
+  console.log('✓ Using service-account.json');
 } else {
-  console.error('ERROR: No service account found.');
-  console.error('Either set FIREBASE_SERVICE_ACCOUNT env var or place service-account.json in repo root.');
-  process.exit(1);
+  appCredential = admin.credential.applicationDefault();
+  console.log('✓ Using Application Default Credentials (gcloud ADC)');
 }
 
-admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+admin.initializeApp({ credential: appCredential, projectId: 'butchers-fc7e1' });
 const db = admin.firestore();
 const auth = admin.auth();
 
