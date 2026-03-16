@@ -27,31 +27,18 @@ export default function StopDetailPage() {
     const file = e.target.files?.[0];
     if (!file || !stopId) return;
     setUploadingPhoto(true);
-    try {
-      const uploadUrl = (import.meta as any).env?.VITE_IMAGE_UPLOAD_URL;
-      const secret = (import.meta as any).env?.VITE_UPLOAD_SECRET ?? '';
-      if (!uploadUrl) throw new Error('Image upload not configured');
-      const form = new FormData();
-      form.append('file', file);
-      form.append('folder', 'proof');
-      const res = await fetch(`${uploadUrl}/upload`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${secret}` },
-        body: form,
-      });
-      if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
-      const { url } = await res.json();
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      const dataUrl = reader.result as string;
       await updateDoc(doc(db, 'stops', stopId), {
-        proofUrl: url,
+        proofUrl: dataUrl,
         proofTakenAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
       });
-      setProofUrl(url);
-    } catch (err: any) {
-      alert(`Photo upload failed: ${err?.message ?? 'Unknown error'}`);
-    } finally {
+      setProofUrl(dataUrl);
       setUploadingPhoto(false);
-    }
+    };
+    reader.readAsDataURL(file);
   };
 
   const updateStatus = async (status: StopStatus, extra?: Record<string, unknown>) => {

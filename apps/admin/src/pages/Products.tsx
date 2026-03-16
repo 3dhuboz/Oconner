@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { collection, onSnapshot, doc, updateDoc, addDoc, Timestamp, orderBy, query } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage } from '../lib/firebase';
 import { formatCurrency } from '@butcher/shared';
 import type { Product } from '@butcher/shared';
 import { Plus, Pencil, X, Upload, Sparkles, Image } from 'lucide-react';
@@ -47,22 +48,12 @@ export default function ProductsPage() {
     if (!file) return;
     setImgUploading(true);
     try {
-      const uploadUrl = (import.meta as any).env?.VITE_IMAGE_UPLOAD_URL;
-      const secret = (import.meta as any).env?.VITE_UPLOAD_SECRET ?? '';
-      if (!uploadUrl) throw new Error('VITE_IMAGE_UPLOAD_URL not configured');
-      const form = new FormData();
-      form.append('file', file);
-      form.append('folder', 'products');
-      const res = await fetch(`${uploadUrl}/upload`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${secret}` },
-        body: form,
-      });
-      if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
-      const { url } = await res.json();
+      const path = `products/${Date.now()}_${file.name.replace(/[^a-z0-9.]/gi, '_')}`;
+      const snap = await uploadBytes(storageRef(storage, path), file);
+      const url = await getDownloadURL(snap.ref);
       setEditing((prev) => prev ? { ...prev, imageUrl: url } : prev);
-    } catch (e: any) {
-      alert(`Upload failed: ${e?.message ?? 'Unknown error'}`);
+    } catch (e) {
+      alert('Upload failed. Check Firebase Storage rules.');
     } finally {
       setImgUploading(false);
     }
