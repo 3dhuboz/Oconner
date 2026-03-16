@@ -6,5 +6,3 @@ compatibility_date = "2024-09-01"
 binding = "IMAGES"
 bucket_name = "butcher-images"
 
-[vars]
-UPLOAD_SECRET = ""
