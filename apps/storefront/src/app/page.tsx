@@ -6,6 +6,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
+import CutAdvisor from '@/components/CutAdvisor';
 
 interface Feature { icon: string; title: string; description: string }
 interface Config {
@@ -91,6 +92,8 @@ export default function HomePage() {
             </div>
           </div>
         </section>
+
+        <CutAdvisor />
 
         <section className="py-16 px-4">
           <div className="max-w-6xl mx-auto text-center">
