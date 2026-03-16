@@ -309,7 +309,7 @@ const STOREFRONT_CONFIG = {
     tagline: '"Good for the land. Good for the community. Good for you."',
     primaryCta: 'Order Now',
     secondaryCta: 'Delivery Schedule',
-    heroImageUrl: '',
+    heroImageUrl: '/hero-cows.jpg',
   },
   features: [
     {

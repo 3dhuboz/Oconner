@@ -24,7 +24,7 @@ const DEFAULTS: Config = {
     tagline: '"Good for the land. Good for the community. Good for you."',
     primaryCta: 'Order Now',
     secondaryCta: 'Delivery Schedule',
-    heroImageUrl: '',
+    heroImageUrl: '/hero-cows.jpg',
   },
   features: [
     { icon: '🌿', title: 'Regenerative Farming', description: 'We focus on soil health and animal welfare, producing beef you can feel good about eating.' },

@@ -11,11 +11,32 @@ const barlowCondensed = Barlow_Condensed({
 });
 
 export const metadata: Metadata = {
-  title: { default: 'O\'Connor Agriculture', template: '%s | O\'Connor Agriculture' },
-  description: 'Local grass fed beef from the Boyne Valley, QLD. Locally raised, grass fed, naturally healthy. Delivered to your door.',
+  title: { default: "O'Connor Agriculture", template: "%s | O'Connor Agriculture" },
+  description:
+    "Local grass fed beef from Calliope & the Boyne Valley, QLD. First generation family farm — locally raised, grass fed, naturally healthy. Delivered to your door.",
+  keywords: [
+    'grass fed beef', 'beef boxes', 'local beef Queensland', 'Calliope QLD', 'Boyne Valley beef',
+    "O'Connor Agriculture", 'regenerative farming', 'beef delivery QLD', 'free range beef',
+  ],
+  icons: {
+    icon: [{ url: '/oc-logo.png', type: 'image/png' }],
+    shortcut: '/oc-logo.png',
+    apple: '/oc-logo.png',
+  },
   openGraph: {
-    siteName: 'O\'Connor Agriculture',
+    siteName: "O'Connor Agriculture",
     type: 'website',
+    title: "O'Connor Agriculture — Local Grass Fed Beef, Calliope QLD",
+    description:
+      "First generation family farm from the Boyne Valley, QLD. Grass fed & naturally healthy beef boxes delivered to your door.",
+    images: [{ url: '/oc-logo.png', width: 500, height: 500, alt: "O'Connor Agriculture Logo" }],
+    locale: 'en_AU',
+  },
+  twitter: {
+    card: 'summary',
+    title: "O'Connor Agriculture",
+    description: 'Local grass fed beef from the Boyne Valley, QLD. Delivered to your door.',
+    images: ['/oc-logo.png'],
   },
 };
 

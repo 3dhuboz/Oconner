@@ -12,6 +12,7 @@ import CustomersPage from './pages/Customers';
 import AuditLogPage from './pages/AuditLog';
 import MapPage from './pages/Map';
 import SettingsPage from './pages/Settings';
+import SocialHubPage from './pages/SocialHub';
 
 function RequireAdmin({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -36,6 +37,7 @@ export default function App() {
         <Route path="map" element={<MapPage />} />
         <Route path="audit" element={<AuditLogPage />} />
         <Route path="settings" element={<SettingsPage />} />
+        <Route path="social-hub" element={<SocialHubPage />} />
       </Route>
     </Routes>
   );

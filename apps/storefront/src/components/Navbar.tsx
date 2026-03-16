@@ -13,12 +13,13 @@ export default function Navbar() {
   return (
     <nav className="bg-brand text-white sticky top-0 z-50 shadow-md">
       <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-2.5 group">
-          <span className="bg-white rounded px-2 py-1 flex flex-col items-center leading-none">
-            <span className="text-brand font-black text-xs tracking-widest" style={{fontFamily:'var(--font-heading)'}}>
-              OC.
-            </span>
-          </span>
+        <Link href="/" className="flex items-center gap-2 group">
+          <img
+            src="/oc-logo.png"
+            alt="O'Connor Agriculture"
+            className="h-10 w-10 rounded object-cover flex-shrink-0"
+            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+          />
           <span className="font-black text-base tracking-wider uppercase" style={{fontFamily:'var(--font-heading)'}}>
             O'Connor
           </span>
