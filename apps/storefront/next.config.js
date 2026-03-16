@@ -1,6 +1,4 @@
 /** @type {import('next').NextConfig} */
-const { withNextOnPages } = require('@cloudflare/next-on-pages/next-config');
-
 const nextConfig = {
   transpilePackages: ['@butcher/shared', '@butcher/ui'],
   images: {
@@ -12,4 +10,4 @@ const nextConfig = {
   },
 };
 
-module.exports = withNextOnPages(nextConfig);
+module.exports = nextConfig;
