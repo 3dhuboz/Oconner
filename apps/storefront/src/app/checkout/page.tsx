@@ -21,7 +21,7 @@ export default function CheckoutPage() {
   const [selectedDayId, setSelectedDayId] = useState('');
   const [form, setForm] = useState({
     name: '', email: '', phone: '',
-    line1: '', line2: '', suburb: '', state: 'WA', postcode: '',
+    line1: '', line2: '', suburb: '', state: 'QLD', postcode: '',
     notes: '',
   });
   const [submitting, setSubmitting] = useState(false);
@@ -33,10 +33,14 @@ export default function CheckoutPage() {
 
   useEffect(() => {
     const fetchDays = async () => {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(today.getDate() + 1);
       const q = query(
         collection(db, 'deliveryDays'),
         where('active', '==', true),
-        where('date', '>=', new Date()),
+        where('date', '>=', tomorrow),
         orderBy('date', 'asc'),
       );
       const snap = await getDocs(q);
