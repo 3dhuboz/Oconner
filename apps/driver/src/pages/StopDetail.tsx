@@ -90,10 +90,10 @@ export default function StopDetailPage() {
               <p className="text-gray-600">{stop.address.suburb} {stop.address.state} {stop.address.postcode}</p>
             </div>
           </div>
-          {stop.deliveryNotes && (
+          {stop.customerNote && (
             <div className="mt-3 bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
               <p className="font-medium mb-0.5">Delivery Notes</p>
-              <p>{stop.deliveryNotes}</p>
+              <p>{stop.customerNote}</p>
             </div>
           )}
         </div>
@@ -101,7 +101,7 @@ export default function StopDetailPage() {
         <div className="bg-white rounded-xl border p-4">
           <h2 className="font-semibold text-sm text-gray-500 uppercase tracking-wide mb-3">Order Items</h2>
           <div className="space-y-2">
-            {stop.orderItems?.map((item, i) => (
+            {stop.items?.map((item, i) => (
               <div key={i} className="flex justify-between text-sm">
                 <span className="text-gray-700">{item.productName}</span>
                 <span className="font-medium text-gray-500">

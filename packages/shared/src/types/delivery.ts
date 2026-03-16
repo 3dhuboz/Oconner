@@ -1,7 +1,7 @@
 import type { Timestamp } from 'firebase/firestore';
 import type { Address, OrderItem } from './order';
 
-export type StopStatus = 'pending' | 'current' | 'completed' | 'flagged' | 'skipped';
+export type StopStatus = 'pending' | 'en_route' | 'arrived' | 'delivered' | 'failed' | 'skipped';
 
 export type FlagReason = 'nobody_home' | 'wrong_address' | 'damaged' | 'refused' | 'other';
 
@@ -39,6 +39,7 @@ export interface Stop {
   proofUrl?: string;
   lat?: number;
   lng?: number;
+  customerNote?: string;
   driverNote?: string;
   flagReason?: FlagReason;
   createdAt: Timestamp;

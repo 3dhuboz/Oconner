@@ -24,9 +24,10 @@ export const ORDER_STATUS_COLORS: Record<OrderStatus, string> = {
 
 export const STOP_STATUS_COLORS = {
   pending: '#9E9E9E',
-  current: '#FF9800',
-  completed: '#4CAF50',
-  flagged: '#F44336',
+  en_route: '#2196F3',
+  arrived: '#FF9800',
+  delivered: '#4CAF50',
+  failed: '#F44336',
   skipped: '#607D8B',
 } as const;
 
