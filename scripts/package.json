@@ -1,0 +1,9 @@
+{
+  "name": "oconner-scripts",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "firebase-admin": "^12.4.0"
+  }
+}

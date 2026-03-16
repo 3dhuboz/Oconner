@@ -15,12 +15,15 @@ import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 
 let admin;
-try {
-  admin = require('firebase-admin');
-} catch {
-  // Try from functions package if not hoisted
-  admin = require('../functions/node_modules/firebase-admin');
+const candidates = [
+  './node_modules/firebase-admin',
+  '../node_modules/firebase-admin',
+  '../functions/node_modules/firebase-admin',
+];
+for (const p of candidates) {
+  try { admin = require(p); break; } catch {}
 }
+if (!admin) throw new Error('firebase-admin not found. Run: cd scripts && npm install');
 
 import { readFileSync, existsSync } from 'fs';
 
@@ -355,7 +358,15 @@ async function seedConfig() {
 
 async function main() {
   console.log('\n🚀 O\'Connor Agriculture — Firestore seed\n');
-  await seedUsers();
+  try {
+    await seedUsers();
+  } catch (e) {
+    console.warn('⚠️  seedUsers skipped (ADC lacks Firebase Auth admin scope):');
+    console.warn('   Create the admin user manually in Firebase Console:');
+    console.warn('   Authentication → Add user → steve@3dhub.au / 123456');
+    console.warn('   Then set custom claim role=admin via the Firebase Console or Admin SDK.');
+    console.warn('   Error:', e.message);
+  }
   await seedProducts();
   await seedConfig();
   console.log('\n✅ Seed complete!\n');
