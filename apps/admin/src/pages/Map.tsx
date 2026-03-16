@@ -36,11 +36,11 @@ export default function MapPage() {
                     <Truck className="h-4 w-4 text-white" />
                   </div>
                   <div className="min-w-0">
-                    <p className="font-medium text-sm">{driver.driverName ?? driver.driverId}</p>
-                    {driver.currentLocation && (
+                    <p className="font-medium text-sm">{driver.driverName ?? driver.driverUid}</p>
+                    {driver.lastLat && driver.lastLng && (
                       <p className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
                         <MapPin className="h-3 w-3" />
-                        {driver.currentLocation.lat.toFixed(4)}, {driver.currentLocation.lng.toFixed(4)}
+                        {driver.lastLat.toFixed(4)}, {driver.lastLng.toFixed(4)}
                       </p>
                     )}
                     <p className="text-xs text-gray-400 mt-0.5">

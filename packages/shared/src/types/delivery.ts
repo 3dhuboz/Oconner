@@ -13,8 +13,9 @@ export interface DeliveryDay {
   active: boolean;
   frozen: boolean;
   cutoffTime: Timestamp;
-  capacityLimit: number;
+  maxOrders: number;
   orderCount: number;
+  notes?: string;
   routeGenerated: boolean;
   routeGeneratedAt?: Timestamp;
   driverUid?: string;
