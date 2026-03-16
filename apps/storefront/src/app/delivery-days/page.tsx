@@ -6,6 +6,7 @@ import Link from 'next/link';
 import type { DeliveryDay } from '@butcher/shared';
 
 export const dynamic = 'force-dynamic';
+export const runtime = 'edge';
 
 async function getDeliveryDays(): Promise<DeliveryDay[]> {
   const now = new Date();
