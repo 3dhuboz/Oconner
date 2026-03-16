@@ -25,7 +25,7 @@ const TONES = [
 ];
 
 const BRANDS = [
-  { id: 'oconnor', label: "O'Connor Agriculture", logo: '/oc-logo.png' },
+  { id: 'oconnor', label: "O'Connor Agriculture", logo: '/oc-logo.jpg' },
 ];
 
 export default function SocialHubPage() {

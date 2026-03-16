@@ -15,7 +15,7 @@ export default function Navbar() {
       <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2 group">
           <img
-            src="/oc-logo.png"
+            src="/oc-logo.jpg"
             alt="O'Connor Agriculture"
             className="h-10 w-10 rounded object-cover flex-shrink-0"
             onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}

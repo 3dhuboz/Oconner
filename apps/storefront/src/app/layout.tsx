@@ -19,9 +19,9 @@ export const metadata: Metadata = {
     "O'Connor Agriculture", 'regenerative farming', 'beef delivery QLD', 'free range beef',
   ],
   icons: {
-    icon: [{ url: '/oc-logo.png', type: 'image/png' }],
-    shortcut: '/oc-logo.png',
-    apple: '/oc-logo.png',
+    icon: [{ url: '/oc-logo.jpg', type: 'image/jpeg' }],
+    shortcut: '/oc-logo.jpg',
+    apple: '/oc-logo.jpg',
   },
   openGraph: {
     siteName: "O'Connor Agriculture",
@@ -29,14 +29,14 @@ export const metadata: Metadata = {
     title: "O'Connor Agriculture — Local Grass Fed Beef, Calliope QLD",
     description:
       "First generation family farm from the Boyne Valley, QLD. Grass fed & naturally healthy beef boxes delivered to your door.",
-    images: [{ url: '/oc-logo.png', width: 500, height: 500, alt: "O'Connor Agriculture Logo" }],
+    images: [{ url: '/oc-logo.jpg', width: 500, height: 500, alt: "O'Connor Agriculture Logo" }],
     locale: 'en_AU',
   },
   twitter: {
     card: 'summary',
     title: "O'Connor Agriculture",
     description: 'Local grass fed beef from the Boyne Valley, QLD. Delivered to your door.',
-    images: ['/oc-logo.png'],
+    images: ['/oc-logo.jpg'],
   },
 };
 
