@@ -19,9 +19,9 @@ export const metadata: Metadata = {
     "O'Connor Agriculture", 'regenerative farming', 'beef delivery QLD', 'free range beef',
   ],
   icons: {
-    icon: [{ url: '/oc-logo.jpg', type: 'image/jpeg' }],
-    shortcut: '/oc-logo.jpg',
-    apple: '/oc-logo.jpg',
+    icon: [{ url: '/favicon.jpg', type: 'image/jpeg' }],
+    shortcut: '/favicon.jpg',
+    apple: '/favicon.jpg',
   },
   openGraph: {
     siteName: "O'Connor Agriculture",
