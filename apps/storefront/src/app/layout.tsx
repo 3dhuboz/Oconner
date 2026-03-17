@@ -1,16 +1,8 @@
 import type { Metadata } from 'next';
-import { Inter, Barlow_Condensed } from 'next/font/google';
 import { ClerkProvider } from '@clerk/nextjs';
 import './globals.css';
 import ChatWidget from '@/components/ChatWidget';
 import ClerkTokenProvider from '@/components/ClerkTokenProvider';
-
-const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
-const barlowCondensed = Barlow_Condensed({
-  subsets: ['latin'],
-  weight: ['600', '700', '800'],
-  variable: '--font-heading',
-});
 
 export const metadata: Metadata = {
   title: { default: "O'Connor Agriculture", template: "%s | O'Connor Agriculture" },
@@ -45,7 +37,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <ClerkProvider>
-      <html lang="en" className={`${inter.variable} ${barlowCondensed.variable}`}>
+      <html lang="en">
         <body className="min-h-screen flex flex-col">
           <ClerkTokenProvider />
           {children}
