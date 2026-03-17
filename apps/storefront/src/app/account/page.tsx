@@ -307,7 +307,7 @@ export default function AccountPage() {
                     try {
                       const VAPID_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? '';
                       if (!VAPID_KEY) return;
-                      const db64u = (s: string) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
+                      const db64u = (s: string): ArrayBuffer => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0)).buffer as ArrayBuffer;
                       const sw = await navigator.serviceWorker.ready;
                       const sub = await sw.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: db64u(VAPID_KEY) });
                       const token = await getToken();

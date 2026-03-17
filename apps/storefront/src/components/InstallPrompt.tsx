@@ -7,8 +7,8 @@ import { Bell, Smartphone, X } from 'lucide-react';
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'https://butcher-api.oconner.com.au';
 const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? '';
 
-function db64u(s: string): Uint8Array {
-  return Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
+function db64u(s: string): ArrayBuffer {
+  return Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0)).buffer as ArrayBuffer;
 }
 
 export default function InstallPrompt() {
