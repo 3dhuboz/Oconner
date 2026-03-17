@@ -1,14 +1,28 @@
 import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/d1';
 import { desc, eq } from 'drizzle-orm';
-import { subscriptions } from '@butcher/db';
+import { subscriptions, customers } from '@butcher/db';
 import type { Env, AuthUser } from '../types';
 
 const app = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
 
 app.get('/', async (c) => {
   const db = drizzle(c.env.DB);
-  const rows = await db.select().from(subscriptions).orderBy(desc(subscriptions.createdAt));
+  const rows = await db.select({
+    id: subscriptions.id,
+    customerId: subscriptions.customerId,
+    email: subscriptions.email,
+    boxId: subscriptions.boxId,
+    boxName: subscriptions.boxName,
+    frequency: subscriptions.frequency,
+    status: subscriptions.status,
+    createdAt: subscriptions.createdAt,
+    customerName: customers.name,
+    customerPhone: customers.phone,
+  })
+  .from(subscriptions)
+  .leftJoin(customers, eq(subscriptions.email, customers.email))
+  .orderBy(desc(subscriptions.createdAt));
   return c.json(rows);
 });
 

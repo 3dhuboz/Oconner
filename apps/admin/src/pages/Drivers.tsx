@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { api } from '@butcher/shared';
-import { Plus, X, Truck, User, KeyRound, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Plus, X, Truck, User, ToggleLeft, ToggleRight } from 'lucide-react';
+import { toast } from '../lib/toast';
 
-const EMPTY_FORM = { name: '', email: '', clerkId: '' };
+const EMPTY_FORM = { name: '', email: '' };
 
 interface DriverUser {
   id: string;
@@ -27,34 +28,45 @@ export default function DriversPage() {
   }, []);
 
   const handleAdd = async () => {
-    if (!form.name || !form.email || !form.clerkId) {
-      setError('Name, email and Clerk user ID are required.');
+    if (!form.name || !form.email) {
+      setError('Name and email are required.');
       return;
     }
     setSaving(true);
     setError('');
+    let clerkId: string | null = null;
     try {
-      const created = await api.users.create({
-        id: form.clerkId,
-        name: form.name,
-        email: form.email,
-        role: 'driver',
-        active: true,
-      }) as DriverUser;
-      setDrivers((prev) => [...prev, created]);
+      const found = await api.users.findByEmail(form.email) as { clerkId: string };
+      clerkId = found.clerkId;
+    } catch {
+      // Not in Clerk yet — use UUID, they can log in after signing up
+    }
+    const id = clerkId ?? crypto.randomUUID();
+    try {
+      await api.users.create({ id, name: form.name, email: form.email, role: 'driver', active: true });
+      const newDriver: DriverUser = { id, name: form.name, email: form.email, role: 'driver', active: true };
+      setDrivers((prev) => [...prev, newDriver]);
       setForm(EMPTY_FORM);
       setShowForm(false);
+      toast(clerkId
+        ? `Driver created and linked to existing account`
+        : `Driver created — they must sign up at the storefront to enable login`);
     } catch (e: unknown) {
       const msg = (e as { message?: string })?.message;
       setError(msg ?? 'Failed to create driver.');
+      toast(msg ?? 'Failed to create driver', 'error');
     } finally {
       setSaving(false);
     }
   };
 
   const toggleActive = async (driver: DriverUser) => {
-    await api.users.update(driver.id, { active: !driver.active });
-    setDrivers((prev) => prev.map((d) => d.id === driver.id ? { ...d, active: !d.active } : d));
+    try {
+      await api.users.update(driver.id, { active: !driver.active });
+      setDrivers((prev) => prev.map((d) => d.id === driver.id ? { ...d, active: !d.active } : d));
+    } catch {
+      toast('Failed to update driver', 'error');
+    }
   };
 
   return (
@@ -143,19 +155,10 @@ export default function DriversPage() {
                   className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
                 />
               </div>
-              <div>
-                <label className="text-xs text-gray-500 mb-1 block">Clerk User ID</label>
-                <div className="relative">
-                  <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <input
-                    placeholder="user_xxxxxxxxxxxxxxxx"
-                    value={form.clerkId}
-                    onChange={(e) => setForm((f) => ({ ...f, clerkId: e.target.value }))}
-                    className="w-full border rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand font-mono"
-                  />
-                </div>
-                <p className="text-xs text-gray-400 mt-1">From Clerk dashboard → Users → click user → copy ID</p>
-              </div>
+              <p className="text-xs text-gray-400 bg-gray-50 rounded-lg p-3">
+                If the driver already has an account at the storefront, they'll be linked automatically.
+                Otherwise they can sign up later and their account will be connected on first login.
+              </p>
               {error && <p className="text-red-600 text-sm bg-red-50 rounded-lg p-3">{error}</p>}
             </div>
             <div className="flex gap-3 mt-5">
