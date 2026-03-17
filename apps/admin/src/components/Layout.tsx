@@ -3,7 +3,7 @@ import { useClerk } from '@clerk/clerk-react';
 import {
   LayoutDashboard, ShoppingBag, Package, CalendarDays,
   BarChart2, Users, Map, FileText, LogOut, Menu, X, Settings, Sparkles,
-  ExternalLink, Store, Truck, UserCog, RefreshCcw,
+  ExternalLink, Store, Truck, UserCog, RefreshCcw, ShieldCheck,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -18,6 +18,7 @@ const NAV_ITEMS = [
   { to: '/stock', icon: BarChart2, label: 'Stock' },
   { to: '/customers', icon: Users, label: 'Customers' },
   { to: '/drivers', icon: UserCog, label: 'Drivers' },
+  { to: '/staff', icon: ShieldCheck, label: 'Staff & Admins' },
   { to: '/subscriptions', icon: RefreshCcw, label: 'Subscriptions' },
   { to: '/map', icon: Map, label: 'Driver Map' },
   { to: '/audit', icon: FileText, label: 'Audit Log' },

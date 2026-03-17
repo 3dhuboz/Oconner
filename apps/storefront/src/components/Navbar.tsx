@@ -2,17 +2,29 @@
 
 import Link from 'next/link';
 import { ShoppingCart, User, Menu, X, LayoutDashboard } from 'lucide-react';
-import { useState } from 'react';
-import { useUser } from '@clerk/nextjs';
+import { useState, useEffect } from 'react';
+import { useUser, useAuth } from '@clerk/nextjs';
 import { useCart } from '@/lib/cart';
 import { cn } from '@butcher/ui';
 
 const ADMIN_URL = process.env.NEXT_PUBLIC_ADMIN_URL ?? 'https://butcher-admin.pages.dev';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787';
+
 export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const { user } = useUser();
-  const isAdmin = (user?.publicMetadata as any)?.role === 'admin';
+  const { getToken, isSignedIn } = useAuth();
+
+  useEffect(() => {
+    if (!isSignedIn) { setIsAdmin(false); return; }
+    getToken()
+      .then(t => t ? fetch(`${API_URL}/api/users/me`, { headers: { Authorization: `Bearer ${t}` } }) : null)
+      .then(r => (r?.ok ? r.json() : null))
+      .then((u: any) => setIsAdmin(u?.role === 'admin'))
+      .catch(() => setIsAdmin(false));
+  }, [isSignedIn]);
   const itemCount = useCart((s) => s.itemCount());
 
   return (

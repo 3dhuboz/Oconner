@@ -19,7 +19,14 @@ import subscriptionsRouter from './routes/subscriptions';
 const app = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
 
 app.use('*', cors({
-  origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'https://oconner.pages.dev', 'https://admin.oconner.com.au', 'https://driver.oconner.com.au'],
+  origin: [
+    'http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002',
+    'https://oconner.pages.dev',
+    'https://butcher-storefront.pages.dev',
+    'https://butcher-admin.pages.dev',
+    'https://butcher-driver.pages.dev',
+    'https://admin.oconner.com.au', 'https://driver.oconner.com.au',
+  ],
   allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
