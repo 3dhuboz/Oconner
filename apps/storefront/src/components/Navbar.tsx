@@ -18,6 +18,10 @@ export default function Navbar() {
   const { getToken, isSignedIn } = useAuth();
 
   useEffect(() => {
+    useCart.persist.rehydrate();
+  }, []);
+
+  useEffect(() => {
     if (!isSignedIn) { setIsAdmin(false); return; }
     getToken()
       .then(t => t ? fetch(`${API_URL}/api/users/me`, { headers: { Authorization: `Bearer ${t}` } }) : null)

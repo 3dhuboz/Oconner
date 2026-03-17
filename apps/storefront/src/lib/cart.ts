@@ -1,6 +1,18 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import type { OrderItem } from '@butcher/shared';
+
+const safeStorage = {
+  getItem: (name: string): string | null => {
+    try { return localStorage.getItem(name); } catch { return null; }
+  },
+  setItem: (name: string, value: string): void => {
+    try { localStorage.setItem(name, value); } catch {}
+  },
+  removeItem: (name: string): void => {
+    try { localStorage.removeItem(name); } catch {}
+  },
+};
 
 interface CartStore {
   items: OrderItem[];
@@ -57,6 +69,6 @@ export const useCart = create<CartStore>()(
       total: () => get().items.reduce((sum, i) => sum + i.lineTotal, 0),
       itemCount: () => get().items.reduce((sum, i) => sum + (i.quantity ?? 1), 0),
     }),
-    { name: 'butcher-cart' },
+    { name: 'butcher-cart', storage: createJSONStorage(() => safeStorage), skipHydration: true },
   ),
 );
