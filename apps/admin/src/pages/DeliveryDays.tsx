@@ -22,13 +22,22 @@ export default function DeliveryDaysPage() {
     if (!form.date) return;
     setSaving(true);
     try {
-      const created = await api.deliveryDays.create({
+      const result = await api.deliveryDays.create({
         date: new Date(form.date).getTime(),
         maxOrders: form.maxOrders,
         notes: form.notes,
         deliveryWindowStart: form.deliveryWindowStart,
-      }) as DeliveryDay;
-      setDays((prev) => [...prev, created].sort((a, b) => a.date - b.date));
+      }) as { id: string };
+      const newDay: DeliveryDay = {
+        id: result.id,
+        date: new Date(form.date).getTime(),
+        maxOrders: form.maxOrders,
+        orderCount: 0,
+        notes: form.notes,
+        active: true,
+        deliveryWindowStart: form.deliveryWindowStart,
+      } as unknown as DeliveryDay;
+      setDays((prev) => [...prev, newDay].sort((a, b) => a.date - b.date));
       setShowForm(false);
       setForm({ date: '', maxOrders: 20, notes: '', deliveryWindowStart: '09:00' });
       toast('Delivery day created');

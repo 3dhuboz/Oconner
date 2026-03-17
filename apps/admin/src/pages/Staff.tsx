@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '@butcher/shared';
 import { Plus, X, Save, ShieldCheck, ShieldOff, Search, CheckCircle } from 'lucide-react';
+import { toast } from '../lib/toast';
 
 interface StaffUser {
   id: string;
@@ -124,8 +125,9 @@ export default function StaffPage() {
     try {
       await api.users.update(u.id, { active: !u.active });
       load();
+      toast(`${u.name} ${u.active ? 'deactivated' : 'activated'}`);
     } catch (e: any) {
-      alert(e.message ?? 'Failed to update');
+      toast(e.message ?? 'Failed to update', 'error');
     }
   };
 

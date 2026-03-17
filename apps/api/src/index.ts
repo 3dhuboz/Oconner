@@ -259,6 +259,57 @@ app.put('/api/config/:key', requireAuth, requireRole('admin'), async (c) => {
   return c.json({ ok: true });
 });
 
+app.post('/api/generate-post', requireAuth, requireRole('admin'), async (c) => {
+  const { brand, platform, postType, tone, extraContext } = await c.req.json<{
+    brand: string; platform: string; postType: string; tone: string; extraContext?: string;
+  }>();
+
+  const brandName = "O'Connor Agriculture";
+  const platformGuide: Record<string, string> = {
+    facebook: 'Conversational, community-focused, 1–3 paragraphs, include a call to action.',
+    instagram: 'Visual storytelling, punchy, use 5–10 relevant hashtags at the end.',
+    linkedin: 'Professional tone, highlight quality and sustainability, 2–3 paragraphs.',
+  };
+  const typeGuide: Record<string, string> = {
+    product: 'Promote a specific product or range from the farm shop.',
+    farm_update: 'Share a genuine update from life on the farm.',
+    seasonal: 'Highlight seasonal availability or upcoming events.',
+    recipe: 'Share a recipe idea using farm products.',
+    community: 'Engage the local community with a warm, personal message.',
+    educational: 'Educate followers about farming practices, animal welfare, or food quality.',
+  };
+  const toneGuide: Record<string, string> = {
+    warm: 'Warm, authentic, and personal.',
+    exciting: 'Exciting, bold, and energetic.',
+    informative: 'Informative and clear.',
+    humorous: 'Light-hearted and a little humorous.',
+    heartfelt: 'Heartfelt and sincere.',
+  };
+
+  const prompt = `You are a social media manager for ${brandName}, a family-run Australian farm and butcher selling premium ethically-raised meat direct to customers.
+
+Write a single ${platform} post. Guidelines:
+- Platform: ${platformGuide[platform] ?? platform}
+- Post type: ${typeGuide[postType] ?? postType}
+- Tone: ${toneGuide[tone] ?? tone}
+${extraContext ? `- Extra context: ${extraContext}` : ''}
+
+Output ONLY the post text, nothing else. No commentary, no "Here is your post:", just the post itself.`;
+
+  try {
+    const result = await c.env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+      messages: [
+        { role: 'system', content: `You are a social media copywriter for ${brandName}, an Australian farm and butcher. Write authentic, on-brand posts.` },
+        { role: 'user', content: prompt },
+      ],
+      max_tokens: 500,
+    }) as { response?: string };
+    return c.json({ post: result.response ?? '' });
+  } catch (e: any) {
+    return c.json({ error: 'AI generation failed. Workers AI may not be available.' }, 500);
+  }
+});
+
 app.post('/api/images/upload', requireAuth, async (c) => {
   const formData = await c.req.formData();
   const file = formData.get('file') as File | null;

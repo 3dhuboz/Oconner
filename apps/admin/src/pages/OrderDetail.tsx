@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { api, formatCurrency, ORDER_STATUS_LABELS } from '@butcher/shared';
 import type { Order, OrderStatus } from '@butcher/shared';
 import { ArrowLeft, Printer } from 'lucide-react';
+import { toast } from '../lib/toast';
 
 const STATUSES: OrderStatus[] = ['pending_payment', 'confirmed', 'preparing', 'packed', 'out_for_delivery', 'delivered', 'cancelled', 'refunded'];
 
@@ -22,14 +23,18 @@ export default function OrderDetailPage() {
   const handleStatusChange = async (status: OrderStatus) => {
     if (!orderId) return;
     setSaving(true);
-    await api.orders.updateStatus(orderId, status);
-    setOrder((prev) => prev ? { ...prev, status } : prev);
-    setSaving(false);
+    try {
+      await api.orders.updateStatus(orderId, status);
+      setOrder((prev) => prev ? { ...prev, status } : prev);
+      toast('Order status updated');
+    } catch {
+      toast('Failed to update status', 'error');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handlePrint = () => {
-    window.open(`${import.meta.env.VITE_PDF_GENERATOR_URL}/packing-list/${orderId}`, '_blank');
-  };
+  const handlePrint = () => window.print();
 
   if (!order) return <div className="flex justify-center py-10"><div className="animate-spin rounded-full h-8 w-8 border-4 border-brand border-t-transparent" /></div>;
 

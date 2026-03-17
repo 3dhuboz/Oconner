@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api, formatCurrency } from '@butcher/shared';
 import type { Order } from '@butcher/shared';
 import { ShoppingBag, DollarSign, Truck, Package } from 'lucide-react';
@@ -70,16 +71,16 @@ export default function DashboardPage() {
         ) : (
           <div className="divide-y">
             {recentOrders.map((order) => (
-              <div key={order.id} className="px-5 py-3 flex items-center justify-between hover:bg-gray-50">
+              <Link key={order.id} to={`/orders/${order.id}`} className="px-5 py-3 flex items-center justify-between hover:bg-gray-50 block">
                 <div>
-                  <p className="font-medium text-sm">#{(order.id ?? '').slice(-8).toUpperCase()}</p>
+                  <p className="font-medium text-sm text-brand">#{(order.id ?? '').slice(-8).toUpperCase()}</p>
                   <p className="text-xs text-gray-500">{order.customerName} · {order.items.length} items</p>
                 </div>
                 <div className="text-right">
                   <p className="font-medium text-sm">{formatCurrency(order.total)}</p>
                   <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{order.status}</span>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         )}

@@ -24,6 +24,9 @@ FROM_EMAIL = "orders@oconner.com.au"
 # STRIPE_WEBHOOK_SECRET
 # GOOGLE_MAPS_API_KEY
 
+[ai]
+binding = "AI"
+
 [triggers]
 crons = ["0 8 * * *"]
 

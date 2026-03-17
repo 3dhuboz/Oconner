@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { api } from '@butcher/shared';
 import { Sparkles, Copy, Check, RefreshCw, Facebook, Instagram, Linkedin } from 'lucide-react';
 
 const PLATFORMS = [
@@ -45,20 +46,15 @@ export default function SocialHubPage() {
     setError('');
     setGeneratedPost('');
     try {
-      const res = await fetch('/api/generate-post', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ brand, platform, postType, tone, extraContext }),
-      });
-      const data = await res.json() as { post?: string; error?: string };
+      const data = await api.post<{ post?: string; error?: string }>('/api/generate-post', { brand, platform, postType, tone, extraContext });
       if (data.error) {
         setError(data.error);
       } else {
         setGeneratedPost(data.post ?? '');
         setCharCount((data.post ?? '').length);
       }
-    } catch (e) {
-      setError('Failed to generate post. Check that OPENAI_API_KEY is set in Cloudflare Pages env vars.');
+    } catch (e: any) {
+      setError(e.message ?? 'Failed to generate post.');
     } finally {
       setLoading(false);
     }

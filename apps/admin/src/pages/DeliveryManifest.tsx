@@ -240,7 +240,7 @@ export default function DeliveryManifestPage() {
           </p>
         </div>
         <button
-          onClick={() => window.open(`${import.meta.env.VITE_PDF_GENERATOR_URL}/delivery-list/${dayId}`, '_blank')}
+          onClick={() => window.print()}
           className="flex items-center gap-2 border px-3 py-2 rounded-lg text-sm hover:bg-gray-50"
         >
           <FileText className="h-4 w-4" /> Delivery List

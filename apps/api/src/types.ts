@@ -1,6 +1,7 @@
 export interface Env {
   DB: D1Database;
   IMAGES: R2Bucket;
+  AI: Ai;
   CLERK_SECRET_KEY: string;
   RESEND_API_KEY: string;
   STRIPE_SECRET_KEY: string;
