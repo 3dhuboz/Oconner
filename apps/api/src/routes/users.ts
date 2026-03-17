@@ -47,4 +47,27 @@ app.patch('/:id', async (c) => {
   return c.json({ ok: true });
 });
 
+app.post('/lookup', async (c) => {
+  const caller = c.get('user');
+  if (caller.role !== 'admin') return c.json({ error: 'Forbidden' }, 403);
+  const { email } = await c.req.json<{ email: string }>();
+  if (!email) return c.json({ error: 'Email required' }, 400);
+
+  const res = await fetch(
+    `https://api.clerk.com/v1/users?email_address[]=${encodeURIComponent(email)}&limit=1`,
+    { headers: { Authorization: `Bearer ${c.env.CLERK_SECRET_KEY}` } },
+  );
+  if (!res.ok) return c.json({ error: 'Clerk lookup failed' }, 500);
+  const found = await res.json() as any[];
+  if (!found.length) {
+    return c.json({ error: 'No Clerk account found for this email. They must sign up at the storefront first.' }, 404);
+  }
+  const u = found[0];
+  return c.json({
+    clerkId: u.id,
+    email: u.email_addresses?.[0]?.email_address ?? email,
+    name: [u.first_name, u.last_name].filter(Boolean).join(' ') || email,
+  });
+});
+
 export default app;

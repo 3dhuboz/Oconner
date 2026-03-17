@@ -55,17 +55,22 @@ export default function StopsPage() {
 
   return (
     <div className="flex flex-col h-full">
-      <header className="bg-brand text-white px-4 py-4 flex-shrink-0">
+      <header className="bg-brand text-white px-4 pt-3 pb-4 flex-shrink-0">
         <div className="flex items-center justify-between mb-3">
-          <div>
-            <h1 className="font-bold text-lg">Today's Deliveries</h1>
-            {deliveryDay ? (
-              <p className="text-white/70 text-sm">
-                {new Date(deliveryDay.date).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })}
-              </p>
-            ) : (
-              <p className="text-white/50 text-sm">No delivery day today</p>
-            )}
+          <div className="flex items-center gap-2.5">
+            <span className="bg-white rounded px-1.5 py-0.5 flex-shrink-0">
+              <span className="text-brand font-black text-xs tracking-widest">OC.</span>
+            </span>
+            <div>
+              <h1 className="font-bold text-sm leading-tight tracking-wider uppercase">O'Connor</h1>
+              {deliveryDay ? (
+                <p className="text-white/60 text-xs leading-tight">
+                  {new Date(deliveryDay.date).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })}
+                </p>
+              ) : (
+                <p className="text-white/50 text-xs leading-tight">Driver App</p>
+              )}
+            </div>
           </div>
           <button onClick={() => navigate('/profile')} className="w-9 h-9 bg-white/10 rounded-full flex items-center justify-center">
             <User className="h-5 w-5" />

@@ -90,6 +90,7 @@ export const api = {
     drivers: () => api.get('/api/users/drivers'),
     create: (data: unknown) => api.post('/api/users', data),
     update: (id: string, data: unknown) => api.patch(`/api/users/${id}`, data),
+    findByEmail: (email: string) => api.post('/api/users/lookup', { email }),
   },
 
   drivers: {

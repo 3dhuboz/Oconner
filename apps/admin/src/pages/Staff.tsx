@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '@butcher/shared';
-import { Plus, X, Save, ShieldCheck, ShieldOff } from 'lucide-react';
+import { Plus, X, Save, ShieldCheck, ShieldOff, Search, CheckCircle } from 'lucide-react';
 
 interface StaffUser {
   id: string;
@@ -10,8 +10,6 @@ interface StaffUser {
   active: boolean;
   createdAt: number;
 }
-
-const BLANK: Partial<StaffUser> = { id: '', name: '', email: '', role: 'staff', active: true };
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
@@ -32,6 +30,7 @@ const inp = 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ou
 const ROLE_BADGE: Record<string, string> = {
   admin: 'bg-purple-100 text-purple-700',
   staff: 'bg-blue-100 text-blue-700',
+  driver: 'bg-amber-100 text-amber-700',
 };
 
 export default function StaffPage() {
@@ -41,6 +40,14 @@ export default function StaffPage() {
   const [isNew, setIsNew] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  // New-member lookup state
+  const [lookupEmail, setLookupEmail] = useState('');
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const [lookupResult, setLookupResult] = useState<{ clerkId: string; email: string; name: string } | null>(null);
+  const [lookupError, setLookupError] = useState('');
+  const [newRole, setNewRole] = useState<'admin' | 'staff'>('staff');
+  const [newName, setNewName] = useState('');
 
   const load = () => {
     setLoading(true);
@@ -54,32 +61,57 @@ export default function StaffPage() {
 
   useEffect(() => { load(); }, []);
 
-  const openNew = () => { setEditing({ ...BLANK }); setIsNew(true); setError(''); };
+  const resetNew = () => {
+    setLookupEmail(''); setLookupResult(null); setLookupError('');
+    setNewRole('staff'); setNewName(''); setError('');
+  };
+  const openNew = () => { resetNew(); setIsNew(true); };
   const openEdit = (u: StaffUser) => { setEditing({ ...u }); setIsNew(false); setError(''); };
-  const close = () => { setEditing(null); setIsNew(false); setError(''); };
+  const close = () => { setEditing(null); setIsNew(false); resetNew(); };
 
-  const handleSave = async () => {
-    if (!editing?.id?.trim()) { setError('Clerk User ID is required.'); return; }
-    if (!editing?.name?.trim()) { setError('Name is required.'); return; }
-    if (!editing?.email?.trim()) { setError('Email is required.'); return; }
+  const handleLookup = async () => {
+    if (!lookupEmail.trim()) return;
+    setLookupLoading(true); setLookupResult(null); setLookupError('');
+    try {
+      const result = await api.users.findByEmail(lookupEmail.trim()) as any;
+      setLookupResult(result);
+      setNewName(result.name || '');
+    } catch (e: any) {
+      setLookupError(e.message ?? 'Lookup failed');
+    } finally {
+      setLookupLoading(false);
+    }
+  };
+
+  const handleAddNew = async () => {
+    if (!lookupResult) return;
     setSaving(true); setError('');
     try {
-      if (isNew) {
-        await api.users.create({
-          id: editing.id!.trim(),
-          name: editing.name,
-          email: editing.email,
-          role: editing.role ?? 'staff',
-          active: true,
-        });
-      } else {
-        await api.users.update(editing.id!, {
-          name: editing.name,
-          email: editing.email,
-          role: editing.role,
-          active: editing.active,
-        });
-      }
+      await api.users.create({
+        id: lookupResult.clerkId,
+        name: newName || lookupResult.name,
+        email: lookupResult.email,
+        role: newRole,
+        active: true,
+      });
+      load(); close();
+    } catch (e: any) {
+      setError(e.message ?? 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleEditSave = async () => {
+    if (!editing?.name?.trim()) { setError('Name is required.'); return; }
+    setSaving(true); setError('');
+    try {
+      await api.users.update(editing.id!, {
+        name: editing.name,
+        email: editing.email,
+        role: editing.role,
+        active: editing.active,
+      });
       load(); close();
     } catch (e: any) {
       setError(e.message ?? 'Save failed');
@@ -97,7 +129,7 @@ export default function StaffPage() {
     }
   };
 
-  const set = (k: keyof StaffUser, v: any) => setEditing((prev) => prev ? { ...prev, [k]: v } : prev);
+  const setEdit = (k: keyof StaffUser, v: any) => setEditing((prev) => prev ? { ...prev, [k]: v } : prev);
 
   return (
     <div>
@@ -111,29 +143,21 @@ export default function StaffPage() {
         </button>
       </div>
 
-      <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-800 mb-6">
-        <strong>To add a new admin or staff member:</strong> they must first create an account at the storefront login page,
-        then you copy their <strong>Clerk User ID</strong> from{' '}
-        <a href="https://dashboard.clerk.com" target="_blank" rel="noopener noreferrer" className="underline">dashboard.clerk.com</a>{' '}
-        → Users, and paste it below.
-      </div>
-
       <div className="bg-white rounded-xl border overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
             <tr>
               <th className="px-4 py-3 text-left">Name</th>
               <th className="px-4 py-3 text-left">Role</th>
-              <th className="px-4 py-3 text-left">Clerk ID</th>
               <th className="px-4 py-3 text-center">Status</th>
               <th className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y">
             {loading ? (
-              <tr><td colSpan={5} className="text-center py-10 text-gray-400">Loading…</td></tr>
+              <tr><td colSpan={4} className="text-center py-10 text-gray-400">Loading…</td></tr>
             ) : staff.length === 0 ? (
-              <tr><td colSpan={5} className="text-center py-10 text-gray-400">No staff found</td></tr>
+              <tr><td colSpan={4} className="text-center py-10 text-gray-400">No staff found</td></tr>
             ) : staff.map((u) => (
               <tr key={u.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3">
@@ -145,7 +169,6 @@ export default function StaffPage() {
                     {u.role}
                   </span>
                 </td>
-                <td className="px-4 py-3 font-mono text-xs text-gray-500 max-w-[160px] truncate">{u.id}</td>
                 <td className="px-4 py-3 text-center">
                   {u.active
                     ? <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Active</span>
@@ -154,11 +177,7 @@ export default function StaffPage() {
                 <td className="px-4 py-3 text-right">
                   <div className="flex items-center justify-end gap-2">
                     <button onClick={() => openEdit(u)} className="text-xs text-brand hover:underline">Edit</button>
-                    <button
-                      onClick={() => toggleActive(u)}
-                      title={u.active ? 'Deactivate' : 'Activate'}
-                      className="text-gray-400 hover:text-gray-700"
-                    >
+                    <button onClick={() => toggleActive(u)} title={u.active ? 'Deactivate' : 'Activate'} className="text-gray-400 hover:text-gray-700">
                       {u.active ? <ShieldOff className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
                     </button>
                   </div>
@@ -169,47 +188,106 @@ export default function StaffPage() {
         </table>
       </div>
 
-      {editing && (
-        <Modal title={isNew ? 'Add Staff Member' : 'Edit Staff Member'} onClose={close}>
-          {isNew && (
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Clerk User ID *</label>
+      {/* Add new staff modal */}
+      {isNew && (
+        <Modal title="Add Staff Member" onClose={close}>
+          <p className="text-sm text-gray-500">
+            Enter the email address of the person you want to add. They must have signed up at the storefront first.
+          </p>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Email address *</label>
+            <div className="flex gap-2">
               <input
                 className={inp}
-                placeholder="user_xxxxxxxxxxxxxxxxxxxxxxxx"
-                value={editing.id ?? ''}
-                onChange={(e) => set('id', e.target.value)}
+                type="email"
+                placeholder="person@example.com"
+                value={lookupEmail}
+                onChange={(e) => { setLookupEmail(e.target.value); setLookupResult(null); setLookupError(''); }}
+                onKeyDown={(e) => e.key === 'Enter' && handleLookup()}
               />
-              <p className="text-xs text-gray-400 mt-1">
-                Found in <a href="https://dashboard.clerk.com" target="_blank" rel="noopener noreferrer" className="text-brand underline">dashboard.clerk.com</a> → Users → click user → copy ID
-              </p>
+              <button
+                onClick={handleLookup}
+                disabled={lookupLoading || !lookupEmail.trim()}
+                className="flex items-center gap-1.5 px-3 py-2 bg-brand text-white rounded-lg text-sm disabled:opacity-50 flex-shrink-0"
+              >
+                <Search className="h-3.5 w-3.5" />
+                {lookupLoading ? 'Looking…' : 'Look up'}
+              </button>
+            </div>
+            {lookupError && (
+              <p className="text-red-600 text-xs mt-1.5">{lookupError}</p>
+            )}
+          </div>
+
+          {lookupResult && (
+            <>
+              <div className="bg-brand-light border border-brand/20 rounded-lg px-4 py-3 flex items-center gap-3">
+                <CheckCircle className="h-5 w-5 text-brand flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-brand">{lookupResult.name || lookupResult.email}</p>
+                  <p className="text-xs text-gray-600">{lookupResult.email}</p>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Display Name</label>
+                <input className={inp} value={newName} onChange={(e) => setNewName(e.target.value)} />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Role</label>
+                <select className={inp} value={newRole} onChange={(e) => setNewRole(e.target.value as 'admin' | 'staff')}>
+                  <option value="staff">Staff — can view & manage orders, products, deliveries</option>
+                  <option value="admin">Admin — full access including settings, staff management</option>
+                </select>
+              </div>
+
+              {error && <p className="text-red-600 text-sm">{error}</p>}
+              <div className="flex justify-end gap-2 pt-1">
+                <button onClick={close} className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50">Cancel</button>
+                <button onClick={handleAddNew} disabled={saving}
+                  className="flex items-center gap-2 px-4 py-2 text-sm bg-brand text-white rounded-lg hover:bg-brand-mid disabled:opacity-60">
+                  <Save className="h-3.5 w-3.5" />{saving ? 'Adding…' : 'Add to Team'}
+                </button>
+              </div>
+            </>
+          )}
+
+          {!lookupResult && (
+            <div className="flex justify-end">
+              <button onClick={close} className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50">Cancel</button>
             </div>
           )}
+        </Modal>
+      )}
+
+      {/* Edit existing staff modal */}
+      {editing && !isNew && (
+        <Modal title="Edit Staff Member" onClose={close}>
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Full Name *</label>
-            <input className={inp} value={editing.name ?? ''} onChange={(e) => set('name', e.target.value)} />
+            <label className="block text-xs font-medium text-gray-600 mb-1">Full Name</label>
+            <input className={inp} value={editing.name ?? ''} onChange={(e) => setEdit('name', e.target.value)} />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Email *</label>
-            <input className={inp} type="email" value={editing.email ?? ''} onChange={(e) => set('email', e.target.value)} />
+            <label className="block text-xs font-medium text-gray-600 mb-1">Email</label>
+            <input className={inp} type="email" value={editing.email ?? ''} onChange={(e) => setEdit('email', e.target.value)} />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Role</label>
-            <select className={inp} value={editing.role ?? 'staff'} onChange={(e) => set('role', e.target.value)}>
-              <option value="staff">Staff — can view & manage orders, products, deliveries</option>
-              <option value="admin">Admin — full access including settings, staff management</option>
+            <select className={inp} value={editing.role ?? 'staff'} onChange={(e) => setEdit('role', e.target.value)}>
+              <option value="staff">Staff</option>
+              <option value="admin">Admin</option>
             </select>
           </div>
-          {!isNew && (
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" className="accent-brand" checked={!!editing.active} onChange={(e) => set('active', e.target.checked)} />
-              <span className="text-sm font-medium text-gray-700">Account active</span>
-            </label>
-          )}
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" className="accent-brand" checked={!!editing.active} onChange={(e) => setEdit('active', e.target.checked)} />
+            <span className="text-sm font-medium text-gray-700">Account active</span>
+          </label>
           {error && <p className="text-red-600 text-sm">{error}</p>}
           <div className="flex justify-end gap-2 pt-2">
             <button onClick={close} className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50">Cancel</button>
-            <button onClick={handleSave} disabled={saving}
+            <button onClick={handleEditSave} disabled={saving}
               className="flex items-center gap-2 px-4 py-2 text-sm bg-brand text-white rounded-lg hover:bg-brand-mid disabled:opacity-60">
               <Save className="h-3.5 w-3.5" />{saving ? 'Saving…' : 'Save'}
             </button>
