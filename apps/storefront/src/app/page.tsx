@@ -12,6 +12,7 @@ import CutAdvisor from '@/components/CutAdvisor';
 import { Settings } from 'lucide-react';
 
 const ADMIN_URL = process.env.NEXT_PUBLIC_ADMIN_URL ?? 'https://butcher-admin.pages.dev';
+const DRIVER_URL = process.env.NEXT_PUBLIC_DRIVER_URL ?? 'https://butcher-driver.pages.dev';
 
 interface Feature { icon: string; title: string; description: string }
 interface Config {
@@ -43,7 +44,7 @@ const DEFAULTS: Config = {
 
 export default function HomePage() {
   const [cfg, setCfg] = useState<Config>(DEFAULTS);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [staffRole, setStaffRole] = useState<'admin' | 'driver' | null>(null);
   const { getToken, isSignedIn } = useAuth();
 
   useEffect(() => {
@@ -53,12 +54,12 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    if (!isSignedIn) { setIsAdmin(false); return; }
+    if (!isSignedIn) { setStaffRole(null); return; }
     getToken()
       .then(t => t ? fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787'}/api/users/me`, { headers: { Authorization: `Bearer ${t}` } }) : null)
       .then(r => (r?.ok ? r.json() : null))
-      .then((u: any) => setIsAdmin(u?.role === 'admin'))
-      .catch(() => setIsAdmin(false));
+      .then((u: any) => setStaffRole(u?.role === 'admin' ? 'admin' : u?.role === 'driver' ? 'driver' : null))
+      .catch(() => setStaffRole(null));
   }, [isSignedIn]);
 
   const { hero, features, cta } = cfg;
@@ -66,7 +67,7 @@ export default function HomePage() {
   return (
     <>
       <Navbar />
-      {isAdmin && (
+      {staffRole === 'admin' && (
         <div className="bg-brand-dark text-white text-sm px-4 py-2 flex items-center justify-between gap-4">
           <span className="text-white/70">Staff view</span>
           <div className="flex items-center gap-4">
@@ -77,6 +78,14 @@ export default function HomePage() {
               <Settings className="h-3.5 w-3.5" /> Admin Panel
             </a>
           </div>
+        </div>
+      )}
+      {staffRole === 'driver' && (
+        <div className="bg-gray-800 text-white text-sm px-4 py-2 flex items-center justify-end gap-4">
+          <span className="text-white/50 text-xs">Driver</span>
+          <a href={DRIVER_URL} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 px-3 py-1 rounded-md font-medium transition-colors">
+            🚚 Open Driver App
+          </a>
         </div>
       )}
       <main className="flex-1">
