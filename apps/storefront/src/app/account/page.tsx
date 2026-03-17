@@ -3,7 +3,8 @@
 export const runtime = 'edge';
 
 import { useEffect, useState } from 'react';
-import { useUser, useClerk, useAuth, SignIn } from '@clerk/nextjs';
+import { useUser, useAuth, SignIn, useClerk } from '@clerk/nextjs';
+import { toast } from '@/lib/toast';
 import { api, formatCurrency, ORDER_STATUS_LABELS } from '@butcher/shared';
 import type { Order } from '@butcher/shared';
 import Navbar from '@/components/Navbar';
@@ -99,6 +100,9 @@ export default function AccountPage() {
       await api.customers.updateMe({ phone: phoneVal });
       setCustomer((prev) => prev ? { ...prev, phone: phoneVal } : prev);
       setEditingPhone(false);
+      toast('Phone number saved');
+    } catch {
+      toast('Failed to save phone number', 'error');
     } finally { setSaving(false); }
   };
 
@@ -109,6 +113,9 @@ export default function AccountPage() {
       await api.customers.updateMe({ addresses: newAddresses });
       setCustomer((prev) => prev ? { ...prev, addresses: newAddresses } : prev);
       setEditingAddress(false);
+      toast('Delivery address saved');
+    } catch {
+      toast('Failed to save address', 'error');
     } finally { setSaving(false); }
   };
 
@@ -285,6 +292,7 @@ export default function AccountPage() {
                       }
                       localStorage.removeItem('push-subscribed');
                       setPushStatus('denied');
+                      toast('Notifications turned off', 'info');
                     } finally { setPushSaving(false); }
                   }}
                   disabled={pushSaving}
@@ -318,6 +326,7 @@ export default function AccountPage() {
                       });
                       localStorage.setItem('push-subscribed', '1');
                       setPushStatus('granted');
+                      toast('Delivery notifications enabled');
                     } finally { setPushSaving(false); }
                   }}
                   disabled={pushSaving}

@@ -4,6 +4,7 @@ import './globals.css';
 import ChatWidget from '@/components/ChatWidget';
 import ClerkTokenProvider from '@/components/ClerkTokenProvider';
 import InstallPrompt from '@/components/InstallPrompt';
+import Toaster from '@/components/Toaster';
 
 export const metadata: Metadata = {
   title: { default: "O'Connor Agriculture", template: "%s | O'Connor Agriculture" },
@@ -45,6 +46,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           {children}
           <ChatWidget />
           <InstallPrompt />
+          <Toaster />
         </body>
       </html>
     </ClerkProvider>
