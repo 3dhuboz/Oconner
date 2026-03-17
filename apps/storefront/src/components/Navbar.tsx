@@ -23,11 +23,21 @@ export default function Navbar() {
 
   useEffect(() => {
     if (!isSignedIn) { setIsAdmin(false); return; }
+    console.log('[Admin] isSignedIn=true, checking role via', API_URL);
     getToken()
-      .then(t => t ? fetch(`${API_URL}/api/users/me`, { headers: { Authorization: `Bearer ${t}` } }) : null)
-      .then(r => (r?.ok ? r.json() : null))
-      .then((u: any) => setIsAdmin(u?.role === 'admin'))
-      .catch(() => setIsAdmin(false));
+      .then(t => {
+        console.log('[Admin] token:', t ? t.slice(0, 20) + '...' : 'NULL');
+        return t ? fetch(`${API_URL}/api/users/me`, { headers: { Authorization: `Bearer ${t}` } }) : null;
+      })
+      .then(r => {
+        console.log('[Admin] /users/me status:', r?.status, 'ok:', r?.ok);
+        return r?.ok ? r.json() : null;
+      })
+      .then((u: any) => {
+        console.log('[Admin] user row:', u);
+        setIsAdmin(u?.role === 'admin');
+      })
+      .catch((e) => { console.error('[Admin] error:', e); setIsAdmin(false); });
   }, [isSignedIn]);
   const itemCount = useCart((s) => s.itemCount());
 
