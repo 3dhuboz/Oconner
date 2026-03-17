@@ -9,6 +9,7 @@ import { api } from '@butcher/shared';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import CutAdvisor from '@/components/CutAdvisor';
+import FacebookTicker from '@/components/FacebookTicker';
 import { Settings } from 'lucide-react';
 
 const ADMIN_URL = process.env.NEXT_PUBLIC_ADMIN_URL ?? 'https://butcher-admin.pages.dev';
@@ -67,6 +68,7 @@ export default function HomePage() {
   return (
     <>
       <Navbar />
+      <FacebookTicker />
       {staffRole === 'admin' && (
         <div className="bg-brand-dark text-white text-sm px-4 py-2 flex items-center justify-between gap-4">
           <span className="text-white/70">Staff view</span>

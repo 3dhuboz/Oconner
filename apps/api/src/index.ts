@@ -134,6 +134,18 @@ app.post('/api/contact', async (c) => {
   return c.json({ ok: true });
 });
 
+app.get('/api/ticker', async (c) => {
+  const { drizzle } = await import('drizzle-orm/d1');
+  const { eq } = await import('drizzle-orm');
+  const { config } = await import('@butcher/db');
+  const db = drizzle(c.env.DB);
+  const [row] = await db.select().from(config).where(eq(config.key, 'ticker')).limit(1);
+  if (!row) return c.json([]);
+  const data = JSON.parse(row.value) as { enabled: boolean; items: Array<{ text: string; url?: string }> };
+  if (!data.enabled) return c.json([]);
+  return c.json(data.items ?? []);
+});
+
 app.use('/api/*', requireAuth);
 
 app.route('/api/orders', ordersRouter);

@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import WeatherWidget from './WeatherWidget';
 
 export default function Footer() {
   return (
@@ -32,6 +33,10 @@ export default function Footer() {
             <li>📍 Calliope &amp; Boyne Valley, QLD</li>
             <li><Link href="/contact" className="hover:text-white transition-colors">✉️ Send us a message</Link></li>
           </ul>
+          <div className="mt-5 pt-4 border-t border-white/15">
+            <p className="text-xs text-brand-light/60 uppercase tracking-widest mb-2 font-medium">Farm Weather</p>
+            <WeatherWidget />
+          </div>
         </div>
       </div>
       <div className="max-w-6xl mx-auto mt-8 pt-6 border-t border-white/20 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-brand-light">

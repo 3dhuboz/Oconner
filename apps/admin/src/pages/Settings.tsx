@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '@butcher/shared';
-import { Save, RefreshCw, Image, Type, Phone, Layout, ChevronDown, ChevronUp, CreditCard, Mail, Bell, Send, Users } from 'lucide-react';
+import { Save, RefreshCw, Image, Type, Phone, Layout, ChevronDown, ChevronUp, CreditCard, Mail, Bell, Send, Users, Radio, Plus, X } from 'lucide-react';
 import { toast } from '../lib/toast';
 
 interface Feature {
@@ -26,6 +26,16 @@ interface EmailConfig {
   smtpPort: string;
   smtpUser: string;
   smtpPass: string;
+}
+
+interface TickerItem {
+  text: string;
+  url?: string;
+}
+
+interface TickerConfig {
+  enabled: boolean;
+  items: TickerItem[];
 }
 
 interface StorefrontConfig {
@@ -140,6 +150,8 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  const [ticker, setTicker] = useState<TickerConfig>({ enabled: true, items: [] });
+
   const [pushStats, setPushStats] = useState<{ subscribers: number } | null>(null);
   const [pushForm, setPushForm] = useState({ title: "O'Connor — Update", body: '', url: '' });
   const [pushSending, setPushSending] = useState(false);
@@ -152,6 +164,7 @@ export default function SettingsPage() {
         if (data?.storefront) setConfig({ ...DEFAULTS, ...data.storefront });
         if (data?.payment) setPayment({ ...PAYMENT_DEFAULTS, ...data.payment });
         if (data?.email) setEmail({ ...EMAIL_DEFAULTS, ...data.email });
+        if (data?.ticker) setTicker({ enabled: true, items: [], ...data.ticker });
       })
       .catch((e: unknown) => console.error('Failed to load settings:', e))
       .finally(() => setLoading(false));
@@ -205,7 +218,7 @@ export default function SettingsPage() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await api.config.update({ storefront: config, payment, email });
+      await api.config.update({ storefront: config, payment, email, ticker });
       toast('Settings saved — storefront updated immediately');
     } catch (e) {
       console.error('Save failed:', e);
@@ -544,6 +557,54 @@ export default function SettingsPage() {
           <Send className="h-3.5 w-3.5" />
           {pushSending ? 'Sending…' : pushMode === 'test' ? 'Send test push' : 'Broadcast now'}
         </button>
+      </Section>
+
+      <Section title="Social Ticker" icon={Radio}>
+        <Field label="Enable ticker" hint="Shows a scrolling update bar at the top of the homepage.">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={ticker.enabled}
+              onChange={(e) => setTicker((t) => ({ ...t, enabled: e.target.checked }))}
+              className="accent-brand w-4 h-4"
+            />
+            <span className="text-sm text-gray-700">Show ticker on homepage</span>
+          </label>
+        </Field>
+        <Field label="Ticker messages" hint="These scroll across the top of the homepage. Add promotions, news, or Facebook post excerpts.">
+          <div className="space-y-2">
+            {ticker.items.map((item, i) => (
+              <div key={i} className="flex gap-2 items-start">
+                <div className="flex-1 space-y-1">
+                  <input
+                    className={inputCls}
+                    placeholder="e.g. 🥩 Fresh beef boxes available this Friday — order now!"
+                    value={item.text}
+                    onChange={(e) => setTicker((t) => { const items = [...t.items]; items[i] = { ...items[i], text: e.target.value }; return { ...t, items }; })}
+                  />
+                  <input
+                    className={inputCls}
+                    placeholder="Link URL (optional, e.g. /shop)"
+                    value={item.url ?? ''}
+                    onChange={(e) => setTicker((t) => { const items = [...t.items]; items[i] = { ...items[i], url: e.target.value || undefined }; return { ...t, items }; })}
+                  />
+                </div>
+                <button
+                  onClick={() => setTicker((t) => ({ ...t, items: t.items.filter((_, j) => j !== i) }))}
+                  className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors mt-0.5"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+            <button
+              onClick={() => setTicker((t) => ({ ...t, items: [...t.items, { text: '' }] }))}
+              className="flex items-center gap-1.5 text-sm text-brand hover:text-brand-mid transition-colors font-medium"
+            >
+              <Plus className="h-4 w-4" /> Add message
+            </button>
+          </div>
+        </Field>
       </Section>
 
       <Section title="Contact Details" icon={Phone}>

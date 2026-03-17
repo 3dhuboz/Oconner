@@ -2,16 +2,62 @@ import { useEffect, useState } from 'react';
 import { api, formatCurrency, ORDER_STATUS_LABELS } from '@butcher/shared';
 import type { Order, OrderStatus } from '@butcher/shared';
 import { Link } from 'react-router-dom';
-import { Search, Filter } from 'lucide-react';
+import { Search, Plus, X, Trash2 } from 'lucide-react';
 import { toast } from '../lib/toast';
 
+interface Product {
+  id: string;
+  name: string;
+  category: string;
+  pricePerKg: number | null;
+  fixedPrice: number | null;
+  active: boolean;
+}
+
+interface DeliveryDay {
+  id: string;
+  date: number;
+  maxOrders: number;
+  orderCount: number;
+  active: boolean;
+  notes?: string;
+}
+
+interface OrderItem {
+  productId: string;
+  productName: string;
+  weightKg?: number;
+  quantity?: number;
+  pricePerKg?: number;
+  fixedPrice?: number;
+  lineTotal: number;
+}
+
 const STATUSES: OrderStatus[] = ['pending_payment', 'confirmed', 'preparing', 'packed', 'out_for_delivery', 'delivered', 'cancelled', 'refunded'];
+const AU_STATES = ['QLD', 'NSW', 'VIC', 'SA', 'WA', 'TAS', 'NT', 'ACT'];
+
+const EMPTY_FORM = {
+  customerName: '', customerEmail: '', customerPhone: '',
+  deliveryDayId: '', status: 'confirmed' as OrderStatus,
+  internalNotes: '', deliveryFee: 0,
+  address: { line1: '', line2: '', suburb: '', state: 'QLD', postcode: '' },
+};
 
 export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [statusFilter, setStatusFilter] = useState<OrderStatus | 'all'>('all');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+
+  const [showCreate, setShowCreate] = useState(false);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [deliveryDays, setDeliveryDays] = useState<DeliveryDay[]>([]);
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [items, setItems] = useState<OrderItem[]>([]);
+  const [selectedProduct, setSelectedProduct] = useState('');
+  const [itemWeight, setItemWeight] = useState('');
+  const [itemQty, setItemQty] = useState('1');
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -20,12 +66,91 @@ export default function OrdersPage() {
       .catch(() => setLoading(false));
   }, [statusFilter]);
 
+  const openCreate = () => {
+    setForm(EMPTY_FORM);
+    setItems([]);
+    setSelectedProduct('');
+    setItemWeight('');
+    setItemQty('1');
+    Promise.all([api.products.list() as Promise<Product[]>, api.deliveryDays.list() as Promise<DeliveryDay[]>])
+      .then(([prods, days]) => {
+        setProducts((prods as Product[]).filter((p) => p.active !== false));
+        setDeliveryDays(days as DeliveryDay[]);
+      }).catch(() => {});
+    setShowCreate(true);
+  };
+
+  const currentProduct = products.find((p) => p.id === selectedProduct);
+  const isWeightBased = !!(currentProduct && currentProduct.pricePerKg != null);
+
+  const addItem = () => {
+    if (!currentProduct) return;
+    let lineTotal = 0;
+    let weightKg: number | undefined;
+    let quantity: number | undefined;
+    if (isWeightBased) {
+      weightKg = parseFloat(itemWeight);
+      if (!weightKg || weightKg <= 0) return;
+      lineTotal = weightKg * (currentProduct.pricePerKg ?? 0);
+    } else {
+      quantity = parseInt(itemQty, 10);
+      if (!quantity || quantity <= 0) return;
+      lineTotal = quantity * (currentProduct.fixedPrice ?? 0);
+    }
+    setItems((prev) => [...prev, {
+      productId: currentProduct.id,
+      productName: currentProduct.name,
+      ...(isWeightBased ? { weightKg, pricePerKg: currentProduct.pricePerKg ?? 0 } : { quantity, fixedPrice: currentProduct.fixedPrice ?? 0 }),
+      lineTotal,
+    }]);
+    setSelectedProduct('');
+    setItemWeight('');
+    setItemQty('1');
+  };
+
+  const subtotal = items.reduce((s, i) => s + i.lineTotal, 0);
+  const total = subtotal + (form.deliveryFee || 0);
+
+  const handleCreate = async () => {
+    if (!form.customerName || !form.customerEmail || !form.deliveryDayId) {
+      toast('Name, email and delivery day are required', 'error'); return;
+    }
+    if (items.length === 0) { toast('Add at least one item', 'error'); return; }
+    if (!form.address.line1 || !form.address.suburb || !form.address.postcode) {
+      toast('Delivery address is required', 'error'); return;
+    }
+    setCreating(true);
+    try {
+      const result = await api.orders.create({
+        customerName: form.customerName,
+        customerEmail: form.customerEmail,
+        customerPhone: form.customerPhone || undefined,
+        deliveryDayId: form.deliveryDayId,
+        items,
+        deliveryAddress: { line1: form.address.line1, line2: form.address.line2 || undefined, suburb: form.address.suburb, state: form.address.state, postcode: form.address.postcode },
+        subtotal,
+        deliveryFee: form.deliveryFee,
+        gst: 0,
+        total,
+        status: form.status,
+        internalNotes: form.internalNotes || undefined,
+      }) as { id: string };
+      const updated = await api.orders.list(statusFilter === 'all' ? undefined : statusFilter) as Order[];
+      setOrders(updated);
+      setShowCreate(false);
+      toast(`Order #${result.id.slice(-8).toUpperCase()} created`);
+    } catch (e: any) {
+      toast(e?.message ?? 'Failed to create order', 'error');
+    } finally {
+      setCreating(false);
+    }
+  };
+
   const filtered = search
     ? orders.filter((o) =>
         o.customerName?.toLowerCase().includes(search.toLowerCase()) ||
         o.customerEmail?.toLowerCase().includes(search.toLowerCase()) ||
-        o.id?.toLowerCase().includes(search.toLowerCase()),
-      )
+        o.id?.toLowerCase().includes(search.toLowerCase()))
     : orders;
 
   const handleStatusChange = async (orderId: string, status: OrderStatus) => {
@@ -38,10 +163,19 @@ export default function OrdersPage() {
     }
   };
 
+  const setAddr = (k: keyof typeof form.address, v: string) =>
+    setForm((f) => ({ ...f, address: { ...f.address, [k]: v } }));
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-brand">Orders</h1>
+        <button
+          onClick={openCreate}
+          className="flex items-center gap-2 bg-brand text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-mid transition-colors"
+        >
+          <Plus className="h-4 w-4" /> Create Order
+        </button>
       </div>
 
       <div className="bg-white rounded-xl border mb-6 p-4 flex flex-wrap gap-3">
@@ -109,6 +243,158 @@ export default function OrdersPage() {
           </tbody>
         </table>
       </div>
+
+      {showCreate && (
+        <div className="fixed inset-0 bg-black/50 z-50 overflow-y-auto">
+          <div className="min-h-screen flex items-start justify-center p-4 py-8">
+            <div className="bg-white rounded-2xl w-full max-w-2xl shadow-xl">
+              <div className="flex items-center justify-between p-6 border-b">
+                <h2 className="text-lg font-semibold flex items-center gap-2">
+                  <Plus className="h-5 w-5 text-brand" /> Create Manual Order
+                </h2>
+                <button onClick={() => setShowCreate(false)} className="p-1.5 rounded-lg hover:bg-gray-100">
+                  <X className="h-5 w-5 text-gray-400" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-6 overflow-y-auto max-h-[75vh]">
+                <div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Customer</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs text-gray-500 mb-1 block">Full Name *</label>
+                      <input value={form.customerName} onChange={(e) => setForm((f) => ({ ...f, customerName: e.target.value }))} placeholder="Jane Smith" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500 mb-1 block">Email *</label>
+                      <input type="email" value={form.customerEmail} onChange={(e) => setForm((f) => ({ ...f, customerEmail: e.target.value }))} placeholder="jane@example.com" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500 mb-1 block">Phone</label>
+                      <input value={form.customerPhone} onChange={(e) => setForm((f) => ({ ...f, customerPhone: e.target.value }))} placeholder="0400 000 000" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500 mb-1 block">Delivery Day *</label>
+                      <select value={form.deliveryDayId} onChange={(e) => setForm((f) => ({ ...f, deliveryDayId: e.target.value }))} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
+                        <option value="">Select delivery day…</option>
+                        {deliveryDays.map((d) => (
+                          <option key={d.id} value={d.id}>
+                            {new Date(d.date).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })} — {d.orderCount}/{d.maxOrders} orders
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Order Items</p>
+                  <div className="flex gap-2 mb-2">
+                    <select
+                      value={selectedProduct}
+                      onChange={(e) => { setSelectedProduct(e.target.value); setItemWeight(''); setItemQty('1'); }}
+                      className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
+                    >
+                      <option value="">Select product…</option>
+                      {products.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} — {p.pricePerKg != null ? `$${p.pricePerKg}/kg` : `$${p.fixedPrice} ea`}
+                        </option>
+                      ))}
+                    </select>
+                    {currentProduct && (
+                      isWeightBased ? (
+                        <input type="number" placeholder="kg" value={itemWeight} onChange={(e) => setItemWeight(e.target.value)} step="0.1" min="0.1" className="w-24 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                      ) : (
+                        <input type="number" placeholder="qty" value={itemQty} onChange={(e) => setItemQty(e.target.value)} min="1" className="w-20 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                      )
+                    )}
+                    <button onClick={addItem} disabled={!currentProduct} className="bg-brand text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-40 hover:bg-brand-mid transition-colors">
+                      Add
+                    </button>
+                  </div>
+                  {currentProduct && (
+                    <p className="text-xs text-gray-400 mb-2">
+                      {isWeightBased
+                        ? `$${currentProduct.pricePerKg}/kg${itemWeight ? ` → ${formatCurrency(parseFloat(itemWeight || '0') * (currentProduct.pricePerKg ?? 0))}` : ''}`
+                        : `$${currentProduct.fixedPrice} each${itemQty ? ` → ${formatCurrency(parseInt(itemQty || '1') * (currentProduct.fixedPrice ?? 0))}` : ''}`}
+                    </p>
+                  )}
+                  {items.length > 0 ? (
+                    <div className="border rounded-lg overflow-hidden divide-y">
+                      {items.map((item, i) => (
+                        <div key={i} className="flex items-center justify-between px-3 py-2.5 bg-gray-50">
+                          <div>
+                            <p className="text-sm font-medium">{item.productName}</p>
+                            <p className="text-xs text-gray-400">
+                              {item.weightKg ? `${item.weightKg}kg @ $${item.pricePerKg}/kg` : `${item.quantity}x @ $${item.fixedPrice} ea`}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="text-sm font-semibold">{formatCurrency(item.lineTotal)}</span>
+                            <button onClick={() => setItems((prev) => prev.filter((_, j) => j !== i))} className="p-1 hover:bg-red-50 rounded text-red-400">
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-400 text-center py-4 border border-dashed rounded-lg">No items added yet</p>
+                  )}
+                </div>
+
+                <div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Delivery Address</p>
+                  <div className="space-y-2">
+                    <input value={form.address.line1} onChange={(e) => setAddr('line1', e.target.value)} placeholder="Street address *" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                    <input value={form.address.line2} onChange={(e) => setAddr('line2', e.target.value)} placeholder="Unit / apartment (optional)" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                    <div className="grid grid-cols-3 gap-2">
+                      <input value={form.address.suburb} onChange={(e) => setAddr('suburb', e.target.value)} placeholder="Suburb *" className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                      <select value={form.address.state} onChange={(e) => setAddr('state', e.target.value)} className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
+                        {AU_STATES.map((s) => <option key={s}>{s}</option>)}
+                      </select>
+                      <input value={form.address.postcode} onChange={(e) => setAddr('postcode', e.target.value)} placeholder="Postcode *" maxLength={4} className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Summary</p>
+                  <div className="grid grid-cols-2 gap-3 mb-3">
+                    <div>
+                      <label className="text-xs text-gray-500 mb-1 block">Order Status</label>
+                      <select value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as OrderStatus }))} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
+                        {STATUSES.map((s) => <option key={s} value={s}>{ORDER_STATUS_LABELS[s] ?? s}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500 mb-1 block">Delivery Fee ($)</label>
+                      <input type="number" value={form.deliveryFee} onChange={(e) => setForm((f) => ({ ...f, deliveryFee: parseFloat(e.target.value) || 0 }))} step="0.01" min="0" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                    </div>
+                  </div>
+                  <div className="mb-3">
+                    <label className="text-xs text-gray-500 mb-1 block">Internal Notes</label>
+                    <textarea value={form.internalNotes} onChange={(e) => setForm((f) => ({ ...f, internalNotes: e.target.value }))} rows={2} placeholder="Notes visible to staff only…" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand resize-none" />
+                  </div>
+                  <div className="bg-gray-50 rounded-lg p-3 space-y-1.5 text-sm">
+                    <div className="flex justify-between text-gray-500"><span>Subtotal</span><span>{formatCurrency(subtotal)}</span></div>
+                    <div className="flex justify-between text-gray-500"><span>Delivery</span><span>{formatCurrency(form.deliveryFee)}</span></div>
+                    <div className="flex justify-between font-bold text-base pt-1.5 border-t border-gray-200"><span>Total</span><span className="text-brand">{formatCurrency(total)}</span></div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-3 p-6 border-t">
+                <button onClick={() => setShowCreate(false)} className="flex-1 border py-2.5 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">Cancel</button>
+                <button onClick={handleCreate} disabled={creating} className="flex-1 bg-brand text-white py-2.5 rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-brand-mid transition-colors">
+                  {creating ? 'Creating…' : `Create Order — ${formatCurrency(total)}`}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
