@@ -8,7 +8,7 @@ export default function DeliveryDaysPage() {
   const navigate = useNavigate();
   const [days, setDays] = useState<DeliveryDay[]>([]);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ date: '', maxOrders: 20, notes: '' });
+  const [form, setForm] = useState({ date: '', maxOrders: 20, notes: '', deliveryWindowStart: '09:00' });
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -24,11 +24,12 @@ export default function DeliveryDaysPage() {
       date: new Date(form.date).getTime(),
       maxOrders: form.maxOrders,
       notes: form.notes,
+      deliveryWindowStart: form.deliveryWindowStart,
     }) as DeliveryDay;
     setDays((prev) => [...prev, created].sort((a, b) => a.date - b.date));
     setSaving(false);
     setShowForm(false);
-    setForm({ date: '', maxOrders: 20, notes: '' });
+    setForm({ date: '', maxOrders: 20, notes: '', deliveryWindowStart: '09:00' });
   };
 
   const toggleActive = async (day: DeliveryDay) => {
@@ -63,6 +64,7 @@ export default function DeliveryDaysPage() {
                 </p>
                 <p className="text-sm text-gray-500 mt-0.5">
                   {day.orderCount ?? 0} / {day.maxOrders ?? 0} orders
+                  {(day as any).deliveryWindowStart && ` · From ${(day as any).deliveryWindowStart}`}
                   {day.notes && ` · ${day.notes}`}
                 </p>
               </div>
@@ -100,6 +102,10 @@ export default function DeliveryDaysPage() {
               <div>
                 <label className="text-xs text-gray-500 mb-1 block">Max Orders</label>
                 <input type="number" value={form.maxOrders} onChange={(e) => setForm((f) => ({ ...f, maxOrders: Number(e.target.value) }))} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Estimated Start Time</label>
+                <input type="time" value={form.deliveryWindowStart} onChange={(e) => setForm((f) => ({ ...f, deliveryWindowStart: e.target.value }))} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
               </div>
               <div>
                 <label className="text-xs text-gray-500 mb-1 block">Notes (optional)</label>

@@ -7,6 +7,13 @@ import { api } from '@butcher/shared';
 export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
 
+function formatTime(hhmm: string): string {
+  const [h, m] = hhmm.split(':').map(Number);
+  const suffix = h >= 12 ? 'pm' : 'am';
+  const hour = h % 12 || 12;
+  return m === 0 ? `${hour}${suffix}` : `${hour}:${String(m).padStart(2, '0')}${suffix}`;
+}
+
 async function getDeliveryDays(): Promise<DeliveryDay[]> {
   const days = await api.deliveryDays.list(true) as DeliveryDay[];
   return days.filter((d) => d.active && d.date >= Date.now());
@@ -50,6 +57,11 @@ export default async function DeliveryDaysPage() {
                         <span className="text-brand-mid font-medium">{spotsLeft} spots remaining</span>
                       )}
                     </p>
+                    {(day as any).deliveryWindowStart && (
+                      <p className="text-sm text-brand-mid font-medium mt-1">
+                        🕐 Estimated delivery from {formatTime((day as any).deliveryWindowStart)}
+                      </p>
+                    )}
                     {day.notes && <p className="text-sm text-gray-400 mt-1">{day.notes}</p>}
                   </div>
                   <Link

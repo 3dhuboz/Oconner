@@ -82,6 +82,7 @@ export const deliveryDays = sqliteTable('delivery_days', {
   notes: text('notes'),
   routeGenerated: integer('route_generated', { mode: 'boolean' }).notNull().default(false),
   routeGeneratedAt: integer('route_generated_at'),
+  deliveryWindowStart: text('delivery_window_start').default('09:00'), // HH:MM 24-hr
   driverUid: text('driver_uid').references(() => users.id),
   runStartedAt: integer('run_started_at'),
   runCompletedAt: integer('run_completed_at'),

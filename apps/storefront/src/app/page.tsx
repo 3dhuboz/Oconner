@@ -4,10 +4,14 @@ export const runtime = 'edge';
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useAuth } from '@clerk/nextjs';
 import { api } from '@butcher/shared';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import CutAdvisor from '@/components/CutAdvisor';
+import { Settings } from 'lucide-react';
+
+const ADMIN_URL = process.env.NEXT_PUBLIC_ADMIN_URL ?? 'https://butcher-admin.pages.dev';
 
 interface Feature { icon: string; title: string; description: string }
 interface Config {
@@ -39,6 +43,8 @@ const DEFAULTS: Config = {
 
 export default function HomePage() {
   const [cfg, setCfg] = useState<Config>(DEFAULTS);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const { getToken, isSignedIn } = useAuth();
 
   useEffect(() => {
     api.config.get('storefront')
@@ -46,11 +52,33 @@ export default function HomePage() {
       .catch(() => {});
   }, []);
 
+  useEffect(() => {
+    if (!isSignedIn) { setIsAdmin(false); return; }
+    getToken()
+      .then(t => t ? fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787'}/api/users/me`, { headers: { Authorization: `Bearer ${t}` } }) : null)
+      .then(r => (r?.ok ? r.json() : null))
+      .then((u: any) => setIsAdmin(u?.role === 'admin'))
+      .catch(() => setIsAdmin(false));
+  }, [isSignedIn]);
+
   const { hero, features, cta } = cfg;
 
   return (
     <>
       <Navbar />
+      {isAdmin && (
+        <div className="bg-brand-dark text-white text-sm px-4 py-2 flex items-center justify-between gap-4">
+          <span className="text-white/70">Staff view</span>
+          <div className="flex items-center gap-4">
+            <a href={`${ADMIN_URL}/delivery-days`} target="_blank" rel="noopener noreferrer" className="hover:text-brand-light transition-colors">Delivery Days</a>
+            <a href={`${ADMIN_URL}/orders`} target="_blank" rel="noopener noreferrer" className="hover:text-brand-light transition-colors">Orders</a>
+            <a href={`${ADMIN_URL}/products`} target="_blank" rel="noopener noreferrer" className="hover:text-brand-light transition-colors">Products</a>
+            <a href={ADMIN_URL} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 px-3 py-1 rounded-md font-medium transition-colors">
+              <Settings className="h-3.5 w-3.5" /> Admin Panel
+            </a>
+          </div>
+        </div>
+      )}
       <main className="flex-1">
         <section
           className="bg-brand text-white py-20 px-4 relative overflow-hidden"

@@ -14,6 +14,15 @@ interface DeliveryDayData {
   orderCount: number;
   notes?: string;
   active: boolean;
+  deliveryWindowStart?: string; // HH:MM 24-hr, e.g. "09:00"
+}
+
+function departureTimestamp(day: DeliveryDayData | null): number {
+  if (!day) return Date.now();
+  const base = new Date(day.date as number);
+  const [hh, mm] = (day.deliveryWindowStart ?? '09:00').split(':').map(Number);
+  base.setHours(hh, mm, 0, 0);
+  return base.getTime();
 }
 
 function nearestNeighborRoute(stops: Stop[]): Stop[] {
@@ -70,8 +79,17 @@ export default function DeliveryManifestPage() {
     if (!dayId || stops.length === 0) return;
     setOptimizing(true);
     const sorted = nearestNeighborRoute([...stops]);
-    await Promise.all(sorted.map((stop, i) => api.stops.updateSequence(stop.id!, i + 1)));
-    setStops(sorted.map((s, i) => ({ ...s, sequence: i + 1 })));
+    const departure = departureTimestamp(day);
+    const avgMinutesPerStop = 8;
+    const withEtas = sorted.map((s, i) => ({
+      ...s,
+      sequence: i + 1,
+      estimatedArrival: departure + i * avgMinutesPerStop * 60 * 1000,
+    }));
+    await Promise.all(withEtas.map((stop, i) =>
+      api.stops.updateSequence(stop.id!, i + 1)
+    ));
+    setStops(withEtas);
     setOptimizing(false);
   };
 
@@ -99,7 +117,9 @@ export default function DeliveryManifestPage() {
         </button>
         <div className="flex-1">
           <h1 className="text-2xl font-bold text-brand">Delivery Manifest</h1>
-          <p className="text-sm text-gray-500">{dateStr}</p>
+          <p className="text-sm text-gray-500">
+            {dateStr}{day?.deliveryWindowStart ? ` — Departs ${day.deliveryWindowStart}` : ''}
+          </p>
         </div>
         <button
           onClick={() => window.open(`${import.meta.env.VITE_PDF_GENERATOR_URL}/delivery-list/${dayId}`, '_blank')}

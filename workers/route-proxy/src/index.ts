@@ -52,10 +52,12 @@ export default {
 };
 
 async function handleOptimiseRoute(request: Request, env: Env): Promise<Response> {
-  const { deliveryDayId, stops } = await request.json<{
+  const { deliveryDayId, stops, departureTimeMs } = await request.json<{
     deliveryDayId: string;
     stops: StopInput[];
+    departureTimeMs?: number;
   }>();
+  const departureEpoch = departureTimeMs ?? Date.now();
 
   const accessToken = await getServiceAccountToken(env);
 
@@ -94,6 +96,7 @@ async function handleOptimiseRoute(request: Request, env: Env): Promise<Response
   directionsUrl.searchParams.set('origin', `${origin.lat},${origin.lng}`);
   directionsUrl.searchParams.set('destination', `${destination.lat},${destination.lng}`);
   if (waypointStr) directionsUrl.searchParams.set('waypoints', `optimize:true|${waypointStr}`);
+  directionsUrl.searchParams.set('departure_time', String(Math.floor(departureEpoch / 1000)));
   directionsUrl.searchParams.set('key', env.GOOGLE_MAPS_API_KEY);
 
   const directionsRes = await fetch(directionsUrl.toString());
@@ -120,10 +123,9 @@ async function handleOptimiseRoute(request: Request, env: Env): Promise<Response
   ];
 
   let cumulativeSeconds = 0;
-  const now = Date.now();
   const etas = route.legs.map((leg) => {
     cumulativeSeconds += leg.duration.value;
-    return new Date(now + cumulativeSeconds * 1000).toISOString();
+    return new Date(departureEpoch + cumulativeSeconds * 1000).toISOString();
   });
 
   return corsResponse({
