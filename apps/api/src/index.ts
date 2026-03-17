@@ -15,6 +15,7 @@ import driversRouter from './routes/drivers';
 import stripeRouter from './routes/stripe';
 import stockRouter from './routes/stock';
 import subscriptionsRouter from './routes/subscriptions';
+import pushRouter from './routes/push';
 
 const app = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
 
@@ -100,6 +101,8 @@ app.get('/api/delivery-days', async (c) => {
   const rows = await db.select().from(deliveryDaysTable).where(eq(deliveryDaysTable.active, true)).orderBy(asc(deliveryDaysTable.date));
   return c.json(rows);
 });
+
+app.route('/api/push', pushRouter);
 
 app.use('/api/*', requireAuth);
 
@@ -231,6 +234,8 @@ export const scheduled: ExportedHandlerScheduledHandler<Env> = async (event, env
           trackingUrl: `${env.STOREFRONT_URL}/track/${order.id}`,
         };
         const result = await sendEmail({ apiKey: env.RESEND_API_KEY, from: env.FROM_EMAIL, to: order.customerEmail, subject: getSubject('day_before', emailData), html: buildOrderEmail('day_before', emailData) });
+        const { notifyCustomer } = await import('./routes/push');
+        await notifyCustomer(db, order.customerId, { title: "O'Connor \u2014 Delivery Tomorrow", body: `Your order arrives ${dateLabel}. Tap to track.`, url: `${env.STOREFRONT_URL}/track/${order.id}` }, env);
         await db.insert(notifications).values({ id: crypto.randomUUID(), orderId: order.id, customerId: order.customerId, type: 'day_before', status: result ? 'sent' : 'failed', recipientEmail: order.customerEmail, resendId: result?.id ?? null, sentAt: Date.now() });
       }
     }

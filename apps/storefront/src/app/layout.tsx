@@ -3,6 +3,7 @@ import { ClerkProvider } from '@clerk/nextjs';
 import './globals.css';
 import ChatWidget from '@/components/ChatWidget';
 import ClerkTokenProvider from '@/components/ClerkTokenProvider';
+import InstallPrompt from '@/components/InstallPrompt';
 
 export const metadata: Metadata = {
   title: { default: "O'Connor Agriculture", template: "%s | O'Connor Agriculture" },
@@ -12,6 +13,7 @@ export const metadata: Metadata = {
     'grass fed beef', 'beef boxes', 'local beef Queensland', 'Calliope QLD', 'Boyne Valley beef',
     "O'Connor Agriculture", 'regenerative farming', 'beef delivery QLD', 'free range beef',
   ],
+  manifest: '/manifest.json',
   icons: {
     icon: [{ url: '/favicon.jpg', type: 'image/jpeg' }],
     shortcut: '/favicon.jpg',
@@ -42,6 +44,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <ClerkTokenProvider />
           {children}
           <ChatWidget />
+          <InstallPrompt />
         </body>
       </html>
     </ClerkProvider>

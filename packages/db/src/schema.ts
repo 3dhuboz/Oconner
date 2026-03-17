@@ -202,6 +202,16 @@ export const subscriptions = sqliteTable('subscriptions', {
   updatedAt: integer('updated_at').notNull(),
 });
 
+// ── Push Subscriptions ────────────────────────────────────────────────────────
+export const pushSubscriptions = sqliteTable('push_subscriptions', {
+  id: text('id').primaryKey(),
+  customerId: text('customer_id').notNull().references(() => customers.id),
+  endpoint: text('endpoint').notNull().unique(),
+  p256dh: text('p256dh').notNull(),
+  auth: text('auth').notNull(),
+  createdAt: integer('created_at').notNull(),
+});
+
 // ── Notification Log ──────────────────────────────────────────────────────────
 export const notifications = sqliteTable('notifications', {
   id: text('id').primaryKey(),

@@ -9,6 +9,8 @@ export interface Env {
   STOREFRONT_URL: string;
   FROM_EMAIL: string;
   ENVIRONMENT: string;
+  VAPID_PUBLIC_KEY: string;
+  VAPID_PRIVATE_KEY: string;
 }
 
 export type UserRole = 'admin' | 'staff' | 'driver';

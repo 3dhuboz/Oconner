@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { notifyCustomer } from './push';
 import { drizzle } from 'drizzle-orm/d1';
 import { eq, asc, gte, and } from 'drizzle-orm';
 import { deliveryDays, orders, stops, notifications } from '@butcher/db';
@@ -99,6 +100,11 @@ app.post('/:id/send-reminders', async (c) => {
       html: buildOrderEmail('day_before', emailData),
     });
     if (result) sent++;
+    await notifyCustomer(db, order.customerId, {
+      title: "O'Connor — Delivery Tomorrow",
+      body: `Your order is on its way ${dateLabel}. Check your order summary for details.`,
+      url: `${c.env.STOREFRONT_URL}/track/${order.id}`,
+    }, c.env);
     await db.insert(notifications).values({
       id: crypto.randomUUID(),
       orderId: order.id,
