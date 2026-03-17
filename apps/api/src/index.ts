@@ -69,7 +69,7 @@ app.patch('/api/customers/me', async (c) => {
       clerkId: clerk.clerkId,
       email: clerk.email,
       name: body.name ?? clerk.email,
-      phone: body.phone ?? null,
+      phone: body.phone ?? '',
       addresses: JSON.stringify(body.addresses ?? []),
       createdAt: now,
       updatedAt: now,
