@@ -3,8 +3,8 @@ import { cors } from 'hono/cors';
 import type { Env, AuthUser } from './types';
 import { requireAuth, requireRole, verifyClerkToken } from './middleware/auth';
 import { drizzle } from 'drizzle-orm/d1';
-import { eq, desc } from 'drizzle-orm';
-import { orders as ordersTable, customers as customersTable } from '@butcher/db';
+import { eq, desc, asc } from 'drizzle-orm';
+import { orders as ordersTable, customers as customersTable, products as productsTable, deliveryDays as deliveryDaysTable } from '@butcher/db';
 import ordersRouter from './routes/orders';
 import productsRouter from './routes/products';
 import deliveryDaysRouter from './routes/deliveryDays';
@@ -42,6 +42,29 @@ app.get('/api/orders/mine', async (c) => {
   if (!customer) return c.json([]);
   const rows = await db.select().from(ordersTable).where(eq(ordersTable.customerId, customer.id)).orderBy(desc(ordersTable.createdAt));
   return c.json(rows.map((o) => ({ ...o, items: JSON.parse(o.items), deliveryAddress: JSON.parse(o.deliveryAddress) })));
+});
+
+// ── Public read-only routes (no auth) ────────────────────────
+app.get('/api/products', async (c) => {
+  const db = drizzle(c.env.DB);
+  const { activeOnly } = c.req.query();
+  const rows = activeOnly === 'true'
+    ? await db.select().from(productsTable).where(eq(productsTable.active, true)).orderBy(asc(productsTable.displayOrder))
+    : await db.select().from(productsTable).orderBy(asc(productsTable.displayOrder));
+  return c.json(rows.map((p) => ({ ...p, weightOptions: p.weightOptions ? JSON.parse(p.weightOptions) : null })));
+});
+
+app.get('/api/products/:id', async (c) => {
+  const db = drizzle(c.env.DB);
+  const [p] = await db.select().from(productsTable).where(eq(productsTable.id, c.req.param('id'))).limit(1);
+  if (!p) return c.json({ error: 'Not found' }, 404);
+  return c.json({ ...p, weightOptions: p.weightOptions ? JSON.parse(p.weightOptions) : null });
+});
+
+app.get('/api/delivery-days', async (c) => {
+  const db = drizzle(c.env.DB);
+  const rows = await db.select().from(deliveryDaysTable).where(eq(deliveryDaysTable.active, true)).orderBy(asc(deliveryDaysTable.date));
+  return c.json(rows);
 });
 
 app.use('/api/*', requireAuth);
