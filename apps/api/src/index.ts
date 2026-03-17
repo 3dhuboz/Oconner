@@ -104,6 +104,21 @@ app.get('/api/delivery-days', async (c) => {
 
 app.route('/api/push', pushRouter);
 
+// ── Public contact form ───────────────────────────────────────────────────────
+app.post('/api/contact', async (c) => {
+  const { name, email, subject, message } = await c.req.json<{ name: string; email: string; subject?: string; message: string }>();
+  if (!name || !email || !message) return c.json({ error: 'Missing required fields' }, 400);
+  const { sendEmail } = await import('./lib/email');
+  await sendEmail({
+    apiKey: c.env.RESEND_API_KEY,
+    from: c.env.FROM_EMAIL,
+    to: 'orders@oconnoragriculture.com.au',
+    subject: `Website enquiry${subject ? `: ${subject}` : ''} — from ${name}`,
+    html: `<p><strong>Name:</strong> ${name}</p><p><strong>Email:</strong> ${email}</p><p><strong>Subject:</strong> ${subject ?? '(none)'}</p><hr/><p>${message.replace(/\n/g, '<br>')}</p>`,
+  });
+  return c.json({ ok: true });
+});
+
 app.use('/api/*', requireAuth);
 
 app.route('/api/orders', ordersRouter);
@@ -125,6 +140,53 @@ app.get('/api/audit-log', requireAuth, requireRole('admin'), async (c) => {
   const db = drizzle(c.env.DB);
   const rows = await db.select().from(auditLog).orderBy(desc(auditLog.timestamp)).limit(100);
   return c.json(rows.map((e) => ({ ...e, before: JSON.parse(e.before), after: JSON.parse(e.after) })));
+});
+
+// ── Admin push helpers ───────────────────────────────────────────────────────
+app.get('/api/push/admin/stats', requireAuth, requireRole('admin'), async (c) => {
+  const { drizzle } = await import('drizzle-orm/d1');
+  const { sql } = await import('drizzle-orm');
+  const { pushSubscriptions } = await import('@butcher/db');
+  const db = drizzle(c.env.DB);
+  const [row] = await db.select({ count: sql<number>`count(*)` }).from(pushSubscriptions);
+  return c.json({ subscribers: Number(row?.count ?? 0) });
+});
+
+app.post('/api/push/admin/test-send', requireAuth, requireRole('admin'), async (c) => {
+  const { title, body, url } = await c.req.json<{ title: string; body: string; url?: string }>();
+  const user = c.get('user');
+  const { drizzle } = await import('drizzle-orm/d1');
+  const { eq } = await import('drizzle-orm');
+  const { pushSubscriptions, customers } = await import('@butcher/db');
+  const { sendPush } = await import('./lib/webpush');
+  const db = drizzle(c.env.DB);
+  const [customer] = await db.select().from(customers).where(eq(customers.email, user.email)).limit(1);
+  if (!customer) return c.json({ error: 'No customer record for your account' }, 404);
+  const subs = await db.select().from(pushSubscriptions).where(eq(pushSubscriptions.customerId, customer.id));
+  if (!subs.length) return c.json({ error: 'No push subscriptions found for your account. Subscribe first from the storefront.' }, 404);
+  const contact = `mailto:${c.env.FROM_EMAIL}`;
+  let sent = 0;
+  for (const s of subs) {
+    const ok = await sendPush({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, { title, body, url }, c.env.VAPID_PUBLIC_KEY, c.env.VAPID_PRIVATE_KEY, contact);
+    if (ok) sent++;
+  }
+  return c.json({ sent, total: subs.length });
+});
+
+app.post('/api/push/admin/broadcast', requireAuth, requireRole('admin'), async (c) => {
+  const { title, body, url } = await c.req.json<{ title: string; body: string; url?: string }>();
+  const { drizzle } = await import('drizzle-orm/d1');
+  const { pushSubscriptions } = await import('@butcher/db');
+  const { sendPush } = await import('./lib/webpush');
+  const db = drizzle(c.env.DB);
+  const subs = await db.select().from(pushSubscriptions);
+  const contact = `mailto:${c.env.FROM_EMAIL}`;
+  let sent = 0;
+  for (const s of subs) {
+    const ok = await sendPush({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, { title, body, url }, c.env.VAPID_PUBLIC_KEY, c.env.VAPID_PRIVATE_KEY, contact);
+    if (ok) sent++;
+  }
+  return c.json({ sent, total: subs.length });
 });
 
 app.get('/api/notifications', requireAuth, async (c) => {

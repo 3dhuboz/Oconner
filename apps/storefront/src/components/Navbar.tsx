@@ -50,6 +50,7 @@ export default function Navbar() {
           <Link href="/" className="hover:text-brand-light transition-colors">Home</Link>
           <Link href="/shop" className="hover:text-brand-light transition-colors">Shop</Link>
           <Link href="/delivery-days" className="hover:text-brand-light transition-colors">Delivery Days</Link>
+          <Link href="/about" className="hover:text-brand-light transition-colors">About</Link>
           <Link href="/subscribe" className="hover:text-brand-light transition-colors">Subscribe</Link>
           <Link href="/account" className="hover:text-brand-light transition-colors flex items-center gap-1">
             <User className="h-4 w-4" /> Account
@@ -86,6 +87,7 @@ export default function Navbar() {
         <div className="md:hidden bg-brand-mid px-4 pb-4 flex flex-col gap-3 text-sm font-medium">
           <Link href="/" onClick={() => setMenuOpen(false)}>Home</Link>
           <Link href="/shop" onClick={() => setMenuOpen(false)}>Shop</Link>
+          <Link href="/about" onClick={() => setMenuOpen(false)}>About</Link>
           <Link href="/delivery-days" onClick={() => setMenuOpen(false)}>Delivery Days</Link>
           <Link href="/subscribe" onClick={() => setMenuOpen(false)}>Subscribe</Link>
           <Link href="/account" onClick={() => setMenuOpen(false)}>Account</Link>

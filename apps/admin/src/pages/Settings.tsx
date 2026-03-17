@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '@butcher/shared';
-import { Save, RefreshCw, Image, Type, Phone, Layout, ChevronDown, ChevronUp, CreditCard, Mail } from 'lucide-react';
+import { Save, RefreshCw, Image, Type, Phone, Layout, ChevronDown, ChevronUp, CreditCard, Mail, Bell, Send, Users } from 'lucide-react';
 
 interface Feature {
   icon: string;
@@ -140,6 +140,12 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  const [pushStats, setPushStats] = useState<{ subscribers: number } | null>(null);
+  const [pushForm, setPushForm] = useState({ title: "O'Connor — Update", body: '', url: '' });
+  const [pushSending, setPushSending] = useState(false);
+  const [pushResult, setPushResult] = useState<{ sent: number; total: number } | null>(null);
+  const [pushMode, setPushMode] = useState<'test' | 'broadcast'>('test');
+
   useEffect(() => {
     api.config.get()
       .then((data: any) => {
@@ -149,7 +155,30 @@ export default function SettingsPage() {
       })
       .catch((e: unknown) => console.error('Failed to load settings:', e))
       .finally(() => setLoading(false));
+    api.get<{ subscribers: number }>('/api/push/admin/stats')
+      .then(setPushStats)
+      .catch(() => {});
   }, []);
+
+  const handlePushSend = async () => {
+    if (!pushForm.body.trim()) return;
+    if (pushMode === 'broadcast' && !confirm(`Send push to all ${pushStats?.subscribers ?? 0} subscribers?`)) return;
+    setPushSending(true);
+    setPushResult(null);
+    try {
+      const endpoint = pushMode === 'test' ? '/api/push/admin/test-send' : '/api/push/admin/broadcast';
+      const result = await api.post<{ sent: number; total: number }>(endpoint, {
+        title: pushForm.title,
+        body: pushForm.body,
+        url: pushForm.url || undefined,
+      });
+      setPushResult(result);
+    } catch (e: any) {
+      alert(e?.message ?? 'Push failed');
+    } finally {
+      setPushSending(false);
+    }
+  };
 
   const setPay = <K extends keyof PaymentConfig>(k: K, v: PaymentConfig[K]) =>
     setPayment((p) => ({ ...p, [k]: v }));
@@ -439,6 +468,88 @@ export default function SettingsPage() {
             </Field>
           </div>
         )}
+      </Section>
+
+      <Section title="Push Notifications" icon={Bell}>
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2 text-sm">
+            <Users className="h-4 w-4 text-gray-400" />
+            <span className="text-gray-600">Active subscribers:</span>
+            <span className="font-semibold text-gray-900">
+              {pushStats === null ? '…' : pushStats.subscribers}
+            </span>
+          </div>
+          <button
+            onClick={() => api.get<{ subscribers: number }>('/api/push/admin/stats').then(setPushStats).catch(() => {})}
+            className="text-xs text-gray-400 hover:text-brand transition-colors flex items-center gap-1"
+          >
+            <RefreshCw className="h-3 w-3" /> Refresh
+          </button>
+        </div>
+
+        <div className="flex gap-2 mb-4">
+          {(['test', 'broadcast'] as const).map((m) => (
+            <button
+              key={m}
+              onClick={() => { setPushMode(m); setPushResult(null); }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${pushMode === m ? 'bg-brand text-white' : 'border border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+            >
+              {m === 'test' ? '🧪 Test (my device)' : `📢 Broadcast (all ${pushStats?.subscribers ?? 0})`}
+            </button>
+          ))}
+        </div>
+
+        <Field label="Notification title">
+          <input
+            className={inputCls}
+            value={pushForm.title}
+            onChange={(e) => setPushForm((f) => ({ ...f, title: e.target.value }))}
+          />
+        </Field>
+        <Field label="Message body *">
+          <textarea
+            className={textareaCls}
+            rows={2}
+            placeholder="Your order arrives tomorrow…"
+            value={pushForm.body}
+            onChange={(e) => setPushForm((f) => ({ ...f, body: e.target.value }))}
+          />
+        </Field>
+        <Field label="Link URL (optional)" hint="Tapping the notification opens this URL">
+          <input
+            className={inputCls}
+            placeholder="https://oconner.com.au/account"
+            value={pushForm.url}
+            onChange={(e) => setPushForm((f) => ({ ...f, url: e.target.value }))}
+          />
+        </Field>
+
+        {pushResult && (
+          <div className="bg-green-50 border border-green-200 text-green-800 text-sm rounded-lg px-3 py-2.5">
+            ✓ Sent to {pushResult.sent} of {pushResult.total} device{pushResult.total !== 1 ? 's' : ''}
+          </div>
+        )}
+
+        {pushMode === 'test' && (
+          <p className="text-xs text-gray-400">
+            Test mode sends only to push subscriptions registered to <strong>your own admin account</strong>.
+            Make sure you've allowed notifications on the storefront first.
+          </p>
+        )}
+        {pushMode === 'broadcast' && (
+          <div className="bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded-lg px-3 py-2">
+            ⚠ Broadcast will send to <strong>all {pushStats?.subscribers ?? 0} subscribed devices</strong>. Use sparingly.
+          </div>
+        )}
+
+        <button
+          onClick={handlePushSend}
+          disabled={pushSending || !pushForm.body.trim()}
+          className="flex items-center gap-2 bg-brand text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-mid transition-colors disabled:opacity-50"
+        >
+          <Send className="h-3.5 w-3.5" />
+          {pushSending ? 'Sending…' : pushMode === 'test' ? 'Send test push' : 'Broadcast now'}
+        </button>
       </Section>
 
       <Section title="Contact Details" icon={Phone}>

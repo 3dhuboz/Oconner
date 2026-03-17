@@ -3,13 +3,13 @@
 export const runtime = 'edge';
 
 import { useEffect, useState } from 'react';
-import { useUser, useClerk, SignIn } from '@clerk/nextjs';
+import { useUser, useClerk, useAuth, SignIn } from '@clerk/nextjs';
 import { api, formatCurrency, ORDER_STATUS_LABELS } from '@butcher/shared';
 import type { Order } from '@butcher/shared';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import Link from 'next/link';
-import { MapPin, Phone, Package, RefreshCw, ChevronDown, ChevronUp, Pencil, Check, X } from 'lucide-react';
+import { MapPin, Phone, Package, RefreshCw, ChevronDown, ChevronUp, Pencil, Check, X, Bell, BellOff } from 'lucide-react';
 
 interface CustomerProfile {
   id: string;
@@ -55,6 +55,7 @@ const FREQ_LABELS: Record<string, string> = {
 
 export default function AccountPage() {
   const { user, isLoaded } = useUser();
+  const { getToken } = useAuth();
   const { signOut } = useClerk();
   const [orders, setOrders] = useState<Order[]>([]);
   const [customer, setCustomer] = useState<CustomerProfile | null>(null);
@@ -65,6 +66,18 @@ export default function AccountPage() {
   const [phoneVal, setPhoneVal] = useState('');
   const [addrVal, setAddrVal] = useState<Address>({ line1: '', suburb: '', state: 'QLD', postcode: '' });
   const [saving, setSaving] = useState(false);
+  const [pushStatus, setPushStatus] = useState<'unknown' | 'granted' | 'denied' | 'unsupported'>('unknown');
+  const [pushSaving, setPushSaving] = useState(false);
+
+  const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'https://butcher-api.oconner.com.au';
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      setPushStatus(Notification.permission === 'granted' ? 'granted' : Notification.permission === 'denied' ? 'denied' : 'unknown');
+    } else {
+      setPushStatus('unsupported');
+    }
+  }, []);
 
   useEffect(() => {
     if (!user) return;
@@ -238,6 +251,89 @@ export default function AccountPage() {
                 {activeSubscription.status === 'active' ? 'Active' : 'Paused'}
               </span>
             </div>
+          </div>
+        )}
+
+        {/* ── Notifications ── */}
+        {pushStatus !== 'unsupported' && (
+          <div className="bg-white rounded-2xl border p-6">
+            <h2 className="font-semibold text-gray-900 flex items-center gap-2 mb-1">
+              <Bell className="h-4 w-4 text-brand" /> Delivery Notifications
+            </h2>
+            <p className="text-xs text-gray-400 mb-4">Get a push notification the day before your order arrives — free, straight to your phone.</p>
+
+            {pushStatus === 'granted' && (
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm text-green-700">
+                  <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />
+                  Notifications enabled
+                </div>
+                <button
+                  onClick={async () => {
+                    setPushSaving(true);
+                    try {
+                      const sw = await navigator.serviceWorker.ready;
+                      const sub = await sw.pushManager.getSubscription();
+                      if (sub) {
+                        await sub.unsubscribe();
+                        const token = await getToken();
+                        await fetch(`${API_URL}/api/push/subscribe`, {
+                          method: 'DELETE',
+                          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                          body: JSON.stringify({ endpoint: sub.endpoint }),
+                        });
+                      }
+                      localStorage.removeItem('push-subscribed');
+                      setPushStatus('denied');
+                    } finally { setPushSaving(false); }
+                  }}
+                  disabled={pushSaving}
+                  className="flex items-center gap-1.5 text-xs text-gray-500 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors disabled:opacity-50"
+                >
+                  <BellOff className="h-3.5 w-3.5" />
+                  {pushSaving ? 'Unsubscribing…' : 'Turn off notifications'}
+                </button>
+              </div>
+            )}
+
+            {(pushStatus === 'unknown') && (
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-gray-500">Not yet enabled</p>
+                <button
+                  onClick={async () => {
+                    const permission = await Notification.requestPermission();
+                    if (permission !== 'granted') { setPushStatus('denied'); return; }
+                    setPushSaving(true);
+                    try {
+                      const VAPID_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? '';
+                      if (!VAPID_KEY) return;
+                      const db64u = (s: string) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
+                      const sw = await navigator.serviceWorker.ready;
+                      const sub = await sw.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: db64u(VAPID_KEY) });
+                      const token = await getToken();
+                      await fetch(`${API_URL}/api/push/subscribe`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+                        body: JSON.stringify(sub.toJSON()),
+                      });
+                      localStorage.setItem('push-subscribed', '1');
+                      setPushStatus('granted');
+                    } finally { setPushSaving(false); }
+                  }}
+                  disabled={pushSaving}
+                  className="flex items-center gap-1.5 text-xs bg-brand text-white rounded-lg px-3 py-1.5 hover:bg-brand-mid transition-colors disabled:opacity-50"
+                >
+                  <Bell className="h-3.5 w-3.5" />
+                  {pushSaving ? 'Enabling…' : 'Enable notifications'}
+                </button>
+              </div>
+            )}
+
+            {pushStatus === 'denied' && (
+              <p className="text-sm text-gray-400">
+                Notifications are blocked. To re-enable, update your browser or device notification settings for this site.
+              </p>
+            )}
           </div>
         )}
 
