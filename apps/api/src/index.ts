@@ -59,12 +59,27 @@ app.patch('/api/customers/me', async (c) => {
   const clerk = await verifyClerkToken(c.req.header('Authorization') ?? null, c.env.CLERK_SECRET_KEY);
   if (!clerk) return c.json({ error: 'Unauthorized' }, 401);
   const db = drizzle(c.env.DB);
-  const [customer] = await db.select().from(customersTable).where(eq(customersTable.clerkId, clerk.clerkId)).limit(1);
-  if (!customer) return c.json({ error: 'Not found' }, 404);
-  const body = await c.req.json<{ phone?: string; addresses?: object[] }>();
+  const body = await c.req.json<{ phone?: string; addresses?: object[]; name?: string }>();
+  let [customer] = await db.select().from(customersTable).where(eq(customersTable.clerkId, clerk.clerkId)).limit(1);
+  if (!customer) {
+    const now = Date.now();
+    const id = crypto.randomUUID();
+    await db.insert(customersTable).values({
+      id,
+      clerkId: clerk.clerkId,
+      email: clerk.email,
+      name: body.name ?? clerk.email,
+      phone: body.phone ?? null,
+      addresses: JSON.stringify(body.addresses ?? []),
+      createdAt: now,
+      updatedAt: now,
+    });
+    return c.json({ ok: true });
+  }
   const patch: Record<string, unknown> = { updatedAt: Date.now() };
   if (body.phone !== undefined) patch.phone = body.phone;
   if (body.addresses !== undefined) patch.addresses = JSON.stringify(body.addresses);
+  if (body.name !== undefined) patch.name = body.name;
   await db.update(customersTable).set(patch).where(eq(customersTable.id, customer.id));
   return c.json({ ok: true });
 });
