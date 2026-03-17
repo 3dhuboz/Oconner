@@ -19,7 +19,7 @@ export default function AboutPage() {
         {/* ── Hero ── */}
         <section className="relative bg-brand text-white overflow-hidden">
           <div className="absolute inset-0 opacity-30">
-            <img src="/hero-cows.jpg" alt="O'Connor cattle" className="w-full h-full object-cover" />
+            <img src="/649363139_122169276728833210_2969468506503855850_n.jpg" alt="O'Connor family" className="w-full h-full object-cover" />
           </div>
           <div className="relative max-w-4xl mx-auto px-4 py-24 text-center">
             <p className="text-brand-light text-sm font-semibold uppercase tracking-widest mb-3">
@@ -61,7 +61,7 @@ export default function AboutPage() {
             </div>
             <div className="relative">
               <img
-                src="/about-family.jpg"
+                src="/649363139_122169276728833210_2969468506503855850_n.jpg"
                 alt="The O'Connor family"
                 className="w-full rounded-2xl object-cover aspect-[3/4] shadow-xl"
               />
@@ -76,11 +76,16 @@ export default function AboutPage() {
         {/* ── The Cattle ── */}
         <section className="py-20 px-4 bg-gray-50">
           <div className="max-w-5xl mx-auto grid md:grid-cols-2 gap-12 items-center">
-            <div className="order-2 md:order-1">
+            <div className="order-2 md:order-1 grid grid-cols-1 gap-4">
               <img
-                src="/about-cattle.jpg"
+                src="/648756608_122169276602833210_2007100768441221733_n.jpg"
                 alt="O'Connor grass fed cattle"
                 className="w-full rounded-2xl object-cover shadow-xl"
+              />
+              <img
+                src="/605527026_122159273378833210_2192412403070503185_n.jpg"
+                alt="Cattle grazing in sunflowers"
+                className="w-full rounded-2xl object-cover shadow-xl max-h-48"
               />
             </div>
             <div className="order-1 md:order-2">
@@ -131,17 +136,33 @@ export default function AboutPage() {
                 with the care and pride of true family farmers.
               </p>
             </div>
-            <div className="relative rounded-2xl overflow-hidden shadow-2xl">
-              <img
-                src="/about-team.jpg"
-                alt="O'Connor Agriculture team"
-                className="w-full object-cover max-h-96"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-brand/80 to-transparent flex items-end p-8">
-                <div className="text-white">
-                  <p className="font-black text-xl">O'Connor Agriculture</p>
-                  <p className="text-brand-light text-sm mt-1">Fresh From the Farm · To Your Door</p>
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="relative rounded-2xl overflow-hidden shadow-2xl md:col-span-2">
+                <img
+                  src="/649233392_122169276668833210_2761320253198269250_n.jpg"
+                  alt="O'Connor Agriculture team"
+                  className="w-full object-cover max-h-96"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-brand/80 to-transparent flex items-end p-8">
+                  <div className="text-white">
+                    <p className="font-black text-xl">O'Connor Agriculture</p>
+                    <p className="text-brand-light text-sm mt-1">Fresh From the Farm · To Your Door</p>
+                  </div>
                 </div>
+              </div>
+              <div className="relative rounded-2xl overflow-hidden shadow-lg">
+                <img
+                  src="/627050601_122164946600833210_6379541527443613506_n.jpg"
+                  alt="O'Connor delivery truck"
+                  className="w-full object-cover h-48"
+                />
+              </div>
+              <div className="relative rounded-2xl overflow-hidden shadow-lg">
+                <img
+                  src="/637918980_122167024448833210_227926334031877108_n.jpg"
+                  alt="Grass fed beef"
+                  className="w-full object-cover h-48"
+                />
               </div>
             </div>
           </div>
@@ -186,7 +207,7 @@ export default function AboutPage() {
             </div>
             <div>
               <img
-                src="/about-butcher.jpg"
+                src="/633837159_122166552518833210_2828990505487028501_n.jpg"
                 alt="Our butcher at work"
                 className="w-full rounded-2xl object-cover shadow-xl aspect-square"
               />
