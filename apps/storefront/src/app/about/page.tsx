@@ -64,18 +64,7 @@ export default function AboutPage() {
                 src="/about-family.jpg"
                 alt="The O'Connor family"
                 className="w-full rounded-2xl object-cover aspect-[3/4] shadow-xl"
-                onError={(e) => {
-                  const el = e.currentTarget as HTMLImageElement;
-                  el.style.display = 'none';
-                  (el.nextSibling as HTMLElement)?.style?.setProperty('display', 'flex');
-                }}
               />
-              <div
-                className="hidden w-full rounded-2xl aspect-[3/4] bg-brand/10 items-center justify-center text-brand/40 text-sm"
-                style={{ display: 'none' }}
-              >
-                Family photo
-              </div>
               <div className="absolute -bottom-4 -left-4 bg-white rounded-xl shadow-lg px-5 py-3">
                 <p className="text-xs text-gray-500">Est.</p>
                 <p className="text-2xl font-black text-brand">2020</p>
@@ -92,7 +81,6 @@ export default function AboutPage() {
                 src="/about-cattle.jpg"
                 alt="O'Connor grass fed cattle"
                 className="w-full rounded-2xl object-cover shadow-xl"
-                onError={(e) => { (e.currentTarget as HTMLImageElement).src = '/hero-cows.jpg'; }}
               />
             </div>
             <div className="order-1 md:order-2">
@@ -148,10 +136,6 @@ export default function AboutPage() {
                 src="/about-team.jpg"
                 alt="O'Connor Agriculture team"
                 className="w-full object-cover max-h-96"
-                onError={(e) => {
-                  const el = e.currentTarget as HTMLImageElement;
-                  el.style.display = 'none';
-                }}
               />
               <div className="absolute inset-0 bg-gradient-to-t from-brand/80 to-transparent flex items-end p-8">
                 <div className="text-white">
@@ -205,10 +189,6 @@ export default function AboutPage() {
                 src="/about-butcher.jpg"
                 alt="Our butcher at work"
                 className="w-full rounded-2xl object-cover shadow-xl aspect-square"
-                onError={(e) => {
-                  const el = e.currentTarget as HTMLImageElement;
-                  el.style.display = 'none';
-                }}
               />
             </div>
           </div>
