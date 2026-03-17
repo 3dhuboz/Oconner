@@ -27,48 +27,16 @@ const DEMO_RESULT: CutResult = {
   tips: 'Bring to room temperature 30 min before cooking. Sear on high heat, then rest on a wire rack — never a flat plate.',
 };
 
-async function analyseWithGemini(base64: string, mimeType: string): Promise<CutResult> {
-  const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
-  if (!apiKey) return DEMO_RESULT;
-
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{
-          parts: [
-            { inlineData: { mimeType, data: base64 } },
-            {
-              text: `Analyse this food/meat image. Respond ONLY with a valid JSON object — no markdown, no code fences.
-Fields required:
-{
-  "cutName": "name of the meat cut (or dish if cooked)",
-  "confidence": "High | Medium | Low",
-  "cookingMethod": "best cooking method for this cut",
-  "portionSize": "typical portion size per serve",
-  "cookingTemp": "ideal internal temperature",
-  "cookingTime": "estimated cooking time",
-  "flavorNotes": "brief flavour and texture description",
-  "alternatives": ["2–3 similar alternative cuts available"],
-  "tips": "single most important cooking tip"
-}
-If no meat is clearly visible, set cutName to "No meat detected" and fill others with "N/A".`,
-            },
-          ],
-        }],
-      }),
-    }
-  );
-
-  const data = await res.json();
-  const text: string = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-  try {
-    return JSON.parse(text.replace(/```json|```/g, '').trim()) as CutResult;
-  } catch {
-    return DEMO_RESULT;
-  }
+async function analyseImage(base64: string, mimeType: string): Promise<CutResult> {
+  const res = await fetch('/api/analyse', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ base64, mimeType }),
+  });
+  if (!res.ok) return DEMO_RESULT;
+  const data = await res.json() as CutResult & { error?: string };
+  if (data.error) return DEMO_RESULT;
+  return data;
 }
 
 const CONFIDENCE_COLORS: Record<string, string> = {
@@ -113,7 +81,7 @@ export default function CutAdvisor() {
     setLoading(true);
     try {
       const base64 = image.split(',')[1];
-      const res = await analyseWithGemini(base64, imageMime);
+      const res = await analyseImage(base64, imageMime);
       setResult(res);
     } finally {
       setLoading(false);
@@ -196,9 +164,9 @@ export default function CutAdvisor() {
               )}
             </button>
 
-            {!process.env.NEXT_PUBLIC_GEMINI_API_KEY && !result && (
+            {!result && (
               <p className="text-xs text-gray-600 text-center">
-                Demo mode — add <code className="text-gray-400">NEXT_PUBLIC_GEMINI_API_KEY</code> to enable live AI analysis
+                Powered by OpenRouter · Gemini Flash
               </p>
             )}
           </div>

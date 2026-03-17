@@ -1,4 +1,3 @@
-import type { Timestamp } from 'firebase/firestore';
 import type { Address, OrderItem } from './order';
 
 export type StopStatus = 'pending' | 'en_route' | 'arrived' | 'delivered' | 'failed' | 'skipped';
@@ -7,21 +6,21 @@ export type FlagReason = 'nobody_home' | 'wrong_address' | 'damaged' | 'refused'
 
 export interface DeliveryDay {
   id: string;
-  date: Timestamp;
+  date: number;
   /** 0=Sun, 1=Mon, ... */
   dayOfWeek: number;
   active: boolean;
   frozen: boolean;
-  cutoffTime: Timestamp;
+  cutoffTime: number;
   maxOrders: number;
   orderCount: number;
   notes?: string;
   routeGenerated: boolean;
-  routeGeneratedAt?: Timestamp;
+  routeGeneratedAt?: number;
   driverUid?: string;
-  runStartedAt?: Timestamp;
-  runCompletedAt?: Timestamp;
-  createdAt: Timestamp;
+  runStartedAt?: number;
+  runCompletedAt?: number;
+  createdAt: number;
 }
 
 export interface Stop {
@@ -35,13 +34,13 @@ export interface Stop {
   items: OrderItem[];
   sequence: number;
   status: StopStatus;
-  estimatedArrival?: Timestamp;
-  completedAt?: Timestamp;
+  estimatedArrival?: number;
+  completedAt?: number;
   proofUrl?: string;
   lat?: number;
   lng?: number;
   customerNote?: string;
   driverNote?: string;
   flagReason?: FlagReason;
-  createdAt: Timestamp;
+  createdAt: number;
 }

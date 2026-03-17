@@ -1,5 +1,3 @@
-import type { Timestamp } from 'firebase/firestore';
-
 export type OrderStatus =
   | 'pending_payment'
   | 'confirmed'
@@ -68,8 +66,8 @@ export interface Order {
   notes?: string;
   internalNotes?: string;
   proofUrl?: string;
-  packedAt?: Timestamp;
+  packedAt?: number;
   packedBy?: string;
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  createdAt: number;
+  updatedAt: number;
 }

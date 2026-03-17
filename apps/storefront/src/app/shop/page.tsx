@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { collection, query, where, orderBy, getDocs } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { api } from '@butcher/shared';
 import { useCart } from '@/lib/cart';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
@@ -19,18 +18,11 @@ export default function ShopPage() {
   const { addItem, items } = useCart();
 
   useEffect(() => {
-    const fetchProducts = async () => {
-      setLoading(true);
-      const q = query(
-        collection(db, 'products'),
-        where('active', '==', true),
-        orderBy('displayOrder', 'asc'),
-      );
-      const snap = await getDocs(q);
-      setProducts(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Product)));
-      setLoading(false);
-    };
-    fetchProducts();
+    setLoading(true);
+    api.products.list(true)
+      .then((data) => setProducts(data as Product[]))
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, []);
 
   const filtered = category === 'All' ? products : products.filter((p) => p.category === category);

@@ -1,5 +1,4 @@
-import { signOut } from 'firebase/auth';
-import { auth } from '../lib/firebase';
+import { useClerk } from '@clerk/clerk-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { ArrowLeft, LogOut, User, Truck } from 'lucide-react';
@@ -8,8 +7,10 @@ export default function ProfilePage() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
+  const { signOut } = useClerk();
+
   const handleSignOut = async () => {
-    await signOut(auth);
+    await signOut();
     navigate('/login');
   };
 
@@ -27,8 +28,8 @@ export default function ProfilePage() {
           <div className="w-16 h-16 bg-brand-light rounded-full flex items-center justify-center mb-3">
             <Truck className="h-8 w-8 text-brand" />
           </div>
-          <p className="font-semibold text-lg">{user?.displayName ?? 'Driver'}</p>
-          <p className="text-gray-500 text-sm">{user?.email}</p>
+          <p className="font-semibold text-lg">{user?.fullName ?? user?.firstName ?? 'Driver'}</p>
+          <p className="text-gray-500 text-sm">{user?.primaryEmailAddress?.emailAddress}</p>
         </div>
 
         <div className="bg-white rounded-xl border divide-y">
@@ -36,7 +37,7 @@ export default function ProfilePage() {
             <User className="h-5 w-5 text-gray-400" />
             <div>
               <p className="text-sm font-medium">Account</p>
-              <p className="text-xs text-gray-500">{user?.email}</p>
+              <p className="text-xs text-gray-500">{user?.primaryEmailAddress?.emailAddress}</p>
             </div>
           </div>
         </div>

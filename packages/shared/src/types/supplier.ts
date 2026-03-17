@@ -1,5 +1,3 @@
-import type { Timestamp } from 'firebase/firestore';
-
 export interface Supplier {
   id: string;
   name: string;
@@ -10,5 +8,5 @@ export interface Supplier {
   paymentTerms: string;
   notes: string;
   active: boolean;
-  createdAt: Timestamp;
+  createdAt: number;
 }

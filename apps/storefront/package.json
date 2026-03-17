@@ -11,11 +11,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@butcher/shared": "*",
-    "@butcher/ui": "*",
+    "@butcher/shared": "workspace:*",
+    "@butcher/ui": "workspace:*",
     "@stripe/react-stripe-js": "^2.7.3",
     "@stripe/stripe-js": "^4.3.0",
-    "firebase": "^10.13.1",
+    "@clerk/nextjs": "^5.7.0",
     "next": "14.2.7",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

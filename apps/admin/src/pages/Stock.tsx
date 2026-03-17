@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-import { collection, query, orderBy, onSnapshot, limit, doc, runTransaction, addDoc, Timestamp } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { api } from '@butcher/shared';
 import type { Product, StockMovement } from '@butcher/shared';
 import { AlertTriangle, Plus, Minus, Package, X } from 'lucide-react';
 
@@ -20,13 +19,13 @@ export default function StockPage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    const unsubP = onSnapshot(query(collection(db, 'products'), orderBy('name', 'asc')), (snap) => {
-      setProducts(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Product)));
-    });
-    const unsubM = onSnapshot(query(collection(db, 'stockMovements'), orderBy('createdAt', 'desc'), limit(50)), (snap) => {
-      setMovements(snap.docs.map((d) => ({ id: d.id, ...d.data() } as StockMovement)));
-    });
-    return () => { unsubP(); unsubM(); };
+    Promise.all([
+      api.products.list() as Promise<Product[]>,
+      api.get<StockMovement[]>('/api/stock/movements'),
+    ]).then(([prods, movs]) => {
+      setProducts(prods.sort((a, b) => a.name.localeCompare(b.name)));
+      setMovements(movs);
+    }).catch(() => {});
   }, []);
 
   const openAdjust = (p: Product, direction: 1 | -1) =>
@@ -37,25 +36,17 @@ export default function StockPage() {
     setSaving(true);
     const { product, delta, reason, note } = adjust;
     try {
-      await runTransaction(db, async (tx) => {
-        const ref = doc(db, 'products', product.id!);
-        const snap = await tx.get(ref);
-        const current: number = snap.data()?.stockOnHand ?? 0;
-        const next = Math.max(0, current + delta);
-        tx.update(ref, { stockOnHand: next, updatedAt: Timestamp.now() });
-      });
-      await addDoc(collection(db, 'stockMovements'), {
+      await api.post('/api/stock/adjust', {
         productId: product.id,
-        productName: product.name,
-        qty: delta,
-        unit: product.isMeatPack ? 'units' : 'kg',
-        type: 'manual',
+        delta,
         reason,
         note: note || null,
-        createdAt: Timestamp.now(),
       });
+      setProducts((prev) => prev.map((p) =>
+        p.id === product.id ? { ...p, stockOnHand: Math.max(0, p.stockOnHand + delta) } : p,
+      ));
       setAdjust(null);
-    } catch (e) {
+    } catch {
       alert('Failed to save adjustment. Please try again.');
     } finally {
       setSaving(false);

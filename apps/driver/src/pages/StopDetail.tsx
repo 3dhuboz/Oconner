@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, onSnapshot, updateDoc, Timestamp } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { api } from '@butcher/shared';
 import type { Stop, StopStatus } from '@butcher/shared';
 import { ArrowLeft, MapPin, Phone, Navigation, CheckCircle, Camera, AlertTriangle, Image } from 'lucide-react';
 import { useRef } from 'react';
@@ -18,39 +17,30 @@ export default function StopDetailPage() {
 
   useEffect(() => {
     if (!stopId) return;
-    return onSnapshot(doc(db, 'stops', stopId), (snap) => {
-      if (snap.exists()) setStop({ id: snap.id, ...snap.data() } as Stop);
-    });
+    api.get<Stop>(`/api/stops/${stopId}`)
+      .then((data) => setStop(data))
+      .catch(() => {});
   }, [stopId]);
 
   const handlePhotoCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !stopId) return;
     setUploadingPhoto(true);
-    const reader = new FileReader();
-    reader.onloadend = async () => {
-      const dataUrl = reader.result as string;
-      await updateDoc(doc(db, 'stops', stopId), {
-        proofUrl: dataUrl,
-        proofTakenAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-      });
-      setProofUrl(dataUrl);
+    try {
+      const url = await api.images.upload(file, 'proof');
+      await api.stops.updateStatus(stopId, { status: stop?.status ?? 'arrived', proofUrl: url });
+      setProofUrl(url);
+    } catch {
+      // best-effort
+    } finally {
       setUploadingPhoto(false);
-    };
-    reader.readAsDataURL(file);
+    }
   };
 
-  const updateStatus = async (status: StopStatus, extra?: Record<string, unknown>) => {
+  const updateStatus = async (status: StopStatus, extra?: { driverNote?: string; failReason?: string }) => {
     if (!stopId) return;
     setUpdating(true);
-    await updateDoc(doc(db, 'stops', stopId), {
-      status,
-      updatedAt: Timestamp.now(),
-      ...(status === 'delivered' ? { deliveredAt: Timestamp.now() } : {}),
-      ...(status === 'failed' ? { failedAt: Timestamp.now() } : {}),
-      ...extra,
-    });
+    await api.stops.updateStatus(stopId, { status, ...extra });
     setUpdating(false);
     if (status === 'delivered' || status === 'failed') navigate('/');
   };

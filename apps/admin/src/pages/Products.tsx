@@ -1,8 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { collection, onSnapshot, doc, updateDoc, addDoc, Timestamp, orderBy, query } from 'firebase/firestore';
-import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '../lib/firebase';
-import { formatCurrency } from '@butcher/shared';
+import { api, formatCurrency } from '@butcher/shared';
 import type { Product } from '@butcher/shared';
 import { Plus, Pencil, X, Upload, Sparkles, Image } from 'lucide-react';
 
@@ -18,27 +15,29 @@ export default function ProductsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    return onSnapshot(query(collection(db, 'products'), orderBy('displayOrder', 'asc')), (snap) => {
-      setProducts(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Product)));
-    });
+    api.products.list()
+      .then((data) => setProducts(data as Product[]))
+      .catch(() => {});
   }, []);
 
   const handleSave = async () => {
     if (!editing) return;
     setSaving(true);
     const { id, ...data } = editing;
-    const payload = { ...data, updatedAt: Timestamp.now() };
     if (id) {
-      await updateDoc(doc(db, 'products', id), payload);
+      await api.products.update(id, data);
+      setProducts((prev) => prev.map((p) => p.id === id ? { ...p, ...data } as Product : p));
     } else {
-      await addDoc(collection(db, 'products'), { ...payload, createdAt: Timestamp.now(), displayOrder: products.length });
+      const created = await api.products.create({ ...data, displayOrder: products.length }) as Product;
+      setProducts((prev) => [...prev, created]);
     }
     setSaving(false);
     setEditing(null);
   };
 
   const toggleActive = async (product: Product) => {
-    await updateDoc(doc(db, 'products', product.id!), { active: !product.active, updatedAt: Timestamp.now() });
+    await api.products.update(product.id!, { active: !product.active });
+    setProducts((prev) => prev.map((p) => p.id === product.id ? { ...p, active: !p.active } : p));
   };
 
   const f = <K extends keyof Product>(k: K) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
@@ -48,12 +47,10 @@ export default function ProductsPage() {
     if (!file) return;
     setImgUploading(true);
     try {
-      const path = `products/${Date.now()}_${file.name.replace(/[^a-z0-9.]/gi, '_')}`;
-      const snap = await uploadBytes(storageRef(storage, path), file);
-      const url = await getDownloadURL(snap.ref);
+      const url = await api.images.upload(file, 'products');
       setEditing((prev) => prev ? { ...prev, imageUrl: url } : prev);
-    } catch (e) {
-      alert('Upload failed. Check Firebase Storage rules.');
+    } catch {
+      alert('Upload failed.');
     } finally {
       setImgUploading(false);
     }

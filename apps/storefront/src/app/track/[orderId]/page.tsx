@@ -2,8 +2,7 @@
 export const runtime = 'edge';
 
 import { useEffect, useState } from 'react';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { api } from '@butcher/shared';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { formatCurrency } from '@butcher/shared';
@@ -28,13 +27,9 @@ export default function TrackOrderPage({ params }: { params: { orderId: string }
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsub = onSnapshot(doc(db, 'orders', params.orderId), (snap) => {
-      if (snap.exists()) {
-        setOrder({ id: snap.id, ...snap.data() } as Order);
-      }
-      setLoading(false);
-    });
-    return unsub;
+    api.orders.get(params.orderId)
+      .then((data) => { setOrder(data as Order); setLoading(false); })
+      .catch(() => setLoading(false));
   }, [params.orderId]);
 
   if (loading) {

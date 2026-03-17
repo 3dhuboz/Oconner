@@ -1,7 +1,5 @@
 import { useEffect, useState } from 'react';
-import { collection, query, where, getDocs, orderBy, limit, Timestamp } from 'firebase/firestore';
-import { db } from '../lib/firebase';
-import { formatCurrency } from '@butcher/shared';
+import { api, formatCurrency } from '@butcher/shared';
 import type { Order } from '@butcher/shared';
 import { ShoppingBag, DollarSign, Truck, Package } from 'lucide-react';
 
@@ -18,27 +16,25 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetch = async () => {
-      const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
-
-      const [todaySnap, pendingSnap, delivSnap, recentSnap] = await Promise.all([
-        getDocs(query(collection(db, 'orders'), where('createdAt', '>=', Timestamp.fromDate(todayStart)))),
-        getDocs(query(collection(db, 'orders'), where('status', 'in', ['confirmed', 'preparing', 'packed']))),
-        getDocs(query(collection(db, 'orders'), where('status', '==', 'out_for_delivery'))),
-        getDocs(query(collection(db, 'orders'), orderBy('createdAt', 'desc'), limit(10))),
+    const load = async () => {
+      const [todayOrders, recent] = await Promise.all([
+        api.orders.today() as Promise<Order[]>,
+        api.orders.list() as Promise<Order[]>,
       ]);
-
-      const todayOrders = todaySnap.docs.map((d) => d.data() as Order);
+      const pending = recent.filter((o) => ['confirmed', 'preparing', 'packed'].includes(o.status));
+      const outForDelivery = recent.filter((o) => o.status === 'out_for_delivery');
+      const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+      const todayFiltered = todayOrders.filter((o) => o.createdAt >= todayStart.getTime());
       setStats({
-        todayOrders: todaySnap.size,
-        todayRevenue: todayOrders.reduce((s, o) => s + (o.total ?? 0), 0),
-        pendingOrders: pendingSnap.size,
-        outForDelivery: delivSnap.size,
+        todayOrders: todayFiltered.length,
+        todayRevenue: todayFiltered.reduce((s, o) => s + (o.total ?? 0), 0),
+        pendingOrders: pending.length,
+        outForDelivery: outForDelivery.length,
       });
-      setRecentOrders(recentSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Order)));
+      setRecentOrders(recent.slice(0, 10));
       setLoading(false);
     };
-    fetch();
+    load();
   }, []);
 
   const cards = [

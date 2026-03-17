@@ -2,20 +2,19 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { collection, query, where, orderBy, getDocs, addDoc, doc, updateDoc, increment, runTransaction, Timestamp } from 'firebase/firestore';
-import { db, auth } from '@/lib/firebase';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
+import { useUser } from '@clerk/nextjs';
+import { api, formatCurrency } from '@butcher/shared';
+import type { DeliveryDay } from '@butcher/shared';
 import { useCart } from '@/lib/cart';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
-import { formatCurrency } from '@butcher/shared';
-import type { DeliveryDay } from '@butcher/shared';
 
 const DELIVERY_FEE = 1500;
 const GST_RATE = 0.1;
 
 export default function CheckoutPage() {
   const router = useRouter();
+  const { user } = useUser();
   const { items, total, clearCart } = useCart();
   const [deliveryDays, setDeliveryDays] = useState<DeliveryDay[]>([]);
   const [selectedDayId, setSelectedDayId] = useState('');
@@ -32,29 +31,27 @@ export default function CheckoutPage() {
   const grandTotal = subtotal + DELIVERY_FEE;
 
   useEffect(() => {
-    const fetchDays = async () => {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const tomorrow = new Date(today);
-      tomorrow.setDate(today.getDate() + 1);
-      const q = query(
-        collection(db, 'deliveryDays'),
-        where('active', '==', true),
-        where('date', '>=', tomorrow),
-        orderBy('date', 'asc'),
-      );
-      const snap = await getDocs(q);
-      const days = snap.docs
-        .map((d) => ({ id: d.id, ...d.data() } as DeliveryDay))
-        .filter((d) => (d.orderCount ?? 0) < (d.maxOrders ?? 999));
-      setDeliveryDays(days);
-      if (days.length > 0) setSelectedDayId(days[0].id!);
-    };
-    fetchDays();
-
-    const user = auth.currentUser;
-    if (user) setForm((f) => ({ ...f, email: user.email ?? '', name: user.displayName ?? '' }));
+    api.deliveryDays.list(true)
+      .then((data) => {
+        const tomorrow = Date.now() + 86_400_000;
+        const days = (data as DeliveryDay[]).filter(
+          (d) => d.active && d.date >= tomorrow && (d.orderCount ?? 0) < (d.maxOrders ?? 999),
+        );
+        setDeliveryDays(days);
+        if (days.length > 0) setSelectedDayId(days[0].id!);
+      })
+      .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (user) {
+      setForm((f) => ({
+        ...f,
+        email: user.primaryEmailAddress?.emailAddress ?? f.email,
+        name: user.fullName ?? f.name,
+      }));
+    }
+  }, [user]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,62 +61,23 @@ export default function CheckoutPage() {
     setError('');
 
     try {
-      let uid = auth.currentUser?.uid;
-      if (!uid) {
-        try {
-          const cred = await createUserWithEmailAndPassword(auth, form.email, Math.random().toString(36).slice(2) + '!A1');
-          uid = cred.user.uid;
-        } catch {
-          const cred = await signInWithEmailAndPassword(auth, form.email, '');
-          uid = cred.user.uid;
-        }
-      }
-
-      const selectedDay = deliveryDays.find((d) => d.id === selectedDayId)!;
-      const orderRef = await addDoc(collection(db, 'orders'), {
-        customerId: uid,
+      const order = await api.orders.create({
         customerEmail: form.email,
         customerName: form.name,
         customerPhone: form.phone,
+        clerkId: user?.id ?? undefined,
         deliveryDayId: selectedDayId,
-        deliveryDate: selectedDay.date,
         deliveryAddress: { line1: form.line1, line2: form.line2, suburb: form.suburb, state: form.state, postcode: form.postcode },
         items,
         subtotal,
         deliveryFee: DELIVERY_FEE,
         gst,
         total: grandTotal,
-        paymentProvider: 'stripe',
-        paymentStatus: 'pending',
-        status: 'pending_payment',
         notes: form.notes,
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
-      });
-
-      await updateDoc(doc(db, 'deliveryDays', selectedDayId), {
-        orderCount: increment(1),
-      });
-
-      // Reduce stock for each ordered item
-      await Promise.all(
-        items.map((item) =>
-          runTransaction(db, async (tx) => {
-            const pRef = doc(db, 'products', item.productId);
-            const pSnap = await tx.get(pRef);
-            if (!pSnap.exists()) return;
-            const current: number = pSnap.data().stockOnHand ?? 0;
-            const qty = item.weight ?? 1;
-            tx.update(pRef, {
-              stockOnHand: Math.max(0, current - qty),
-              updatedAt: Timestamp.now(),
-            });
-          })
-        )
-      );
+      }) as { id: string };
 
       clearCart();
-      router.push(`/checkout/success?orderId=${orderRef.id}`);
+      router.push(`/checkout/success?orderId=${order.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred. Please try again.');
     } finally {
@@ -165,7 +123,7 @@ export default function CheckoutPage() {
               ) : (
                 <select value={selectedDayId} onChange={(e) => setSelectedDayId(e.target.value)} className="w-full border rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand text-sm">
                   {deliveryDays.map((day) => {
-                    const date = (day.date as unknown as { toDate: () => Date }).toDate?.() ?? new Date();
+                    const date = new Date(day.date);
                     return (
                       <option key={day.id} value={day.id}>
                         {date.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })} — {(day.maxOrders ?? 0) - (day.orderCount ?? 0)} spots left
@@ -206,9 +164,9 @@ export default function CheckoutPage() {
                 disabled={submitting || deliveryDays.length === 0}
                 className="w-full mt-6 bg-brand text-white py-3 rounded-lg font-medium hover:bg-brand-mid transition-colors disabled:opacity-50"
               >
-                {submitting ? 'Placing Order…' : `Pay ${formatCurrency(grandTotal)}`}
+                {submitting ? 'Placing Order…' : `Place Order — ${formatCurrency(grandTotal)}`}
               </button>
-              <p className="text-xs text-center text-gray-400 mt-3">Secured by Stripe. Your payment info is never stored.</p>
+              <p className="text-xs text-center text-gray-400 mt-3">We'll confirm your order and arrange payment on delivery.</p>
             </div>
           </div>
         </form>

@@ -12,9 +12,9 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
         runtimeCaching: [
           {
-            urlPattern: /^https:\/\/firestore\.googleapis\.com/,
+            urlPattern: /^https:\/\/oconner-api\.workers\.dev\/api\//,
             handler: 'NetworkFirst',
-            options: { cacheName: 'firestore-cache' },
+            options: { cacheName: 'api-cache', networkTimeoutSeconds: 5 },
           },
         ],
       },

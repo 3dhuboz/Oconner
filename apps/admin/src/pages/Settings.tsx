@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { api } from '@butcher/shared';
 import { Save, RefreshCw, Image, Type, Phone, Layout, ChevronDown, ChevronUp, CreditCard, Mail } from 'lucide-react';
 
 interface Feature {
@@ -142,22 +141,14 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const [sfSnap, paySnap, emailSnap] = await Promise.all([
-          getDoc(doc(db, 'config', 'storefront')),
-          getDoc(doc(db, 'config', 'payment')),
-          getDoc(doc(db, 'config', 'email')),
-        ]);
-        if (sfSnap.exists()) setConfig({ ...DEFAULTS, ...(sfSnap.data() as StorefrontConfig) });
-        if (paySnap.exists()) setPayment({ ...PAYMENT_DEFAULTS, ...(paySnap.data() as PaymentConfig) });
-        if (emailSnap.exists()) setEmail({ ...EMAIL_DEFAULTS, ...(emailSnap.data() as EmailConfig) });
-      } catch (e) {
-        console.error('Failed to load settings:', e);
-      } finally {
-        setLoading(false);
-      }
-    })();
+    api.config.get()
+      .then((data: any) => {
+        if (data?.storefront) setConfig({ ...DEFAULTS, ...data.storefront });
+        if (data?.payment) setPayment({ ...PAYMENT_DEFAULTS, ...data.payment });
+        if (data?.email) setEmail({ ...EMAIL_DEFAULTS, ...data.email });
+      })
+      .catch((e: unknown) => console.error('Failed to load settings:', e))
+      .finally(() => setLoading(false));
   }, []);
 
   const setPay = <K extends keyof PaymentConfig>(k: K, v: PaymentConfig[K]) =>
@@ -184,11 +175,7 @@ export default function SettingsPage() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await Promise.all([
-        setDoc(doc(db, 'config', 'storefront'), { ...config, updatedAt: serverTimestamp() }, { merge: true }),
-        setDoc(doc(db, 'config', 'payment'), { ...payment, updatedAt: serverTimestamp() }, { merge: true }),
-        setDoc(doc(db, 'config', 'email'), { ...email, updatedAt: serverTimestamp() }, { merge: true }),
-      ]);
+      await api.config.update({ storefront: config, payment, email });
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (e) {

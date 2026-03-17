@@ -2,8 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { api } from '@butcher/shared';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import CutAdvisor from '@/components/CutAdvisor';
@@ -40,8 +39,8 @@ export default function HomePage() {
   const [cfg, setCfg] = useState<Config>(DEFAULTS);
 
   useEffect(() => {
-    getDoc(doc(db, 'config', 'storefront'))
-      .then((snap) => { if (snap.exists()) setCfg({ ...DEFAULTS, ...(snap.data() as Config) }); })
+    api.config.get('storefront')
+      .then((data: any) => { if (data) setCfg({ ...DEFAULTS, ...data }); })
       .catch(() => {});
   }, []);
 

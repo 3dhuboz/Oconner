@@ -1,5 +1,3 @@
-import type { Timestamp } from 'firebase/firestore';
-
 export type StockMovementType =
   | 'sale'
   | 'adjustment'
@@ -20,7 +18,7 @@ export interface StockMovement {
   supplierId?: string;
   stocktakeSessionId?: string;
   createdBy: string;
-  createdAt: Timestamp;
+  createdAt: number;
 }
 
 export interface StocktakeItem {
@@ -30,12 +28,12 @@ export interface StocktakeItem {
   systemQty: number;
   countedQty?: number;
   variance?: number;
-  countedAt?: Timestamp;
+  countedAt?: number;
 }
 
 export interface StocktakeSession {
   id: string;
-  date: Timestamp;
+  date: number;
   status: 'in_progress' | 'completed';
   categories: string[];
   items: StocktakeItem[];
@@ -44,7 +42,7 @@ export interface StocktakeSession {
   /** cents */
   totalVarianceValue: number;
   approvedBy?: string;
-  approvedAt?: Timestamp;
+  approvedAt?: number;
   createdBy: string;
-  createdAt: Timestamp;
+  createdAt: number;
 }

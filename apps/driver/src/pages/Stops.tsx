@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
-import { collection, query, where, orderBy, onSnapshot, doc, updateDoc, addDoc, Timestamp } from 'firebase/firestore';
-import { db, auth } from '../lib/firebase';
 import { useNavigate } from 'react-router-dom';
+import { useUser } from '@clerk/clerk-react';
+import { api } from '@butcher/shared';
 import type { Stop, DeliveryDay } from '@butcher/shared';
 import { useGPS, type GPSStatus } from '../hooks/useGPS';
 import { MapPin, Navigation, User, CheckCircle, Clock, Truck } from 'lucide-react';
 
 export default function StopsPage() {
   const navigate = useNavigate();
-  const user = auth.currentUser;
+  const { user } = useUser();
   const [deliveryDay, setDeliveryDay] = useState<DeliveryDay | null>(null);
   const [stops, setStops] = useState<Stop[]>([]);
   const [trackingEnabled, setTrackingEnabled] = useState(false);
@@ -20,59 +20,31 @@ export default function StopsPage() {
 
   useEffect(() => {
     if (!user) return;
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
-
-    return onSnapshot(
-      query(
-        collection(db, 'deliveryDays'),
-        where('date', '>=', Timestamp.fromDate(today)),
-        where('date', '<', Timestamp.fromDate(tomorrow)),
-        where('active', '==', true),
-      ),
-      (snap) => {
-        if (!snap.empty) {
-          const day = { id: snap.docs[0].id, ...snap.docs[0].data() } as DeliveryDay;
-          setDeliveryDay(day);
-        }
-      },
-    );
+    api.deliveryDays.today()
+      .then((day) => { if (day) setDeliveryDay(day as DeliveryDay); })
+      .catch(() => {});
   }, [user]);
 
   useEffect(() => {
     if (!deliveryDay?.id) return;
-    return onSnapshot(
-      query(
-        collection(db, 'stops'),
-        where('deliveryDayId', '==', deliveryDay.id),
-        orderBy('sequence', 'asc'),
-      ),
-      (snap) => setStops(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Stop))),
-    );
+    api.stops.list(deliveryDay.id)
+      .then((data) => setStops(data as Stop[]))
+      .catch(() => {});
   }, [deliveryDay?.id]);
 
   const handleStartDay = async () => {
     if (!deliveryDay?.id || !user) return;
-    const ref = await addDoc(collection(db, 'driverSessions'), {
-      driverId: user.uid,
-      driverUid: user.uid,
-      driverName: user.displayName ?? user.email,
+    const session = await api.drivers.startSession({
       deliveryDayId: deliveryDay.id,
-      active: true,
-      gpsStatus: 'idle',
-      startedAt: Timestamp.now(),
-      updatedAt: Timestamp.now(),
-    });
-    setSessionId(ref.id);
+      driverName: user.fullName ?? user.primaryEmailAddress?.emailAddress ?? 'Driver',
+    }) as { id: string };
+    setSessionId(session.id);
     setTrackingEnabled(true);
   };
 
   const handleEndDay = async () => {
     if (sessionId) {
-      await updateDoc(doc(db, 'driverSessions', sessionId), {
-        active: false,
-        endedAt: Timestamp.now(),
-      });
+      await api.drivers.endSession(sessionId);
     }
     setTrackingEnabled(false);
     setSessionId(null);
@@ -89,7 +61,7 @@ export default function StopsPage() {
             <h1 className="font-bold text-lg">Today's Deliveries</h1>
             {deliveryDay ? (
               <p className="text-white/70 text-sm">
-                {(deliveryDay.date as unknown as { toDate: () => Date }).toDate?.()?.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })}
+                {new Date(deliveryDay.date).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })}
               </p>
             ) : (
               <p className="text-white/50 text-sm">No delivery day today</p>

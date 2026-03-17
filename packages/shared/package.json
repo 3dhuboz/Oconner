@@ -11,10 +11,7 @@
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist"
   },
-  "dependencies": {
-    "firebase": "^10.13.1",
-    "firebase-admin": "^12.4.0"
-  },
+  "dependencies": {},
   "devDependencies": {
     "typescript": "^5.5.4"
   }

@@ -1,5 +1,3 @@
-import type { Timestamp } from 'firebase/firestore';
-
 export type ProductCategory = 'beef' | 'lamb' | 'pork' | 'chicken' | 'packs' | string;
 
 export interface Product {
@@ -24,8 +22,8 @@ export interface Product {
   active: boolean;
   displayOrder: number;
   gstApplicable: boolean;
-  seasonalStart?: Timestamp;
-  seasonalEnd?: Timestamp;
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  seasonalStart?: number;
+  seasonalEnd?: number;
+  createdAt: number;
+  updatedAt: number;
 }

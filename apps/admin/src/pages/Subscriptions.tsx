@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-import { collection, query, orderBy, onSnapshot, updateDoc, doc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { api } from '@butcher/shared';
 import { RefreshCcw, Check, X, Phone, Mail, MapPin } from 'lucide-react';
 
 interface Subscription {
@@ -28,14 +27,14 @@ export default function SubscriptionsPage() {
   const [subs, setSubs] = useState<Subscription[]>([]);
 
   useEffect(() => {
-    return onSnapshot(
-      query(collection(db, 'subscriptions'), orderBy('createdAt', 'desc')),
-      (snap) => setSubs(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Subscription))),
-    );
+    api.get<Subscription[]>('/api/subscriptions')
+      .then((data) => setSubs(data))
+      .catch(() => {});
   }, []);
 
   const setStatus = async (id: string, status: string) => {
-    await updateDoc(doc(db, 'subscriptions', id), { status });
+    await api.patch(`/api/subscriptions/${id}`, { status });
+    setSubs((prev) => prev.map((s) => s.id === id ? { ...s, status: status as Subscription['status'] } : s));
   };
 
   const pending = subs.filter((s) => s.status === 'pending').length;

@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, onSnapshot, updateDoc, Timestamp } from 'firebase/firestore';
-import { db } from '../lib/firebase';
-import { formatCurrency, ORDER_STATUS_LABELS } from '@butcher/shared';
+import { api, formatCurrency, ORDER_STATUS_LABELS } from '@butcher/shared';
 import type { Order, OrderStatus } from '@butcher/shared';
 import { ArrowLeft, Printer } from 'lucide-react';
 
@@ -16,15 +14,16 @@ export default function OrderDetailPage() {
 
   useEffect(() => {
     if (!orderId) return;
-    return onSnapshot(doc(db, 'orders', orderId), (snap) => {
-      if (snap.exists()) setOrder({ id: snap.id, ...snap.data() } as Order);
-    });
+    api.orders.get(orderId)
+      .then((data) => setOrder(data as Order))
+      .catch(() => {});
   }, [orderId]);
 
   const handleStatusChange = async (status: OrderStatus) => {
     if (!orderId) return;
     setSaving(true);
-    await updateDoc(doc(db, 'orders', orderId), { status, updatedAt: Timestamp.now() });
+    await api.orders.updateStatus(orderId, status);
+    setOrder((prev) => prev ? { ...prev, status } : prev);
     setSaving(false);
   };
 

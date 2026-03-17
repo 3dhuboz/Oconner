@@ -1,19 +1,14 @@
-import { useState, useEffect } from 'react';
-import { onAuthStateChanged } from 'firebase/auth';
-import type { User } from 'firebase/auth';
-import { auth } from '../lib/firebase';
+import { useUser, useAuth as useClerkAuth } from '@clerk/clerk-react';
+import { setTokenProvider } from '@butcher/shared';
+import { useEffect } from 'react';
 
 export function useAuth() {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { user, isLoaded } = useUser();
+  const { getToken } = useClerkAuth();
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-      setLoading(false);
-    });
-    return unsub;
-  }, []);
+    setTokenProvider(() => getToken());
+  }, [getToken]);
 
-  return { user, loading };
+  return { user, loading: !isLoaded };
 }

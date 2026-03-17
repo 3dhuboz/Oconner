@@ -1,16 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { api, formatCurrency } from '@butcher/shared';
+import type { Stop, Order } from '@butcher/shared';
 import {
-  collection, query, where, onSnapshot, doc, getDoc,
-  orderBy, updateDoc, writeBatch, Timestamp,
-} from 'firebase/firestore';
-import { db } from '../lib/firebase';
-import {
-  ArrowLeft, Route, Printer, Bell, Package,
+  ArrowLeft, Route, Printer, Bell, Package, FileText,
   CheckCircle, Clock, Navigation, AlertTriangle, User, Camera,
 } from 'lucide-react';
-import { formatCurrency } from '@butcher/shared';
-import type { Stop, Order } from '@butcher/shared';
 
 interface DeliveryDayData {
   id: string;
@@ -60,43 +55,30 @@ export default function DeliveryManifestPage() {
 
   useEffect(() => {
     if (!dayId) return;
-    getDoc(doc(db, 'deliveryDays', dayId)).then((snap) => {
-      if (snap.exists()) setDay({ id: snap.id, ...snap.data() } as DeliveryDayData);
-    });
-  }, [dayId]);
-
-  useEffect(() => {
-    if (!dayId) return;
-    const unsubStops = onSnapshot(
-      query(collection(db, 'stops'), where('deliveryDayId', '==', dayId), orderBy('sequence', 'asc')),
-      (snap) => setStops(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Stop))),
-    );
-    const unsubOrders = onSnapshot(
-      query(collection(db, 'orders'), where('deliveryDayId', '==', dayId)),
-      (snap) => setOrders(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Order))),
-    );
-    return () => { unsubStops(); unsubOrders(); };
+    Promise.all([
+      api.deliveryDays.get(dayId),
+      api.stops.list(dayId),
+      api.orders.list(),
+    ]).then(([dayData, stopsData, ordersData]) => {
+      setDay(dayData as unknown as DeliveryDayData);
+      setStops(stopsData as Stop[]);
+      setOrders((ordersData as Order[]).filter((o) => (o as any).deliveryDayId === dayId));
+    }).catch(() => {});
   }, [dayId]);
 
   const optimizeRoute = async () => {
     if (!dayId || stops.length === 0) return;
     setOptimizing(true);
     const sorted = nearestNeighborRoute([...stops]);
-    const batch = writeBatch(db);
-    sorted.forEach((stop, i) => {
-      batch.update(doc(db, 'stops', stop.id!), { sequence: i + 1, updatedAt: Timestamp.now() });
-    });
-    await batch.commit();
+    await Promise.all(sorted.map((stop, i) => api.stops.updateSequence(stop.id!, i + 1)));
+    setStops(sorted.map((s, i) => ({ ...s, sequence: i + 1 })));
     setOptimizing(false);
   };
 
   const sendDayBeforeNotice = async () => {
     if (!dayId) return;
     setNotifying(true);
-    await updateDoc(doc(db, 'deliveryDays', dayId), {
-      notificationSentAt: Timestamp.now(),
-      notificationStatus: 'sent',
-    });
+    await api.deliveryDays.sendReminders(dayId);
     setNotifySent(true);
     setNotifying(false);
   };
@@ -105,8 +87,8 @@ export default function DeliveryManifestPage() {
   const total = stops.length;
   const totalRevenue = orders.reduce((s, o) => s + (o.total ?? 0), 0);
 
-  const dateStr = day?.date?.toDate
-    ? day.date.toDate().toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+  const dateStr = day?.date
+    ? new Date(day.date as unknown as number).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
     : '—';
 
   return (
@@ -119,6 +101,12 @@ export default function DeliveryManifestPage() {
           <h1 className="text-2xl font-bold text-brand">Delivery Manifest</h1>
           <p className="text-sm text-gray-500">{dateStr}</p>
         </div>
+        <button
+          onClick={() => window.open(`${import.meta.env.VITE_PDF_GENERATOR_URL}/delivery-list/${dayId}`, '_blank')}
+          className="flex items-center gap-2 border px-3 py-2 rounded-lg text-sm hover:bg-gray-50"
+        >
+          <FileText className="h-4 w-4" /> Delivery List
+        </button>
         <button onClick={() => window.print()} className="flex items-center gap-2 border px-3 py-2 rounded-lg text-sm hover:bg-gray-50">
           <Printer className="h-4 w-4" /> Print
         </button>

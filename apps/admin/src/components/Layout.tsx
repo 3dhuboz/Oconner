@@ -1,6 +1,5 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
-import { signOut } from 'firebase/auth';
-import { auth } from '../lib/firebase';
+import { useClerk } from '@clerk/clerk-react';
 import {
   LayoutDashboard, ShoppingBag, Package, CalendarDays,
   BarChart2, Users, Map, FileText, LogOut, Menu, X, Settings, Sparkles,
@@ -28,10 +27,11 @@ const NAV_ITEMS = [
 
 export default function Layout() {
   const navigate = useNavigate();
+  const { signOut } = useClerk();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const handleSignOut = async () => {
-    await signOut(auth);
+    await signOut();
     navigate('/login');
   };
 

@@ -1,23 +1,15 @@
-import { collection, query, where, orderBy, getDocs } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import Link from 'next/link';
 import type { DeliveryDay } from '@butcher/shared';
+import { api } from '@butcher/shared';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
 
 async function getDeliveryDays(): Promise<DeliveryDay[]> {
-  const now = new Date();
-  const q = query(
-    collection(db, 'deliveryDays'),
-    where('active', '==', true),
-    where('date', '>=', now),
-    orderBy('date', 'asc'),
-  );
-  const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as DeliveryDay));
+  const days = await api.deliveryDays.list(true) as DeliveryDay[];
+  return days.filter((d) => d.active && d.date >= Date.now());
 }
 
 export default async function DeliveryDaysPage() {
@@ -38,7 +30,7 @@ export default async function DeliveryDaysPage() {
         ) : (
           <div className="space-y-4">
             {days.map((day) => {
-              const date = (day.date as unknown as { toDate: () => Date }).toDate?.() ?? new Date(day.date as unknown as string);
+              const date = new Date(day.date);
               const spotsLeft = (day.maxOrders ?? 0) - (day.orderCount ?? 0);
               const isFull = spotsLeft <= 0;
 

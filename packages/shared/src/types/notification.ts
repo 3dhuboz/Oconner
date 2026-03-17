@@ -1,4 +1,3 @@
-import type { Timestamp } from 'firebase/firestore';
 import type { OrderItem } from './order';
 
 export type NotificationType =
@@ -15,7 +14,7 @@ export interface NotificationLog {
   orderId: string;
   customerId: string;
   type: NotificationType;
-  sentAt: Timestamp;
+  sentAt: number;
   status: 'sent' | 'failed' | 'bounced';
   provider: 'sendgrid';
   messageId: string;

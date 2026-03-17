@@ -26,7 +26,7 @@ Your role:
 Always be warm, friendly, and conversational. If asked about ordering, direct them to the shop page or mention they can message the Facebook page. Never make up information — if unsure, say so and suggest they contact O'Connor directly via Facebook.`;
 
 export async function POST(req: Request) {
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.OPENROUTER_API_KEY;
 
   if (!apiKey) {
     return new Response(
@@ -38,14 +38,16 @@ export async function POST(req: Request) {
   try {
     const { messages } = await req.json() as { messages: { role: string; content: string }[] };
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://oconner.com.au',
+        'X-Title': "O'Connor Agriculture",
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: 'google/gemini-flash-1.5',
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
           ...messages.slice(-10),
@@ -56,7 +58,7 @@ export async function POST(req: Request) {
     });
 
     if (!response.ok) {
-      throw new Error(`OpenAI error: ${response.status}`);
+      throw new Error(`OpenRouter error: ${response.status}`);
     }
 
     const data = await response.json() as { choices: { message: { content: string } }[] };

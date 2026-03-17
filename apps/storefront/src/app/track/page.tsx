@@ -1,19 +1,18 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { collection, query, where, onSnapshot, orderBy, limit } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { api } from '@butcher/shared';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
-import { Truck, MapPin, CheckCircle, Clock, Navigation, Phone } from 'lucide-react';
+import { Truck, MapPin, CheckCircle, Clock, Phone } from 'lucide-react';
 
 interface DriverSession {
   id: string;
   driverName?: string;
-  lat?: number;
-  lng?: number;
+  lastLat?: number;
+  lastLng?: number;
   heading?: number;
-  updatedAt?: any;
+  lastUpdated?: any;
   active?: boolean;
   deliveryDayId?: string;
 }
@@ -31,8 +30,7 @@ interface Stop {
 
 function formatTime(ts: any): string {
   if (!ts) return '';
-  const d = ts?.toDate ? ts.toDate() : new Date(ts);
-  return d.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' });
+  return new Date(ts).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' });
 }
 
 export default function TrackPage() {
@@ -44,35 +42,34 @@ export default function TrackPage() {
   const mapInstance = useRef<any>(null);
 
   useEffect(() => {
-    const unsub = onSnapshot(
-      query(collection(db, 'driverSessions'), where('active', '==', true), orderBy('updatedAt', 'desc'), limit(1)),
-      (snap) => {
-        setLoading(false);
-        if (snap.empty) { setSession(null); return; }
-        const s = { id: snap.docs[0].id, ...snap.docs[0].data() } as DriverSession;
-        setSession(s);
-      },
-    );
-    return unsub;
+    const load = () =>
+      api.drivers.activeSessions()
+        .then((data: any) => {
+          setLoading(false);
+          const sessions = data as DriverSession[];
+          setSession(sessions.length > 0 ? sessions[0] : null);
+        })
+        .catch(() => setLoading(false));
+    load();
+    const t = setInterval(load, 15_000);
+    return () => clearInterval(t);
   }, []);
 
   useEffect(() => {
     if (!session?.deliveryDayId) return;
-    const unsub = onSnapshot(
-      query(collection(db, 'stops'), where('deliveryDayId', '==', session.deliveryDayId), orderBy('sequence', 'asc')),
-      (snap) => setStops(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Stop))),
-    );
-    return unsub;
+    api.stops.list(session.deliveryDayId)
+      .then((data: any) => setStops(data as Stop[]))
+      .catch(() => {});
   }, [session?.deliveryDayId]);
 
   useEffect(() => {
-    if (!session?.lat || !session?.lng || !mapRef.current) return;
+    if (!session?.lastLat || !session?.lastLng || !mapRef.current) return;
     if (typeof window === 'undefined') return;
 
     if (!mapInstance.current) {
       const L = (window as any).L;
       if (!L) return;
-      const map = L.map(mapRef.current).setView([session.lat, session.lng], 14);
+      const map = L.map(mapRef.current).setView([session.lastLat, session.lastLng], 14);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap contributors',
       }).addTo(map);
@@ -84,12 +81,12 @@ export default function TrackPage() {
         iconSize: [36, 36],
         iconAnchor: [18, 18],
       });
-      markerRef.current = L.marker([session.lat, session.lng], { icon }).addTo(map);
+      markerRef.current = L.marker([session.lastLat, session.lastLng], { icon }).addTo(map);
     } else {
-      markerRef.current?.setLatLng([session.lat, session.lng]);
-      mapInstance.current.panTo([session.lat, session.lng]);
+      markerRef.current?.setLatLng([session.lastLat, session.lastLng]);
+      mapInstance.current.panTo([session.lastLat, session.lastLng]);
     }
-  }, [session?.lat, session?.lng]);
+  }, [session?.lastLat, session?.lastLng]);
 
   const delivered = stops.filter((s) => s.status === 'delivered').length;
   const pending = stops.filter((s) => s.status === 'pending').length;
@@ -157,12 +154,12 @@ export default function TrackPage() {
 
               <div className="bg-white rounded-2xl border overflow-hidden">
                 <div ref={mapRef} style={{ height: 320 }} className="w-full" />
-                {session.lat && session.lng && (
+                {session.lastLat && session.lastLng && (
                   <p className="text-xs text-gray-400 px-4 py-2">
-                    Last updated: {formatTime(session.updatedAt)} · Driver: {session.driverName ?? 'On the way'}
+                    Last updated: {formatTime(session.lastUpdated)} · Driver: {session.driverName ?? 'On the way'}
                   </p>
                 )}
-                {(!session.lat || !session.lng) && (
+                {(!session.lastLat || !session.lastLng) && (
                   <div className="h-40 flex items-center justify-center text-gray-400">
                     <p className="text-sm">Waiting for driver GPS signal…</p>
                   </div>

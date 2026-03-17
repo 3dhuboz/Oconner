@@ -1,11 +1,8 @@
 import { useEffect, useState } from 'react';
-import { collection, query, where, onSnapshot, doc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
-import { initializeApp, getApps, deleteApp } from 'firebase/app';
-import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
-import { db } from '../lib/firebase';
+import { api } from '@butcher/shared';
 import { Plus, X, Truck, User, KeyRound, ToggleLeft, ToggleRight } from 'lucide-react';
 
-const EMPTY_FORM = { name: '', email: '', password: '' };
+const EMPTY_FORM = { name: '', email: '', clerkId: '' };
 
 interface DriverUser {
   id: string;
@@ -24,52 +21,40 @@ export default function DriversPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    return onSnapshot(
-      query(collection(db, 'users'), where('role', '==', 'driver')),
-      (snap) => setDrivers(snap.docs.map((d) => ({ id: d.id, ...d.data() } as DriverUser))),
-    );
+    api.users.drivers()
+      .then((data) => setDrivers(data as DriverUser[]))
+      .catch(() => {});
   }, []);
 
   const handleAdd = async () => {
-    if (!form.name || !form.email || !form.password) {
-      setError('Name, email and password are required.');
+    if (!form.name || !form.email || !form.clerkId) {
+      setError('Name, email and Clerk user ID are required.');
       return;
     }
     setSaving(true);
     setError('');
     try {
-      const firebaseConfig = {
-        apiKey: (import.meta as any).env?.VITE_FIREBASE_API_KEY,
-        authDomain: (import.meta as any).env?.VITE_FIREBASE_AUTH_DOMAIN,
-        projectId: (import.meta as any).env?.VITE_FIREBASE_PROJECT_ID,
-        storageBucket: (import.meta as any).env?.VITE_FIREBASE_STORAGE_BUCKET,
-      };
-      const secondaryAppName = `driver-create-${Date.now()}`;
-      const secondaryApp = initializeApp(firebaseConfig, secondaryAppName);
-      const secondaryAuth = getAuth(secondaryApp);
-
-      const cred = await createUserWithEmailAndPassword(secondaryAuth, form.email, form.password);
-      await setDoc(doc(db, 'users', cred.user.uid), {
+      const created = await api.users.create({
+        id: form.clerkId,
         name: form.name,
         email: form.email,
         role: 'driver',
         active: true,
-        createdAt: serverTimestamp(),
-      });
-      await signOut(secondaryAuth);
-      await deleteApp(secondaryApp);
-
+      }) as DriverUser;
+      setDrivers((prev) => [...prev, created]);
       setForm(EMPTY_FORM);
       setShowForm(false);
-    } catch (e: any) {
-      setError(e?.message ?? 'Failed to create driver.');
+    } catch (e: unknown) {
+      const msg = (e as { message?: string })?.message;
+      setError(msg ?? 'Failed to create driver.');
     } finally {
       setSaving(false);
     }
   };
 
   const toggleActive = async (driver: DriverUser) => {
-    await updateDoc(doc(db, 'users', driver.id), { active: !driver.active });
+    await api.users.update(driver.id, { active: !driver.active });
+    setDrivers((prev) => prev.map((d) => d.id === driver.id ? { ...d, active: !d.active } : d));
   };
 
   return (
@@ -159,17 +144,17 @@ export default function DriversPage() {
                 />
               </div>
               <div>
-                <label className="text-xs text-gray-500 mb-1 block">Password</label>
+                <label className="text-xs text-gray-500 mb-1 block">Clerk User ID</label>
                 <div className="relative">
                   <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                   <input
-                    type="password"
-                    placeholder="Set login password"
-                    value={form.password}
-                    onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-                    className="w-full border rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
+                    placeholder="user_xxxxxxxxxxxxxxxx"
+                    value={form.clerkId}
+                    onChange={(e) => setForm((f) => ({ ...f, clerkId: e.target.value }))}
+                    className="w-full border rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand font-mono"
                   />
                 </div>
+                <p className="text-xs text-gray-400 mt-1">From Clerk dashboard → Users → click user → copy ID</p>
               </div>
               {error && <p className="text-red-600 text-sm bg-red-50 rounded-lg p-3">{error}</p>}
             </div>

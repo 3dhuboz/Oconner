@@ -1,8 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { api } from '@butcher/shared';
 import { CheckCircle, Package, RefreshCcw } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
@@ -30,13 +29,12 @@ export default function SubscribePage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
-    await addDoc(collection(db, 'subscriptions'), {
+    await api.post('/api/subscriptions', {
       boxId: selectedBox,
       boxName: BOXES.find((b) => b.id === selectedBox)?.name,
       frequency,
       ...form,
       status: 'pending',
-      createdAt: serverTimestamp(),
     });
     setSaving(false);
     setStep('done');

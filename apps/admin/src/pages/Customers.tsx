@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react';
-import { collection, query, orderBy, getDocs } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { api, formatCurrency } from '@butcher/shared';
 import type { Customer } from '@butcher/shared';
-import { formatCurrency } from '@butcher/shared';
 import { Search } from 'lucide-react';
 
 export default function CustomersPage() {
@@ -11,10 +9,9 @@ export default function CustomersPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    getDocs(query(collection(db, 'customers'), orderBy('createdAt', 'desc'))).then((snap) => {
-      setCustomers(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Customer)));
-      setLoading(false);
-    });
+    api.customers.list()
+      .then((data) => { setCustomers(data as Customer[]); setLoading(false); })
+      .catch(() => setLoading(false));
   }, []);
 
   const filtered = customers.filter((c) =>

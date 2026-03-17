@@ -1,61 +1,26 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { auth, db } from '@/lib/firebase';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
-import { collection, query, where, orderBy, getDocs } from 'firebase/firestore';
-import type { User } from 'firebase/auth';
+import { useUser, useClerk, SignIn } from '@clerk/nextjs';
+import { api, formatCurrency, ORDER_STATUS_LABELS } from '@butcher/shared';
 import type { Order } from '@butcher/shared';
-import { formatCurrency, ORDER_STATUS_LABELS } from '@butcher/shared';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import Link from 'next/link';
 
 export default function AccountPage() {
-  const [user, setUser] = useState<User | null>(null);
+  const { user, isLoaded } = useUser();
+  const { signOut } = useClerk();
   const [orders, setOrders] = useState<Order[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [isRegister, setIsRegister] = useState(false);
-  const [authError, setAuthError] = useState('');
-  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (u) => {
-      setUser(u);
-      if (u) {
-        const q = query(
-          collection(db, 'orders'),
-          where('customerId', '==', u.uid),
-          orderBy('createdAt', 'desc'),
-        );
-        const snap = await getDocs(q);
-        setOrders(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Order)));
-      }
-      setLoading(false);
-    });
-    return unsub;
-  }, []);
+    if (!user) return;
+    api.get<Order[]>('/api/orders/mine')
+      .then((data) => setOrders(data))
+      .catch(() => {});
+  }, [user]);
 
-  const handleAuth = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitting(true);
-    setAuthError('');
-    try {
-      if (isRegister) {
-        await createUserWithEmailAndPassword(auth, email, password);
-      } else {
-        await signInWithEmailAndPassword(auth, email, password);
-      }
-    } catch (err) {
-      setAuthError(err instanceof Error ? err.message : 'Authentication failed');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  if (loading) {
+  if (!isLoaded) {
     return (
       <>
         <Navbar />
@@ -72,20 +37,7 @@ export default function AccountPage() {
       <>
         <Navbar />
         <main className="flex-1 flex items-center justify-center px-4 py-16">
-          <div className="w-full max-w-sm">
-            <h1 className="text-2xl font-bold text-brand mb-6 text-center">{isRegister ? 'Create Account' : 'Sign In'}</h1>
-            <form onSubmit={handleAuth} className="space-y-4">
-              <input type="email" required placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} className="w-full border rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand text-sm" />
-              <input type="password" required placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full border rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand text-sm" />
-              {authError && <p className="text-accent text-sm">{authError}</p>}
-              <button type="submit" disabled={submitting} className="w-full bg-brand text-white py-2.5 rounded-lg font-medium hover:bg-brand-mid transition-colors disabled:opacity-50">
-                {submitting ? 'Please wait…' : isRegister ? 'Create Account' : 'Sign In'}
-              </button>
-            </form>
-            <button onClick={() => setIsRegister(!isRegister)} className="w-full text-center text-sm text-gray-500 hover:text-brand mt-4 transition-colors">
-              {isRegister ? 'Already have an account? Sign in' : "Don't have an account? Register"}
-            </button>
-          </div>
+          <SignIn routing="hash" />
         </main>
         <Footer />
       </>
@@ -99,9 +51,9 @@ export default function AccountPage() {
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-2xl font-bold text-brand">My Account</h1>
-            <p className="text-gray-500 text-sm mt-1">{user.email}</p>
+            <p className="text-gray-500 text-sm mt-1">{user.primaryEmailAddress?.emailAddress}</p>
           </div>
-          <button onClick={() => signOut(auth)} className="text-sm text-gray-500 hover:text-accent transition-colors border rounded-lg px-4 py-2">
+          <button onClick={() => signOut()} className="text-sm text-gray-500 hover:text-accent transition-colors border rounded-lg px-4 py-2">
             Sign Out
           </button>
         </div>

@@ -10,9 +10,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@butcher/shared": "*",
-    "@butcher/ui": "*",
-    "firebase": "^10.13.1",
+    "@butcher/shared": "workspace:*",
+    "@butcher/ui": "workspace:*",
+    "@clerk/clerk-react": "^5.14.0",
     "lucide-react": "^0.441.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

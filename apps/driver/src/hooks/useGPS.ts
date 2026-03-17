@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { doc, updateDoc, Timestamp } from 'firebase/firestore';
-import { db, auth } from '../lib/firebase';
+import { api } from '@butcher/shared';
 
 export type GPSStatus = 'idle' | 'active' | 'stale' | 'unavailable' | 'permission_denied' | 'unsupported';
 
@@ -43,36 +42,17 @@ export function useGPS({ sessionId, enabled }: GPSOptions) {
         setStatus('active');
         setError(null);
         resetStaleTimer();
-        const user = auth.currentUser;
-        if (!user || !sessionId) return;
+        if (!sessionId) return;
         try {
-          await updateDoc(doc(db, 'driverSessions', sessionId), {
-            lastLat: pos.coords.latitude,
-            lastLng: pos.coords.longitude,
-            accuracy: pos.coords.accuracy,
-            heading: pos.coords.heading ?? null,
-            speed: pos.coords.speed ?? null,
-            gpsStatus: 'active',
-            updatedAt: Timestamp.now(),
-          });
+          await api.drivers.ping(sessionId, pos.coords.latitude, pos.coords.longitude);
         } catch {
-          // best-effort — don't crash driver app on Firestore write fail
+          // best-effort — don't crash driver app on ping fail
         }
       },
-      async (err) => {
+      (err) => {
         const newStatus: GPSStatus = err.code === 1 ? 'permission_denied' : 'unavailable';
         setStatus(newStatus);
         setError(err.message);
-        const user = auth.currentUser;
-        if (user && sessionId) {
-          try {
-            await updateDoc(doc(db, 'driverSessions', sessionId), {
-              gpsStatus: newStatus,
-              gpsError: err.message,
-              updatedAt: Timestamp.now(),
-            });
-          } catch { /* best-effort */ }
-        }
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 },
     );

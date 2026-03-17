@@ -1,6 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { api } from '@butcher/shared';
 import { MapPin, Truck, WifiOff, AlertTriangle, CheckCircle } from 'lucide-react';
 
 interface DriverSession {
@@ -18,7 +17,7 @@ interface DriverSession {
 
 function timeSince(ts: any): string {
   if (!ts) return 'unknown';
-  const d = ts?.toDate ? ts.toDate() : new Date(ts);
+  const d = new Date(ts);
   const secs = Math.floor((Date.now() - d.getTime()) / 1000);
   if (secs < 60) return `${secs}s ago`;
   if (secs < 3600) return `${Math.floor(secs / 60)}m ago`;
@@ -27,7 +26,7 @@ function timeSince(ts: any): string {
 
 function isStale(ts: any): boolean {
   if (!ts) return true;
-  const d = ts?.toDate ? ts.toDate() : new Date(ts);
+  const d = new Date(ts);
   return Date.now() - d.getTime() > 120_000; // >2 min = stale
 }
 
@@ -55,10 +54,13 @@ export default function MapPage() {
   }, []);
 
   useEffect(() => {
-    return onSnapshot(
-      query(collection(db, 'driverSessions'), where('active', '==', true)),
-      (snap) => setDrivers(snap.docs.map((d) => ({ id: d.id, ...d.data() } as DriverSession))),
-    );
+    const load = () =>
+      api.drivers.activeSessions()
+        .then((data) => setDrivers(data as DriverSession[]))
+        .catch(() => {});
+    load();
+    const t = setInterval(load, 15_000);
+    return () => clearInterval(t);
   }, []);
 
   // Inject Leaflet once

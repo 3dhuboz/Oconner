@@ -1,7 +1,5 @@
 import { useEffect, useState } from 'react';
-import { collection, query, orderBy, onSnapshot, where, doc, updateDoc, Timestamp } from 'firebase/firestore';
-import { db } from '../lib/firebase';
-import { formatCurrency, ORDER_STATUS_LABELS } from '@butcher/shared';
+import { api, formatCurrency, ORDER_STATUS_LABELS } from '@butcher/shared';
 import type { Order, OrderStatus } from '@butcher/shared';
 import { Link } from 'react-router-dom';
 import { Search, Filter } from 'lucide-react';
@@ -15,15 +13,10 @@ export default function OrdersPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const q = statusFilter === 'all'
-      ? query(collection(db, 'orders'), orderBy('createdAt', 'desc'))
-      : query(collection(db, 'orders'), where('status', '==', statusFilter), orderBy('createdAt', 'desc'));
-
-    const unsub = onSnapshot(q, (snap) => {
-      setOrders(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Order)));
-      setLoading(false);
-    });
-    return unsub;
+    setLoading(true);
+    api.orders.list(statusFilter === 'all' ? undefined : statusFilter)
+      .then((data) => { setOrders(data as Order[]); setLoading(false); })
+      .catch(() => setLoading(false));
   }, [statusFilter]);
 
   const filtered = search
@@ -35,10 +28,8 @@ export default function OrdersPage() {
     : orders;
 
   const handleStatusChange = async (orderId: string, status: OrderStatus) => {
-    await updateDoc(doc(db, 'orders', orderId), {
-      status,
-      updatedAt: Timestamp.now(),
-    });
+    await api.orders.updateStatus(orderId, status);
+    setOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, status } : o));
   };
 
   return (

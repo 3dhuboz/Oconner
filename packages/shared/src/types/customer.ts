@@ -1,4 +1,3 @@
-import type { Timestamp } from 'firebase/firestore';
 import type { Address } from './order';
 
 export interface Customer {
@@ -14,6 +13,6 @@ export interface Customer {
   blacklisted: boolean;
   blacklistReason?: string;
   notes: string;
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  createdAt: number;
+  updatedAt: number;
 }

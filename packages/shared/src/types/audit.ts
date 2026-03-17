@@ -1,5 +1,3 @@
-import type { Timestamp } from 'firebase/firestore';
-
 export interface AuditEntry {
   id: string;
   action: string;
@@ -9,5 +7,5 @@ export interface AuditEntry {
   after: Record<string, unknown>;
   adminUid: string;
   adminEmail: string;
-  timestamp: Timestamp;
+  timestamp: number;
 }

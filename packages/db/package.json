@@ -1,0 +1,24 @@
+{
+  "name": "@butcher/db",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "generate": "drizzle-kit generate",
+    "migrate:local": "npx wrangler d1 execute oconner-db --local --file=./migrations/0000_init.sql",
+    "migrate:remote": "npx wrangler d1 execute oconner-db --remote --file=./migrations/0000_init.sql"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.33.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241022.0",
+    "@types/node": "^22.5.4",
+    "drizzle-kit": "^0.24.0",
+    "typescript": "^5.5.4",
+    "wrangler": "^3.78.0"
+  }
+}

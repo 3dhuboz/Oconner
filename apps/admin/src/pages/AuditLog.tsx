@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { api } from '@butcher/shared';
 import type { AuditEntry } from '@butcher/shared';
 import { FileText } from 'lucide-react';
 
@@ -9,13 +8,9 @@ export default function AuditLogPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    return onSnapshot(
-      query(collection(db, 'auditLog'), orderBy('timestamp', 'desc'), limit(100)),
-      (snap) => {
-        setEntries(snap.docs.map((d) => ({ id: d.id, ...d.data() } as AuditEntry)));
-        setLoading(false);
-      },
-    );
+    api.get<AuditEntry[]>('/api/audit-log')
+      .then((data) => { setEntries(data); setLoading(false); })
+      .catch(() => setLoading(false));
   }, []);
 
   return (
@@ -41,7 +36,7 @@ export default function AuditLogPage() {
             ) : entries.length === 0 ? (
               <tr><td colSpan={4} className="text-center py-10 text-gray-400 font-sans">No audit entries yet.</td></tr>
             ) : entries.map((entry) => {
-              const ts = (entry.timestamp as unknown as { toDate: () => Date })?.toDate?.();
+              const ts = entry.timestamp ? new Date(entry.timestamp) : null;
               return (
                 <tr key={entry.id} className="hover:bg-gray-50">
                   <td className="px-4 py-2">
@@ -52,7 +47,7 @@ export default function AuditLogPage() {
                     }`}>{entry.action}</span>
                   </td>
                   <td className="px-4 py-2 text-gray-600">{entry.entity}/{entry.entityId?.slice(-8)}</td>
-                  <td className="px-4 py-2 text-gray-500 font-sans">{entry.adminEmail ?? entry.adminUid ?? 'system'}</td>
+                  <td className="px-4 py-2 text-gray-500 font-sans">{(entry as any).adminEmail ?? (entry as any).adminUid ?? 'system'}</td>
                   <td className="px-4 py-2 text-gray-400 font-sans">
                     {ts ? ts.toLocaleString('en-AU', { dateStyle: 'short', timeStyle: 'short' }) : '—'}
                   </td>

@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-import { collection, query, orderBy, onSnapshot, addDoc, updateDoc, doc, Timestamp } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { api } from '@butcher/shared';
 import type { DeliveryDay } from '@butcher/shared';
 import { Plus, X, CalendarDays, ClipboardList } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -13,29 +12,28 @@ export default function DeliveryDaysPage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    return onSnapshot(query(collection(db, 'deliveryDays'), orderBy('date', 'asc')), (snap) => {
-      setDays(snap.docs.map((d) => ({ id: d.id, ...d.data() } as DeliveryDay)));
-    });
+    api.deliveryDays.list()
+      .then((data) => setDays(data as DeliveryDay[]))
+      .catch(() => {});
   }, []);
 
   const handleCreate = async () => {
     if (!form.date) return;
     setSaving(true);
-    await addDoc(collection(db, 'deliveryDays'), {
-      date: Timestamp.fromDate(new Date(form.date)),
+    const created = await api.deliveryDays.create({
+      date: new Date(form.date).getTime(),
       maxOrders: form.maxOrders,
-      orderCount: 0,
-      active: true,
       notes: form.notes,
-      createdAt: Timestamp.now(),
-    });
+    }) as DeliveryDay;
+    setDays((prev) => [...prev, created].sort((a, b) => a.date - b.date));
     setSaving(false);
     setShowForm(false);
     setForm({ date: '', maxOrders: 20, notes: '' });
   };
 
   const toggleActive = async (day: DeliveryDay) => {
-    await updateDoc(doc(db, 'deliveryDays', day.id!), { active: !day.active });
+    await api.deliveryDays.update(day.id!, { active: !day.active });
+    setDays((prev) => prev.map((d) => d.id === day.id ? { ...d, active: !d.active } : d));
   };
 
   return (
@@ -55,7 +53,7 @@ export default function DeliveryDaysPage() {
           </div>
         )}
         {days.map((day) => {
-          const date = (day.date as unknown as { toDate: () => Date }).toDate?.() ?? new Date();
+          const date = typeof day.date === 'number' ? new Date(day.date) : new Date();
           const isPast = date < new Date();
           return (
             <div key={day.id} className={`bg-white rounded-xl border p-5 flex items-center justify-between ${isPast ? 'opacity-60' : ''}`}>

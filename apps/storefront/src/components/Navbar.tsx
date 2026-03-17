@@ -2,10 +2,8 @@
 
 import Link from 'next/link';
 import { ShoppingCart, User, Menu, X, LayoutDashboard } from 'lucide-react';
-import { useState, useEffect } from 'react';
-import { onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
-import { auth, db } from '@/lib/firebase';
+import { useState } from 'react';
+import { useUser } from '@clerk/nextjs';
 import { useCart } from '@/lib/cart';
 import { cn } from '@butcher/ui';
 
@@ -13,16 +11,9 @@ const ADMIN_URL = process.env.NEXT_PUBLIC_ADMIN_URL ?? 'https://butcher-admin.pa
 
 export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const { user } = useUser();
+  const isAdmin = (user?.publicMetadata as any)?.role === 'admin';
   const itemCount = useCart((s) => s.itemCount());
-
-  useEffect(() => {
-    return onAuthStateChanged(auth, async (u) => {
-      if (!u) { setIsAdmin(false); return; }
-      const snap = await getDoc(doc(db, 'users', u.uid));
-      setIsAdmin(snap.exists() && snap.data()?.role === 'admin');
-    });
-  }, []);
 
   return (
     <nav className="bg-brand text-white sticky top-0 z-50 shadow-md">
