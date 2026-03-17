@@ -1,5 +1,7 @@
 'use client';
 
+export const runtime = 'edge';
+
 import { useState } from 'react';
 import Link from 'next/link';
 import { Trash2, ShoppingBag } from 'lucide-react';

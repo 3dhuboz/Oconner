@@ -1,5 +1,7 @@
 'use client';
 
+export const runtime = 'edge';
+
 import { useState } from 'react';
 import { api } from '@butcher/shared';
 import { CheckCircle, Package, RefreshCcw } from 'lucide-react';

@@ -1,5 +1,7 @@
 'use client';
 
+export const runtime = 'edge';
+
 import { useState, useEffect } from 'react';
 import { api } from '@butcher/shared';
 import { useCart } from '@/lib/cart';

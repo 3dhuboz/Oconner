@@ -1,5 +1,7 @@
 'use client';
 
+export const runtime = 'edge';
+
 import { useEffect, useState } from 'react';
 import { useUser, useClerk, SignIn } from '@clerk/nextjs';
 import { api, formatCurrency, ORDER_STATUS_LABELS } from '@butcher/shared';
