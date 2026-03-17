@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '@butcher/shared';
 import type { DeliveryDay } from '@butcher/shared';
 import { Plus, X, CalendarDays, ClipboardList } from 'lucide-react';
+import { toast } from '../lib/toast';
 import { useNavigate } from 'react-router-dom';
 
 export default function DeliveryDaysPage() {
@@ -20,21 +21,31 @@ export default function DeliveryDaysPage() {
   const handleCreate = async () => {
     if (!form.date) return;
     setSaving(true);
-    const created = await api.deliveryDays.create({
-      date: new Date(form.date).getTime(),
-      maxOrders: form.maxOrders,
-      notes: form.notes,
-      deliveryWindowStart: form.deliveryWindowStart,
-    }) as DeliveryDay;
-    setDays((prev) => [...prev, created].sort((a, b) => a.date - b.date));
-    setSaving(false);
-    setShowForm(false);
-    setForm({ date: '', maxOrders: 20, notes: '', deliveryWindowStart: '09:00' });
+    try {
+      const created = await api.deliveryDays.create({
+        date: new Date(form.date).getTime(),
+        maxOrders: form.maxOrders,
+        notes: form.notes,
+        deliveryWindowStart: form.deliveryWindowStart,
+      }) as DeliveryDay;
+      setDays((prev) => [...prev, created].sort((a, b) => a.date - b.date));
+      setShowForm(false);
+      setForm({ date: '', maxOrders: 20, notes: '', deliveryWindowStart: '09:00' });
+      toast('Delivery day created');
+    } catch {
+      toast('Failed to create delivery day', 'error');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const toggleActive = async (day: DeliveryDay) => {
-    await api.deliveryDays.update(day.id!, { active: !day.active });
-    setDays((prev) => prev.map((d) => d.id === day.id ? { ...d, active: !d.active } : d));
+    try {
+      await api.deliveryDays.update(day.id!, { active: !day.active });
+      setDays((prev) => prev.map((d) => d.id === day.id ? { ...d, active: !d.active } : d));
+    } catch {
+      toast('Failed to update delivery day', 'error');
+    }
   };
 
   return (

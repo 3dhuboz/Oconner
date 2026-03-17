@@ -6,6 +6,7 @@ import {
   ExternalLink, Store, Truck, UserCog, RefreshCcw, ShieldCheck,
 } from 'lucide-react';
 import { useState } from 'react';
+import Toaster from './Toaster';
 
 const STOREFRONT_URL = (import.meta as any).env?.VITE_STOREFRONT_URL ?? 'https://butcher-storefront.pages.dev';
 const DRIVER_URL = (import.meta as any).env?.VITE_DRIVER_URL ?? 'https://butcher-driver.pages.dev';
@@ -116,6 +117,7 @@ export default function Layout() {
         <main className="flex-1 overflow-y-auto p-6">
           <Outlet />
         </main>
+        <Toaster />
       </div>
     </div>
   );

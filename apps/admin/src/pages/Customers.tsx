@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api, formatCurrency } from '@butcher/shared';
 import type { Customer } from '@butcher/shared';
 import { Search, Plus, X, Save, UserX } from 'lucide-react';
+import { toast } from '../lib/toast';
 
 const BLANK: Partial<Customer> = { name: '', email: '', phone: '', notes: '', blacklisted: false };
 
@@ -56,11 +57,14 @@ export default function CustomersPage() {
       if (isNew) {
         const id = crypto.randomUUID();
         await api.customers.create({ ...editing, id, createdAt: Date.now(), updatedAt: Date.now() });
+        toast('Customer created');
       } else {
         await api.customers.update(editing.id!, { name: editing.name, email: editing.email, phone: editing.phone, notes: editing.notes, blacklisted: editing.blacklisted, blacklistReason: editing.blacklistReason });
+        toast('Customer saved');
       }
       load(); close();
     } catch (e: any) {
+      toast(e?.message ?? 'Save failed', 'error');
       setError(e.message ?? 'Save failed');
     } finally {
       setSaving(false);

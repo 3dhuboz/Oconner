@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '@butcher/shared';
 import { Save, RefreshCw, Image, Type, Phone, Layout, ChevronDown, ChevronUp, CreditCard, Mail, Bell, Send, Users } from 'lucide-react';
+import { toast } from '../lib/toast';
 
 interface Feature {
   icon: string;
@@ -138,7 +139,6 @@ export default function SettingsPage() {
   const [email, setEmail] = useState<EmailConfig>(EMAIL_DEFAULTS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
 
   const [pushStats, setPushStats] = useState<{ subscribers: number } | null>(null);
   const [pushForm, setPushForm] = useState({ title: "O'Connor — Update", body: '', url: '' });
@@ -173,8 +173,9 @@ export default function SettingsPage() {
         url: pushForm.url || undefined,
       });
       setPushResult(result);
+      toast(`Push sent to ${result.sent} device${result.sent !== 1 ? 's' : ''}`);
     } catch (e: any) {
-      alert(e?.message ?? 'Push failed');
+      toast(e?.message ?? 'Push send failed', 'error');
     } finally {
       setPushSending(false);
     }
@@ -205,11 +206,10 @@ export default function SettingsPage() {
     setSaving(true);
     try {
       await api.config.update({ storefront: config, payment, email });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
+      toast('Settings saved — storefront updated immediately');
     } catch (e) {
       console.error('Save failed:', e);
-      alert('Save failed. Check console for details.');
+      toast('Save failed', 'error');
     } finally {
       setSaving(false);
     }
@@ -251,16 +251,10 @@ export default function SettingsPage() {
             className="flex items-center gap-1.5 px-4 py-2 text-sm text-white bg-brand rounded-lg hover:bg-brand-mid transition-colors disabled:opacity-60"
           >
             <Save className="h-3.5 w-3.5" />
-            {saving ? 'Saving...' : saved ? '✓ Saved!' : 'Save Changes'}
+            {saving ? 'Saving...' : 'Save Changes'}
           </button>
         </div>
       </div>
-
-      {saved && (
-        <div className="bg-brand-light border border-brand/20 text-brand text-sm rounded-lg px-4 py-2.5">
-          ✓ Settings saved — the storefront will reflect changes immediately.
-        </div>
-      )}
 
       <Section title="Hero Section" icon={Type}>
         <Field label="Badge text (small line above headline)">
@@ -571,7 +565,7 @@ export default function SettingsPage() {
           className="flex items-center gap-2 px-6 py-2.5 text-sm text-white bg-brand rounded-lg hover:bg-brand-mid transition-colors disabled:opacity-60 font-medium"
         >
           <Save className="h-4 w-4" />
-          {saving ? 'Saving...' : saved ? '✓ Saved!' : 'Save All Changes'}
+          {saving ? 'Saving...' : 'Save All Changes'}
         </button>
       </div>
     </div>

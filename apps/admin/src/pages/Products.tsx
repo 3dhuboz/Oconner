@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { api, formatCurrency } from '@butcher/shared';
 import type { Product } from '@butcher/shared';
 import { Plus, Pencil, X, Upload, Sparkles, Image } from 'lucide-react';
+import { toast } from '../lib/toast';
 
 const CATEGORIES = ['beef', 'lamb', 'pork', 'chicken', 'seafood', 'deli', 'pack', 'other'];
 const EMPTY: Partial<Product> = { name: '', category: 'beef', pricePerKg: 0, fixedPrice: 0, stockOnHand: 0, minThreshold: 0, active: true, isMeatPack: false };
@@ -23,16 +24,23 @@ export default function ProductsPage() {
   const handleSave = async () => {
     if (!editing) return;
     setSaving(true);
-    const { id, ...data } = editing;
-    if (id) {
-      await api.products.update(id, data);
-      setProducts((prev) => prev.map((p) => p.id === id ? { ...p, ...data } as Product : p));
-    } else {
-      const created = await api.products.create({ ...data, displayOrder: products.length }) as Product;
-      setProducts((prev) => [...prev, created]);
+    try {
+      const { id, ...data } = editing;
+      if (id) {
+        await api.products.update(id, data);
+        setProducts((prev) => prev.map((p) => p.id === id ? { ...p, ...data } as Product : p));
+        toast('Product updated');
+      } else {
+        const created = await api.products.create({ ...data, displayOrder: products.length }) as Product;
+        setProducts((prev) => [...prev, created]);
+        toast('Product created');
+      }
+      setEditing(null);
+    } catch {
+      toast('Failed to save product', 'error');
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
-    setEditing(null);
   };
 
   const toggleActive = async (product: Product) => {
@@ -49,30 +57,22 @@ export default function ProductsPage() {
     try {
       const url = await api.images.upload(file, 'products');
       setEditing((prev) => prev ? { ...prev, imageUrl: url } : prev);
+      toast('Image uploaded');
     } catch {
-      alert('Upload failed.');
+      toast('Image upload failed', 'error');
     } finally {
       setImgUploading(false);
     }
   };
 
   const handleAIGenerate = async () => {
-    if (!editing?.name) { alert('Enter a product name first.'); return; }
+    if (!editing?.name) { toast('Enter a product name first', 'info'); return; }
     setImgGenerating(true);
-    try {
-      const prompt = encodeURIComponent(`${editing.name}, premium quality meat, food photography, dark background, restaurant quality, high resolution`);
-      const url = `https://image.pollinations.ai/prompt/${prompt}?width=800&height=600&nologo=true&seed=${Date.now()}`;
-      // Pre-fetch to confirm it resolves
-      await fetch(url, { mode: 'no-cors' });
-      setEditing((prev) => prev ? { ...prev, imageUrl: url } : prev);
-    } catch {
-      // Pollinations is no-cors so fetch throws - the URL itself is still valid
-      const prompt = encodeURIComponent(`${editing.name}, premium quality meat, food photography, dark background, restaurant quality, high resolution`);
-      const url = `https://image.pollinations.ai/prompt/${prompt}?width=800&height=600&nologo=true&seed=${Date.now()}`;
-      setEditing((prev) => prev ? { ...prev, imageUrl: url } : prev);
-    } finally {
-      setImgGenerating(false);
-    }
+    const prompt = encodeURIComponent(`${editing.name}, premium quality meat, food photography, dark background, restaurant quality, high resolution`);
+    const url = `https://image.pollinations.ai/prompt/${prompt}?width=800&height=600&nologo=true&seed=${Date.now()}`;
+    setEditing((prev) => prev ? { ...prev, imageUrl: url } : prev);
+    toast('AI image generating — may take a few seconds', 'info');
+    setImgGenerating(false);
   };
 
   return (
@@ -149,15 +149,24 @@ export default function ProductsPage() {
               {/* Image section */}
               <div className="border border-dashed rounded-lg p-3 space-y-2">
                 <p className="text-xs font-medium text-gray-500">Product Image</p>
-                {(editing as any).imageUrl && (
+                {(editing as any).imageUrl ? (
                   <div className="relative">
-                    <img src={(editing as any).imageUrl} alt="preview" className="w-full h-40 object-cover rounded-lg" />
+                    <img
+                      src={(editing as any).imageUrl}
+                      alt="preview"
+                      className="w-full h-40 object-cover rounded-lg bg-gray-100"
+                      onError={(e) => { (e.currentTarget as HTMLImageElement).src = ''; (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                    />
                     <button
                       onClick={() => setEditing((prev) => prev ? { ...prev, imageUrl: '' } : prev)}
                       className="absolute top-2 right-2 w-6 h-6 bg-black/50 text-white rounded-full flex items-center justify-center"
                     >
                       <X className="h-3 w-3" />
                     </button>
+                  </div>
+                ) : (
+                  <div className="w-full h-32 rounded-lg bg-gray-50 border border-dashed border-gray-200 flex items-center justify-center text-gray-300">
+                    <Image className="h-8 w-8" />
                   </div>
                 )}
                 <div className="flex gap-2">

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '@butcher/shared';
 import type { Product, StockMovement } from '@butcher/shared';
 import { AlertTriangle, Plus, Minus, Package, X } from 'lucide-react';
+import { toast } from '../lib/toast';
 
 const REASONS = ['Restock', 'Damaged / Waste', 'Stocktake correction', 'Return', 'Transfer in', 'Transfer out', 'Other'];
 
@@ -46,8 +47,9 @@ export default function StockPage() {
         p.id === product.id ? { ...p, stockOnHand: Math.max(0, p.stockOnHand + delta) } : p,
       ));
       setAdjust(null);
+      toast(`Stock adjusted: ${adjust.product.name} ${adjust.delta > 0 ? '+' : ''}${adjust.delta}`);
     } catch {
-      alert('Failed to save adjustment. Please try again.');
+      toast('Failed to save adjustment', 'error');
     } finally {
       setSaving(false);
     }

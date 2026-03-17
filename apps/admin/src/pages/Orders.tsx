@@ -3,6 +3,7 @@ import { api, formatCurrency, ORDER_STATUS_LABELS } from '@butcher/shared';
 import type { Order, OrderStatus } from '@butcher/shared';
 import { Link } from 'react-router-dom';
 import { Search, Filter } from 'lucide-react';
+import { toast } from '../lib/toast';
 
 const STATUSES: OrderStatus[] = ['pending_payment', 'confirmed', 'preparing', 'packed', 'out_for_delivery', 'delivered', 'cancelled', 'refunded'];
 
@@ -28,8 +29,13 @@ export default function OrdersPage() {
     : orders;
 
   const handleStatusChange = async (orderId: string, status: OrderStatus) => {
-    await api.orders.updateStatus(orderId, status);
-    setOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, status } : o));
+    try {
+      await api.orders.updateStatus(orderId, status);
+      setOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, status } : o));
+      toast(`Order status updated to ${ORDER_STATUS_LABELS[status] ?? status}`);
+    } catch {
+      toast('Failed to update order status', 'error');
+    }
   };
 
   return (
