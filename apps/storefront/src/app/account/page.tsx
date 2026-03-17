@@ -69,7 +69,7 @@ export default function AccountPage() {
   const [pushStatus, setPushStatus] = useState<'unknown' | 'granted' | 'denied' | 'unsupported'>('unknown');
   const [pushSaving, setPushSaving] = useState(false);
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'https://butcher-api.oconner.com.au';
+  const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'https://oconner-api.steve-700.workers.dev';
 
   useEffect(() => {
     if (typeof window !== 'undefined' && 'Notification' in window) {

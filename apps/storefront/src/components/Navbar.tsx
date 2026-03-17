@@ -9,7 +9,7 @@ import { cn } from '@butcher/ui';
 
 const ADMIN_URL = process.env.NEXT_PUBLIC_ADMIN_URL ?? 'https://butcher-admin.pages.dev';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787';
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'https://oconner-api.steve-700.workers.dev';
 
 export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
