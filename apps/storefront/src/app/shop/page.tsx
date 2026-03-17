@@ -9,9 +9,13 @@ import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import type { Product } from '@butcher/shared';
 import { formatCurrency, formatWeight } from '@butcher/shared';
-import { ShoppingCart, Plus, Minus } from 'lucide-react';
+import { ShoppingCart, Phone } from 'lucide-react';
+import Link from 'next/link';
 
 const CATEGORIES = ['All', 'packs', 'beef', 'lamb', 'pork', 'chicken', 'other'];
+
+const BULK_IDS = ['prod-quarter-share', 'prod-half-share'];
+const BULK_MIN_KG: Record<string, number> = { 'prod-sausages-mince': 5 };
 
 export default function ShopPage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -69,17 +73,21 @@ export default function ShopPage() {
                 key={product.id}
                 product={product}
                 qty={getItemQty(product.id!)}
-                onAdd={() => addItem({
-                  productId: product.id!,
-                  productName: product.name,
-                  category: product.category,
-                  isMeatPack: product.isMeatPack,
-                  weight: product.isMeatPack ? undefined : 500,
-                  quantity: 1,
-                  pricePerKg: product.pricePerKg,
-                  fixedPrice: product.fixedPrice,
-                  lineTotal: product.isMeatPack ? (product.fixedPrice ?? 0) : Math.round((product.pricePerKg ?? 0) * 0.5),
-                })}
+                onAdd={() => {
+                  const minKg = BULK_MIN_KG[product.id!] ?? 1;
+                  const weightG = product.isMeatPack ? undefined : minKg * 1000;
+                  addItem({
+                    productId: product.id!,
+                    productName: product.name,
+                    category: product.category,
+                    isMeatPack: product.isMeatPack,
+                    weight: weightG,
+                    quantity: 1,
+                    pricePerKg: product.pricePerKg,
+                    fixedPrice: product.fixedPrice,
+                    lineTotal: product.isMeatPack ? (product.fixedPrice ?? 0) : Math.round((product.pricePerKg ?? 0) * minKg),
+                  });
+                }}
               />
             ))}
           </div>
@@ -99,40 +107,67 @@ function ProductCard({
   qty: number;
   onAdd: () => void;
 }) {
+  const isBulkShare = BULK_IDS.includes(product.id ?? '');
+  const minKg = BULK_MIN_KG[product.id ?? ''];
+
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow flex flex-col">
       {product.imageUrl ? (
         <img src={product.imageUrl} alt={product.name} className="w-full h-48 object-cover" />
       ) : (
         <div className="w-full h-48 bg-brand-light flex items-center justify-center text-6xl">🥩</div>
       )}
-      <div className="p-4">
-        <span className="text-xs font-medium text-brand uppercase tracking-wide bg-brand-light px-2 py-0.5 rounded-full">
-          {product.category}
-        </span>
-        <h3 className="font-semibold text-lg mt-2 mb-1">{product.name}</h3>
+      <div className="p-4 flex flex-col flex-1">
+        <div className="flex items-center gap-2 flex-wrap mb-2">
+          <span className="text-xs font-medium text-brand uppercase tracking-wide bg-brand-light px-2 py-0.5 rounded-full">
+            {product.category}
+          </span>
+          {isBulkShare && (
+            <span className="text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+              Bulk order
+            </span>
+          )}
+          {minKg && (
+            <span className="text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">
+              Min {minKg} kg
+            </span>
+          )}
+        </div>
+        <h3 className="font-semibold text-lg mb-1">{product.name}</h3>
         {product.description && (
-          <p className="text-sm text-gray-500 mb-3 line-clamp-2">{product.description}</p>
+          <p className="text-sm text-gray-500 mb-3 line-clamp-3 flex-1">{product.description}</p>
         )}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between mt-auto pt-2">
           <div>
             {product.isMeatPack ? (
               <span className="text-xl font-bold text-brand">{formatCurrency(product.fixedPrice ?? 0)}</span>
             ) : (
-              <span className="text-xl font-bold text-brand">{formatCurrency(product.pricePerKg ?? 0)}<span className="text-sm font-normal text-gray-500">/kg</span></span>
+              <span className="text-xl font-bold text-brand">
+                {formatCurrency(product.pricePerKg ?? 0)}
+                <span className="text-sm font-normal text-gray-500">/kg</span>
+              </span>
             )}
-            {product.stockOnHand <= (product.minThreshold ?? 0) + 2 && (
+            {!isBulkShare && product.stockOnHand > 0 && product.stockOnHand <= (product.minThreshold ?? 0) + 2 && (
               <p className="text-xs text-accent font-medium">Low stock</p>
             )}
           </div>
-          <button
-            onClick={onAdd}
-            disabled={product.stockOnHand <= 0}
-            className="flex items-center gap-1 bg-brand text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-mid transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <ShoppingCart className="h-4 w-4" />
-            {qty > 0 ? `Add (${qty})` : 'Add'}
-          </button>
+          {isBulkShare ? (
+            <Link
+              href="/contact"
+              className="flex items-center gap-1.5 bg-brand text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-mid transition-colors"
+            >
+              <Phone className="h-4 w-4" /> Enquire
+            </Link>
+          ) : (
+            <button
+              onClick={onAdd}
+              disabled={product.stockOnHand <= 0}
+              className="flex items-center gap-1 bg-brand text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-mid transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <ShoppingCart className="h-4 w-4" />
+              {qty > 0 ? `Add (${qty})` : 'Add'}
+            </button>
+          )}
         </div>
       </div>
     </div>
