@@ -4,7 +4,7 @@ import type { Env, AuthUser } from './types';
 import { requireAuth, requireRole, verifyClerkToken } from './middleware/auth';
 import { drizzle } from 'drizzle-orm/d1';
 import { eq, desc, asc } from 'drizzle-orm';
-import { orders as ordersTable, customers as customersTable, products as productsTable, deliveryDays as deliveryDaysTable } from '@butcher/db';
+import { orders as ordersTable, customers as customersTable, products as productsTable, deliveryDays as deliveryDaysTable, subscriptions as subscriptionsTable } from '@butcher/db';
 import ordersRouter from './routes/orders';
 import productsRouter from './routes/products';
 import deliveryDaysRouter from './routes/deliveryDays';
@@ -42,6 +42,40 @@ app.get('/api/orders/mine', async (c) => {
   if (!customer) return c.json([]);
   const rows = await db.select().from(ordersTable).where(eq(ordersTable.customerId, customer.id)).orderBy(desc(ordersTable.createdAt));
   return c.json(rows.map((o) => ({ ...o, items: JSON.parse(o.items), deliveryAddress: JSON.parse(o.deliveryAddress) })));
+});
+
+// ── Customer-facing authenticated routes (Clerk token, no staff DB row required) ──
+app.get('/api/customers/me', async (c) => {
+  const clerk = await verifyClerkToken(c.req.header('Authorization') ?? null, c.env.CLERK_SECRET_KEY);
+  if (!clerk) return c.json({ error: 'Unauthorized' }, 401);
+  const db = drizzle(c.env.DB);
+  const [customer] = await db.select().from(customersTable).where(eq(customersTable.clerkId, clerk.clerkId)).limit(1);
+  if (!customer) return c.json(null);
+  return c.json({ ...customer, addresses: JSON.parse(customer.addresses) });
+});
+
+app.patch('/api/customers/me', async (c) => {
+  const clerk = await verifyClerkToken(c.req.header('Authorization') ?? null, c.env.CLERK_SECRET_KEY);
+  if (!clerk) return c.json({ error: 'Unauthorized' }, 401);
+  const db = drizzle(c.env.DB);
+  const [customer] = await db.select().from(customersTable).where(eq(customersTable.clerkId, clerk.clerkId)).limit(1);
+  if (!customer) return c.json({ error: 'Not found' }, 404);
+  const body = await c.req.json<{ phone?: string; addresses?: object[] }>();
+  const patch: Record<string, unknown> = { updatedAt: Date.now() };
+  if (body.phone !== undefined) patch.phone = body.phone;
+  if (body.addresses !== undefined) patch.addresses = JSON.stringify(body.addresses);
+  await db.update(customersTable).set(patch).where(eq(customersTable.id, customer.id));
+  return c.json({ ok: true });
+});
+
+app.get('/api/subscriptions/mine', async (c) => {
+  const clerk = await verifyClerkToken(c.req.header('Authorization') ?? null, c.env.CLERK_SECRET_KEY);
+  if (!clerk) return c.json({ error: 'Unauthorized' }, 401);
+  const db = drizzle(c.env.DB);
+  const rows = await db.select().from(subscriptionsTable)
+    .where(eq(subscriptionsTable.email, clerk.email))
+    .orderBy(desc(subscriptionsTable.createdAt));
+  return c.json(rows);
 });
 
 // ── Public read-only routes (no auth) ────────────────────────

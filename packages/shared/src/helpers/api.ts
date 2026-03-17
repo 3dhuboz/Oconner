@@ -82,6 +82,15 @@ export const api = {
     orders: (id: string) => api.get(`/api/customers/${id}/orders`),
     create: (data: unknown) => api.post('/api/customers', data),
     update: (id: string, data: unknown) => api.patch(`/api/customers/${id}`, data),
+    me: () => api.get('/api/customers/me'),
+    updateMe: (data: unknown) => api.patch('/api/customers/me', data),
+  },
+
+  subscriptions: {
+    mine: () => api.get('/api/subscriptions/mine'),
+    list: () => api.get('/api/subscriptions'),
+    create: (data: unknown) => api.post('/api/subscriptions', data),
+    update: (id: string, data: unknown) => api.patch(`/api/subscriptions/${id}`, data),
   },
 
   users: {
