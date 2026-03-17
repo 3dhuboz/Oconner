@@ -24,7 +24,8 @@ const STATUS_STYLE: Record<string, string> = {
 };
 
 const FREQUENCIES = ['weekly', 'fortnightly', 'monthly'];
-const EMPTY_FORM = { email: '', boxId: '', boxName: '', frequency: 'monthly', status: 'active' as const };
+const EMPTY_FORM: { email: string; boxId: string; boxName: string; frequency: string; status: Subscription['status'] } =
+  { email: '', boxId: '', boxName: '', frequency: 'monthly', status: 'active' };
 
 function BoxPlanCard({ product, onSaved }: { product: Product & { imageUrl?: string }; onSaved: (id: string, url: string) => void }) {
   const [url, setUrl] = useState(product.imageUrl ?? '');
