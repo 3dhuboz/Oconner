@@ -5,7 +5,7 @@ import type { Stop, Order } from '@butcher/shared';
 import {
   ArrowLeft, Route, Printer, Bell, Package, FileText,
   CheckCircle, Clock, Navigation, AlertTriangle, User, Camera,
-  Eye, MapPin, Timer, TrendingUp,
+  Eye, MapPin, Timer, TrendingUp, ChevronUp, ChevronDown, Info, Send,
 } from 'lucide-react';
 
 const DRIVER_URL = import.meta.env.VITE_DRIVER_URL ?? 'https://butcher-driver.pages.dev';
@@ -52,23 +52,25 @@ function windowStatus(etaMs: number, w: { earliest?: number; latest?: number }):
   return 'ok';
 }
 
-function optimizeWithConstraints(stops: Stop[], departureMs: number): Stop[] {
+function optimizeWithConstraints(
+  stops: Stop[], departureMs: number,
+): { stops: Stop[]; reasons: Record<string, string> } {
   const AVG = 8 * 60 * 1000;
   let sorted = nearestNeighborRoute([...stops]);
-  // ETA pass 1
+  const geoPos: Record<string, number> = {};
+  sorted.forEach((s, i) => { geoPos[s.id!] = i; });
   let withEta = sorted.map((s, i) => ({ ...s, estimatedArrival: departureMs + i * AVG }));
-  // Constraint-aware bubble: move urgent stops earlier
+  // Constraint pass: bubble stops with a 'before' window forward if needed
   for (let i = withEta.length - 1; i > 0; i--) {
     const s = withEta[i];
     const w = parseTimeWindow(s.customerNote);
     if (w.latest === undefined) continue;
     const etaMins = new Date(s.estimatedArrival!).getHours() * 60 + new Date(s.estimatedArrival!).getMinutes();
     if (etaMins <= w.latest) continue;
-    // Find best earlier slot
     let best = i;
     for (let j = 0; j < i; j++) {
-      const candidateMins = new Date(departureMs + j * AVG).getHours() * 60 + new Date(departureMs + j * AVG).getMinutes();
-      if (candidateMins <= w.latest) { best = j; break; }
+      const cm = new Date(departureMs + j * AVG).getHours() * 60 + new Date(departureMs + j * AVG).getMinutes();
+      if (cm <= w.latest) { best = j; break; }
     }
     if (best < i) {
       const [moved] = withEta.splice(i, 1);
@@ -76,7 +78,24 @@ function optimizeWithConstraints(stops: Stop[], departureMs: number): Stop[] {
       withEta = withEta.map((x, k) => ({ ...x, estimatedArrival: departureMs + k * AVG }));
     }
   }
-  return withEta;
+  const reasons: Record<string, string> = {};
+  withEta.forEach((s, i) => {
+    const w = parseTimeWindow(s.customerNote);
+    const hasConstraint = w.earliest !== undefined || w.latest !== undefined;
+    const wasMoved = geoPos[s.id!] !== undefined && geoPos[s.id!] > i;
+    if (hasConstraint && wasMoved) {
+      const constraint = w.latest !== undefined ? `before ${minsToTime(w.latest)}` : `after ${minsToTime(w.earliest!)}`;
+      reasons[s.id!] = `Prioritised: moved from geo stop ${geoPos[s.id!] + 1} → ${i + 1} to meet customer request (${constraint})`;
+    } else if (hasConstraint) {
+      const constraint = w.earliest && w.latest
+        ? `${minsToTime(w.earliest)}–${minsToTime(w.latest)}`
+        : w.latest ? `before ${minsToTime(w.latest)}` : `after ${minsToTime(w.earliest!)}`;
+      reasons[s.id!] = `Time request (${constraint}) met at current geographic position`;
+    } else {
+      reasons[s.id!] = `Geographic cluster — nearest neighbour from ${s.address.suburb} (${s.address.postcode})`;
+    }
+  });
+  return { stops: withEta, reasons };
 }
 
 interface DeliveryDayData {
@@ -135,6 +154,10 @@ export default function DeliveryManifestPage() {
   const [notifySent, setNotifySent] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [routeOptimised, setRouteOptimised] = useState(false);
+  const [stopReasons, setStopReasons] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
+  const [lastPushed, setLastPushed] = useState<Date | null>(null);
+  const [showExplainer, setShowExplainer] = useState(false);
 
   useEffect(() => {
     if (!dayId) return;
@@ -153,12 +176,39 @@ export default function DeliveryManifestPage() {
     if (!dayId || stops.length === 0) return;
     setOptimizing(true);
     const departure = departureTimestamp(day);
-    const withEtas = optimizeWithConstraints(stops, departure).map((s, i) => ({ ...s, sequence: i + 1 }));
-    await Promise.all(withEtas.map((s, i) => api.stops.updateSequence(s.id!, i + 1)));
-    setStops(withEtas);
+    const { stops: optimized, reasons } = optimizeWithConstraints(stops, departure);
+    const withSeq = optimized.map((s, i) => ({ ...s, sequence: i + 1 }));
+    await Promise.all(withSeq.map((s, i) => api.stops.updateSequence(s.id!, i + 1)));
+    setStops(withSeq);
+    setStopReasons(reasons);
     setRouteOptimised(true);
     setShowPreview(true);
+    setLastPushed(new Date());
     setOptimizing(false);
+  };
+
+  const moveStop = async (stopId: string, dir: 'up' | 'down') => {
+    const sorted = [...stops].sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
+    const idx = sorted.findIndex((s) => s.id === stopId);
+    if (idx < 0) return;
+    if (dir === 'up' && idx === 0) return;
+    if (dir === 'down' && idx === sorted.length - 1) return;
+    const swapIdx = dir === 'up' ? idx - 1 : idx + 1;
+    [sorted[idx], sorted[swapIdx]] = [sorted[swapIdx], sorted[idx]];
+    const departure = departureTimestamp(day);
+    const updated = sorted.map((s, i) => ({ ...s, sequence: i + 1, estimatedArrival: departure + i * 8 * 60 * 1000 }));
+    setStops(updated);
+    // Update reasons for swapped stops
+    setStopReasons((prev) => {
+      const next = { ...prev };
+      next[sorted[idx].id!] = 'Manually repositioned by admin';
+      next[sorted[swapIdx].id!] = 'Manually repositioned by admin';
+      return next;
+    });
+    setSaving(true);
+    await Promise.all(updated.map((s, i) => api.stops.updateSequence(s.id!, i + 1)));
+    setSaving(false);
+    setLastPushed(new Date());
   };
 
   const sendDayBeforeNotice = async () => {
@@ -304,15 +354,64 @@ export default function DeliveryManifestPage() {
                   }`}>
                     {conflicts.length === 0 ? '✓ All windows met' : `⚠ ${conflicts.length} conflict${conflicts.length !== 1 ? 's' : ''}`}
                   </div>
-                  <a
-                    href={`${DRIVER_URL}/run/${dayId}`}
-                    target="_blank" rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
-                  >
-                    <Navigation className="h-3.5 w-3.5" /> Open in Driver App
-                  </a>
+                  <div className="flex flex-col items-end gap-1.5">
+                    {lastPushed && (
+                      <div className="flex items-center gap-1.5 text-xs text-green-200">
+                        <Send className="h-3 w-3" />
+                        {saving ? 'Saving…' : `Pushed ${lastPushed.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' })}`}
+                      </div>
+                    )}
+                    <a
+                      href={`${DRIVER_URL}/run/${dayId}`}
+                      target="_blank" rel="noopener noreferrer"
+                      className="flex items-center gap-1.5 bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                    >
+                      <Navigation className="h-3.5 w-3.5" /> Open in Driver App
+                    </a>
+                  </div>
                 </div>
               </div>
+            </div>
+            {/* Explainer accordion */}
+            <div className="border-b border-indigo-100">
+              <button
+                onClick={() => setShowExplainer((v) => !v)}
+                className="w-full flex items-center justify-between px-5 py-2.5 text-xs text-indigo-600 hover:bg-indigo-50/50 transition-colors"
+              >
+                <span className="flex items-center gap-1.5 font-medium">
+                  <Info className="h-3.5 w-3.5" /> How was this route determined?
+                </span>
+                <span className="text-indigo-400">{showExplainer ? '▲' : '▼'}</span>
+              </button>
+              {showExplainer && (
+                <div className="px-5 pb-4 space-y-2">
+                  <div className="bg-indigo-50 rounded-lg p-3 text-xs text-indigo-800 leading-relaxed">
+                    <p className="font-semibold mb-1">Step 1 — Geographic clustering</p>
+                    <p>Stops are sorted using a nearest-neighbour algorithm based on suburb and postcode. Starting from the first stop, each subsequent stop is the geographically closest unvisited one, minimising total travel distance.</p>
+                  </div>
+                  <div className="bg-indigo-50 rounded-lg p-3 text-xs text-indigo-800 leading-relaxed">
+                    <p className="font-semibold mb-1">Step 2 — Customer time window constraints</p>
+                    <p>After geographic sorting, each stop’s estimated arrival is checked against any time request in the customer’s delivery note (e.g. “before 2pm”, “after 10am”, “morning only”). Stops that would miss their window are moved to the earliest position in the run that satisfies the constraint. ETAs are recalculated after each adjustment.</p>
+                  </div>
+                  <div className="bg-indigo-50 rounded-lg p-3 text-xs text-indigo-800 leading-relaxed">
+                    <p className="font-semibold mb-1">Step 3 — Admin override</p>
+                    <p>Use the ↑ / ↓ buttons on each stop to manually adjust the sequence. Changes are written immediately and pushed live to the driver app.</p>
+                  </div>
+                  {Object.keys(stopReasons).length > 0 && (
+                    <div className="mt-3">
+                      <p className="text-xs font-semibold text-indigo-700 mb-1.5">Per-stop decisions:</p>
+                      <div className="space-y-1">
+                        {[...stops].sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0)).map((s, i) => stopReasons[s.id!] ? (
+                          <div key={s.id} className="flex items-start gap-2 text-xs">
+                            <span className="w-5 h-5 rounded-full bg-indigo-200 text-indigo-800 font-bold flex items-center justify-center flex-shrink-0">{i + 1}</span>
+                            <span className="text-gray-600"><span className="font-medium text-gray-800">{s.customerName}</span> — {stopReasons[s.id!]}</span>
+                          </div>
+                        ) : null)}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
             {/* Per-stop timeline */}
             <div className="divide-y divide-indigo-50">
@@ -321,8 +420,27 @@ export default function DeliveryManifestPage() {
                 const ws = windowStatus(stop.estimatedArrival!, w);
                 const hasWindow = ws !== 'none';
                 return (
-                  <div key={stop.id} className="px-5 py-3 flex items-start gap-4">
-                    {/* Sequence + ETA */}
+                  <div key={stop.id} className="px-5 py-3 flex items-start gap-3">
+                    {/* Reorder controls */}
+                    <div className="flex flex-col gap-0.5 flex-shrink-0 mt-0.5">
+                      <button
+                        onClick={() => moveStop(stop.id!, 'up')}
+                        disabled={idx === 0 || saving}
+                        className="w-6 h-6 flex items-center justify-center rounded hover:bg-indigo-100 disabled:opacity-20 transition-colors"
+                        title="Move up"
+                      >
+                        <ChevronUp className="h-3.5 w-3.5 text-indigo-500" />
+                      </button>
+                      <button
+                        onClick={() => moveStop(stop.id!, 'down')}
+                        disabled={idx === stopsWithEta.length - 1 || saving}
+                        className="w-6 h-6 flex items-center justify-center rounded hover:bg-indigo-100 disabled:opacity-20 transition-colors"
+                        title="Move down"
+                      >
+                        <ChevronDown className="h-3.5 w-3.5 text-indigo-500" />
+                      </button>
+                    </div>
+                    {/* Sequence bubble + connector */}
                     <div className="flex flex-col items-center gap-1 flex-shrink-0">
                       <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
                         ws === 'late' ? 'bg-red-100 text-red-700' : ws === 'early' ? 'bg-amber-100 text-amber-700' : ws === 'ok' ? 'bg-green-100 text-green-700' : 'bg-indigo-100 text-indigo-700'
@@ -342,6 +460,9 @@ export default function DeliveryManifestPage() {
                           </p>
                           {stop.customerNote && (
                             <p className="text-xs text-amber-700 mt-1">💬 {stop.customerNote}</p>
+                          )}
+                          {stopReasons[stop.id!] && (
+                            <p className="text-xs text-indigo-400 mt-0.5 italic">{stopReasons[stop.id!]}</p>
                           )}
                         </div>
                         <div className="flex flex-col items-end gap-1 flex-shrink-0">
