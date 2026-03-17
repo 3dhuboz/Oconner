@@ -69,7 +69,7 @@ export default function AccountPage() {
   useEffect(() => {
     if (!user) return;
     api.get<Order[]>('/api/orders/mine').then(setOrders).catch(() => {});
-    api.customers.me<CustomerProfile>().then((c) => {
+    api.customers.me().then((c) => {
       setCustomer(c as CustomerProfile);
       if (c) {
         const profile = c as CustomerProfile;
@@ -77,7 +77,7 @@ export default function AccountPage() {
         setAddrVal(profile.addresses?.[0] ?? { line1: '', suburb: '', state: 'QLD', postcode: '' });
       }
     }).catch(() => {});
-    api.subscriptions.mine<Subscription[]>().then((s) => setSubscriptions(s as Subscription[])).catch(() => {});
+    api.subscriptions.mine().then((s) => setSubscriptions(s as Subscription[])).catch(() => {});
   }, [user]);
 
   const savePhone = async () => {
