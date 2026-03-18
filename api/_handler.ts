@@ -30,28 +30,26 @@ export type AppHandler = (req: AppRequest, res: AppResponse) => Promise<void> | 
 
 /**
  * Wraps a Cloudflare Workers Request into an AppRequest.
- * Used in _worker.ts (production entry point).
+ * Used in functions/api/[[route]].ts (production entry point).
  */
-export async function fromCfRequest(request: Request, parsedBody?: any): Promise<AppRequest> {
+export async function fromCfRequest(request: Request, env: AppEnv = {}): Promise<AppRequest> {
   const url = new URL(request.url);
   const query: Record<string, string> = {};
   url.searchParams.forEach((v, k) => { query[k] = v; });
 
-  let body = parsedBody;
-  if (body === undefined) {
-    const ct = request.headers.get('content-type') || '';
-    try {
-      if (ct.includes('application/json')) {
-        body = await request.json();
-      } else if (ct.includes('application/x-www-form-urlencoded') || ct.includes('multipart/form-data')) {
-        const fd = await request.formData();
-        body = Object.fromEntries(fd.entries());
-      } else {
-        body = await request.text();
-      }
-    } catch {
-      body = {};
+  let body: any = {};
+  const ct = request.headers.get('content-type') || '';
+  try {
+    if (ct.includes('application/json')) {
+      body = await request.json();
+    } else if (ct.includes('application/x-www-form-urlencoded') || ct.includes('multipart/form-data')) {
+      const fd = await request.formData();
+      body = Object.fromEntries(fd.entries());
+    } else {
+      body = await request.text();
     }
+  } catch {
+    body = {};
   }
 
   return {
@@ -60,7 +58,7 @@ export async function fromCfRequest(request: Request, parsedBody?: any): Promise
     body,
     query,
     url: request.url,
-    env: (parsedBody as any)?._env || {},
+    env,
   };
 }
 
