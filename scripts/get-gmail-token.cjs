@@ -92,18 +92,18 @@ const server = http.createServer(async (req, res) => {
             console.log('\n✅ GMAIL_REFRESH_TOKEN written to .env automatically!');
           } catch (writeErr) {
             console.warn('\n⚠️  Could not auto-write to .env:', writeErr.message);
-            console.log('Manually add to .env and Vercel:\n  GMAIL_REFRESH_TOKEN=' + data.refresh_token);
+            console.log('Manually add to .env and Cloudflare dashboard:\n  GMAIL_REFRESH_TOKEN=' + data.refresh_token);
           }
           console.log('\n📋 Next steps:');
           console.log('  1. Restart the dev server (npm run dev) to load the new token');
-          console.log('  2. Add GMAIL_REFRESH_TOKEN to Vercel environment variables\n');
+          console.log('  2. Add GMAIL_REFRESH_TOKEN to Cloudflare dashboard secrets (wrangler secret put GMAIL_REFRESH_TOKEN)\n');
 
           res.writeHead(200, { 'Content-Type': 'text/html' });
           res.end(`
             <div style="font-family:sans-serif;max-width:500px;margin:40px auto;text-align:center;">
               <h2 style="color:#16a34a;">Success!</h2>
               <p>Your refresh token has been written to <strong>.env</strong> automatically.</p>
-              <p>Also add <code>GMAIL_REFRESH_TOKEN</code> to your Vercel environment variables.</p>
+              <p>Also add <code>GMAIL_REFRESH_TOKEN</code> to your Cloudflare dashboard secrets.</p>
               <p>You can close this tab.</p>
             </div>
           `);
