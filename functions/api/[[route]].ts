@@ -119,7 +119,10 @@ export const onRequest = async (context: { request: Request; env: Env }): Promis
 
   // Convert CF request → AppRequest, inject D1/R2 bindings
   const appEnv = { DB: env.DB, R2: env.R2, ...env };
-  const appReq = await fromCfRequest(request, appEnv);
+  // Stripe webhooks require the exact raw body bytes for signature verification
+  const isStripeWebhook = pathname.includes('/api/stripe/webhook');
+  const rawBody = isStripeWebhook ? await request.text() : undefined;
+  const appReq = await fromCfRequest(isStripeWebhook ? new Request(request, { body: rawBody }) : request, appEnv, rawBody);
   const { res, getResponse } = makeCfResponse();
 
   try {
