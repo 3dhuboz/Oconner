@@ -6,8 +6,21 @@
 
 const BASE = '/api/data';
 
+/** Get the current Clerk JWT — Clerk sets window.Clerk after mounting */
+async function getClerkToken(): Promise<string | null> {
+  try {
+    const clerk = (window as any).Clerk;
+    if (clerk?.session) return await clerk.session.getToken();
+  } catch { /* not logged in or Clerk not yet mounted */ }
+  return null;
+}
+
 async function req<T>(method: string, path: string, body?: any): Promise<T> {
-  const opts: RequestInit = { method, headers: { 'Content-Type': 'application/json' } };
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const token = await getClerkToken();
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+
+  const opts: RequestInit = { method, headers };
   if (body !== undefined) opts.body = JSON.stringify(body);
   const res = await fetch(path, opts);
   if (!res.ok) {
