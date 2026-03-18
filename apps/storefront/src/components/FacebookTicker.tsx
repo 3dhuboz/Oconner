@@ -9,14 +9,20 @@ interface TickerItem {
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'https://oconner-api.steve-700.workers.dev';
+const FB_PAGE = 'https://www.facebook.com/profile.php?id=61574996320860';
 
 export default function FacebookTicker() {
   const [items, setItems] = useState<TickerItem[]>([]);
+  const [fbUrl, setFbUrl] = useState(FB_PAGE);
 
   useEffect(() => {
     fetch(`${API_URL}/api/ticker`)
       .then((r) => r.json())
-      .then((data) => { if (Array.isArray(data) && data.length > 0) setItems(data); })
+      .then((data) => {
+        if (data?.facebookPageUrl) setFbUrl(data.facebookPageUrl);
+        const list = Array.isArray(data) ? data : (data?.items ?? []);
+        if (list.length > 0) setItems(list);
+      })
       .catch(() => {});
   }, []);
 
@@ -27,12 +33,17 @@ export default function FacebookTicker() {
 
   return (
     <div className="bg-[#1877F2] text-white overflow-hidden flex items-stretch" style={{ height: '36px' }}>
-      <div className="flex-shrink-0 flex items-center gap-2 px-4 bg-[#145dbf] font-semibold text-sm tracking-wide">
+      <a
+        href={fbUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex-shrink-0 flex items-center gap-2 px-4 bg-[#145dbf] hover:bg-[#0e4da0] transition-colors font-semibold text-sm tracking-wide"
+      >
         <svg className="h-4 w-4 fill-white flex-shrink-0" viewBox="0 0 24 24" aria-hidden="true">
           <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
         </svg>
         <span className="hidden sm:inline">Updates</span>
-      </div>
+      </a>
       <div className="flex-1 overflow-hidden relative flex items-center">
         <div
           className="flex items-center gap-0 whitespace-nowrap"

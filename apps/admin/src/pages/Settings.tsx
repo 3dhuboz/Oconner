@@ -36,6 +36,7 @@ interface TickerItem {
 interface TickerConfig {
   enabled: boolean;
   items: TickerItem[];
+  facebookPageUrl?: string;
 }
 
 interface StorefrontConfig {
@@ -150,7 +151,7 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  const [ticker, setTicker] = useState<TickerConfig>({ enabled: true, items: [] });
+  const [ticker, setTicker] = useState<TickerConfig>({ enabled: true, items: [], facebookPageUrl: 'https://www.facebook.com/profile.php?id=61574996320860' });
 
   const [pushStats, setPushStats] = useState<{ subscribers: number } | null>(null);
   const [pushForm, setPushForm] = useState({ title: "O'Connor — Update", body: '', url: '' });
@@ -164,7 +165,7 @@ export default function SettingsPage() {
         if (data?.storefront) setConfig({ ...DEFAULTS, ...data.storefront });
         if (data?.payment) setPayment({ ...PAYMENT_DEFAULTS, ...data.payment });
         if (data?.email) setEmail({ ...EMAIL_DEFAULTS, ...data.email });
-        if (data?.ticker) setTicker({ enabled: true, items: [], ...data.ticker });
+        if (data?.ticker) setTicker({ enabled: true, items: [], facebookPageUrl: 'https://www.facebook.com/profile.php?id=61574996320860', ...data.ticker });
       })
       .catch((e: unknown) => console.error('Failed to load settings:', e))
       .finally(() => setLoading(false));
@@ -571,7 +572,15 @@ export default function SettingsPage() {
             <span className="text-sm text-gray-700">Show ticker on homepage</span>
           </label>
         </Field>
-        <Field label="Ticker messages" hint="These scroll across the top of the homepage. Add promotions, news, or Facebook post excerpts.">
+        <Field label="Facebook page URL" hint="Clicking the Facebook logo in the ticker takes visitors here.">
+          <input
+            className={inputCls}
+            placeholder="https://www.facebook.com/yourpage"
+            value={ticker.facebookPageUrl ?? ''}
+            onChange={(e) => setTicker((t) => ({ ...t, facebookPageUrl: e.target.value }))}
+          />
+        </Field>
+        <Field label="Ticker messages" hint="Copy key updates from your Facebook posts here — they scroll across the top of the homepage.">
           <div className="space-y-2">
             {ticker.items.map((item, i) => (
               <div key={i} className="flex gap-2 items-start">

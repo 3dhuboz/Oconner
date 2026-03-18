@@ -143,11 +143,11 @@ app.get('/api/ticker', async (c) => {
   const { eq } = await import('drizzle-orm');
   const { config } = await import('@butcher/db');
   const db = drizzle(c.env.DB);
-  const [row] = await db.select().from(config).where(eq(config.key, 'ticker')).limit(1);
-  if (!row) return c.json([]);
-  const data = JSON.parse(row.value) as { enabled: boolean; items: Array<{ text: string; url?: string }> };
-  if (!data.enabled) return c.json([]);
-  return c.json(data.items ?? []);
+  const [tickerRow] = await db.select().from(config).where(eq(config.key, 'ticker')).limit(1);
+  if (!tickerRow) return c.json({ enabled: false, items: [] });
+  const data = JSON.parse(tickerRow.value) as { enabled: boolean; items: Array<{ text: string; url?: string }>; facebookPageUrl?: string };
+  if (!data.enabled) return c.json({ enabled: false, items: [] });
+  return c.json({ enabled: true, items: data.items ?? [], facebookPageUrl: data.facebookPageUrl ?? null });
 });
 
 app.use('/api/*', requireAuth);
