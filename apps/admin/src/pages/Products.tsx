@@ -14,6 +14,7 @@ export default function ProductsPage() {
   const [imgUploading, setImgUploading] = useState(false);
   const [imgGenerating, setImgGenerating] = useState(false);
   const [imgLoading, setImgLoading] = useState(false);
+  const [imgError, setImgError] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -58,6 +59,7 @@ export default function ProductsPage() {
     try {
       const url = await api.images.upload(file, 'products');
       setImgLoading(true);
+      setImgError(false);
       setEditing((prev) => prev ? { ...prev, imageUrl: url } : prev);
       toast('Image uploaded');
     } catch {
@@ -73,6 +75,7 @@ export default function ProductsPage() {
     const prompt = encodeURIComponent(`${editing.name}, premium quality meat, food photography, dark background, restaurant quality, high resolution`);
     const url = `https://image.pollinations.ai/prompt/${prompt}?width=800&height=600&nologo=true&seed=${Date.now()}`;
     setImgLoading(true);
+    setImgError(false);
     setEditing((prev) => prev ? { ...prev, imageUrl: url } : prev);
     toast('AI image generating — preview will appear when ready');
     setImgGenerating(false);
@@ -128,7 +131,7 @@ export default function ProductsPage() {
                   </button>
                 </td>
                 <td className="px-4 py-3 text-right">
-                  <button onClick={() => { setEditing({ ...p }); setImgLoading(!!(p as any).imageUrl); }} className="text-brand hover:underline text-xs font-medium">
+                  <button onClick={() => { setEditing({ ...p }); setImgLoading(!!(p as any).imageUrl); setImgError(false); }} className="text-brand hover:underline text-xs font-medium">
                     <Pencil className="h-3.5 w-3.5" />
                   </button>
                 </td>
@@ -160,15 +163,21 @@ export default function ProductsPage() {
                         <span className="text-xs text-gray-400">Loading image…</span>
                       </div>
                     )}
+                    {imgError && !imgLoading && (
+                      <div className="w-full h-40 rounded-lg bg-red-50 border border-red-200 flex flex-col items-center justify-center gap-1">
+                        <span className="text-xs text-red-500 font-medium">Image failed to load</span>
+                        <span className="text-xs text-red-400">Check the URL or try AI Generate again</span>
+                      </div>
+                    )}
                     <img
                       src={(editing as any).imageUrl}
                       alt="preview"
-                      className={`w-full h-40 object-cover rounded-lg bg-gray-100 ${imgLoading ? 'hidden' : ''}`}
-                      onLoad={() => setImgLoading(false)}
-                      onError={() => setImgLoading(false)}
+                      className={`w-full h-40 object-cover rounded-lg bg-gray-100 ${imgLoading || imgError ? 'hidden' : ''}`}
+                      onLoad={() => { setImgLoading(false); setImgError(false); }}
+                      onError={() => { setImgLoading(false); setImgError(true); }}
                     />
                     <button
-                      onClick={() => { setEditing((prev) => prev ? { ...prev, imageUrl: '' } : prev); setImgLoading(false); }}
+                      onClick={() => { setEditing((prev) => prev ? { ...prev, imageUrl: '' } : prev); setImgLoading(false); setImgError(false); }}
                       className="absolute top-2 right-2 w-6 h-6 bg-black/50 text-white rounded-full flex items-center justify-center"
                     >
                       <X className="h-3 w-3" />
@@ -210,7 +219,7 @@ export default function ProductsPage() {
                 <input
                   placeholder="https://example.com/image.jpg"
                   value={(editing as any).imageUrl ?? ''}
-                  onChange={(e) => { setImgLoading(!!e.target.value); setEditing((prev) => prev ? { ...prev, imageUrl: e.target.value } : prev); }}
+                  onChange={(e) => { setImgLoading(!!e.target.value); setImgError(false); setEditing((prev) => prev ? { ...prev, imageUrl: e.target.value } : prev); }}
                   className="w-full border rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand"
                 />
               </div>
