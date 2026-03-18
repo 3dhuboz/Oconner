@@ -28,7 +28,9 @@ function Deploy-Driver {
 }
 
 function Deploy-Storefront {
-    Write-Host "`n[Storefront] Building (next-on-pages)..." -ForegroundColor Cyan
+    Write-Host "`n[Storefront] Running next build..." -ForegroundColor Cyan
+    pnpm --filter "@butcher/storefront" run build
+    Write-Host "[Storefront] Running next-on-pages..." -ForegroundColor Cyan
     pnpm --filter "@butcher/storefront" run build:cf
     Write-Host "[Storefront] Deploying to Cloudflare Pages..." -ForegroundColor Cyan
     Invoke-Expression "$WRANGLER pages deploy apps\storefront\.vercel\output\static --project-name butcher-storefront --branch main"
