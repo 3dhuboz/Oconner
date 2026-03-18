@@ -5,7 +5,7 @@ import twilio from "twilio";
 import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
-import { requireStripe } from "./src/services/stripe.ts";
+import Stripe from "stripe";
 import { PDFDocument } from "pdf-lib";
 import { format } from "date-fns";
 import Database from "better-sqlite3";
@@ -34,6 +34,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 dotenv.config();
+
+function requireStripe(): Stripe {
+  if (!process.env.STRIPE_SECRET_KEY) throw new Error('STRIPE_SECRET_KEY not set');
+  return new Stripe(process.env.STRIPE_SECRET_KEY);
+}
 
 // ── SQLite / D1 dev setup ───────────────────────────────────────────────────
 // Creates a D1-compatible wrapper around better-sqlite3 so all api/data/* handlers
