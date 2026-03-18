@@ -11,13 +11,13 @@ pages_build_output_dir = "dist"
 #   b) An external service like cron-job.org hitting: https://wirezrus.pages.dev/api/email/poll-inbox
 #      with Authorization: Bearer <CRON_SECRET>
 
-# Cloudflare D1 database (replaces Firebase Firestore)
+# Cloudflare D1 database
 [[d1_databases]]
 binding = "DB"
 database_name = "wirez-r-us-db"
 database_id = ""   # set after: wrangler d1 create wirez-r-us-db
 
-# Cloudflare R2 bucket (replaces Firebase Storage)
+# Cloudflare R2 bucket
 [[r2_buckets]]
 binding = "R2"
 bucket_name = "wirez-r-us-uploads"
