@@ -66,6 +66,37 @@ app.delete('/:id', async (c) => {
   return c.json({ ok: true });
 });
 
+app.post('/:id/generate-stops', async (c) => {
+  const db = drizzle(c.env.DB);
+  const dayId = c.req.param('id');
+
+  const dayOrders = await db.select().from(orders).where(eq(orders.deliveryDayId, dayId));
+  const existingStops = await db.select({ orderId: stops.orderId }).from(stops).where(eq(stops.deliveryDayId, dayId));
+  const existingOrderIds = new Set(existingStops.map((s) => s.orderId));
+
+  let created = 0;
+  for (const order of dayOrders) {
+    if (existingOrderIds.has(order.id)) continue;
+    await db.insert(stops).values({
+      id: crypto.randomUUID(),
+      deliveryDayId: dayId,
+      orderId: order.id,
+      customerId: order.customerId,
+      customerName: order.customerName,
+      customerPhone: order.customerPhone ?? '',
+      address: order.deliveryAddress,
+      items: order.items,
+      sequence: created,
+      status: 'pending',
+      customerNote: order.notes ?? null,
+      createdAt: Date.now(),
+    });
+    created++;
+  }
+
+  return c.json({ created, total: dayOrders.length });
+});
+
 app.post('/:id/send-reminders', async (c) => {
   const db = drizzle(c.env.DB);
   const dayId = c.req.param('id');

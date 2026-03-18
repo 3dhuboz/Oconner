@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { api } from '@butcher/shared';
-import { Sparkles, Copy, Check, RefreshCw, Facebook, Instagram, Linkedin } from 'lucide-react';
+import { Sparkles, Copy, Check, RefreshCw, Facebook, Instagram, Linkedin, ExternalLink } from 'lucide-react';
+
+const SOCIAL_STUDIO_URL = 'https://studio.d-id.com'; // Replace with your Social AI Studio URL
 
 const PLATFORMS = [
   { id: 'facebook', label: 'Facebook', icon: Facebook, color: 'text-blue-600' },
@@ -30,6 +32,7 @@ const BRANDS = [
 ];
 
 export default function SocialHubPage() {
+  const [activeTab, setActiveTab] = useState<'generator' | 'studio'>('generator');
   const [brand, setBrand] = useState('oconnor');
   const [platform, setPlatform] = useState('facebook');
   const [postType, setPostType] = useState('product');
@@ -75,18 +78,39 @@ export default function SocialHubPage() {
   const charWarning = charCount > charLimit * 0.85;
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <Sparkles className="h-6 w-6 text-brand" />
-            Social AI Studio
-          </h1>
-          <p className="text-sm text-gray-500 mt-0.5">
-            Generate on-brand social media posts in seconds with AI.
-          </p>
+    <div className="flex flex-col h-full -m-6">
+      <div className="bg-white border-b px-6 pt-6 pb-0 flex-shrink-0">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+              <Sparkles className="h-6 w-6 text-brand" />
+              Social AI Studio
+            </h1>
+            <p className="text-sm text-gray-500 mt-0.5">AI post generator + embedded social studio.</p>
+          </div>
+          {activeTab === 'studio' && (
+            <a href={SOCIAL_STUDIO_URL} target="_blank" rel="noopener noreferrer"
+              className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-brand border rounded-lg px-3 py-1.5">
+              <ExternalLink className="h-3.5 w-3.5" /> Open in new tab
+            </a>
+          )}
+        </div>
+        <div className="flex gap-0 border-b -mb-px">
+          {(['generator', 'studio'] as const).map((id) => (
+            <button key={id} onClick={() => setActiveTab(id)}
+              className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors ${activeTab === id ? 'border-brand text-brand' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+              {id === 'generator' ? 'AI Post Generator' : 'Social AI Studio'}
+            </button>
+          ))}
         </div>
       </div>
+
+      {activeTab === 'studio' ? (
+        <iframe src={SOCIAL_STUDIO_URL} className="flex-1 w-full border-0" title="Social AI Studio"
+          allow="camera; microphone; clipboard-read; clipboard-write" />
+      ) : (
+      <div className="flex-1 overflow-y-auto p-6">
+        <div className="max-w-4xl mx-auto space-y-6">
 
       <div className="grid lg:grid-cols-2 gap-6">
         <div className="space-y-5">
@@ -294,6 +318,9 @@ export default function SocialHubPage() {
           )}
         </div>
       </div>
+        </div>
+      </div>
+      )}
     </div>
   );
 }

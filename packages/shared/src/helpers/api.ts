@@ -66,6 +66,7 @@ export const api = {
     create: (data: unknown) => api.post('/api/delivery-days', data),
     update: (id: string, data: unknown) => api.patch(`/api/delivery-days/${id}`, data),
     sendReminders: (id: string) => api.post(`/api/delivery-days/${id}/send-reminders`, {}),
+    generateStops: (id: string) => api.post<{ created: number; total: number }>(`/api/delivery-days/${id}/generate-stops`, {}),
   },
 
   stops: {
