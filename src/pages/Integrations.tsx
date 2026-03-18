@@ -3,8 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Database, DollarSign, CheckCircle2, AlertCircle, Loader2, Mail, MessageSquare, ExternalLink, Copy, PlayCircle, Phone, Send, Eye, EyeOff, Save, TestTube2, Inbox, RefreshCw, Clock, Zap } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { cn } from '../utils';
-import { db } from '../services/firebase';
-import { collection, addDoc, doc, getDoc, setDoc } from 'firebase/firestore';
+import { settingsApi } from '../services/api';
 import toast from 'react-hot-toast';
 
 const IntegrationCard = ({ icon: Icon, title, status, statusColor, children, onAction, actionText, actionDisabled, isConnecting }: any) => {
@@ -142,73 +141,32 @@ export function Integrations() {
   const [emailTesting, setEmailTesting] = useState(false);
   const [emailTestAddress, setEmailTestAddress] = useState('');
 
-  // ─── Load saved settings from Firestore ─────────────────────
+  // ─── Load saved settings via REST API ──────────────────────
   useEffect(() => {
-    if (!db) return;
-    // Load SMS config
-    getDoc(doc(db, 'settings', 'sms')).then(snap => {
-      if (snap.exists()) {
-        const data = snap.data();
-        setSmsProvider(data.provider || 'twilio');
-        setSmsConfig({
-          accountSid: data.accountSid || '',
-          authToken: data.authToken || '',
-          fromNumber: data.fromNumber || '',
-          enabled: data.enabled || false,
-        });
-      }
-    }).catch(() => {});
-    // Load Email config
-    getDoc(doc(db, 'settings', 'email')).then(snap => {
-      if (snap.exists()) {
-        const data = snap.data();
-        setEmailProvider(data.provider || 'smtp');
-        setEmailConfig({
-          host: data.host || '',
-          port: data.port || '587',
-          username: data.username || '',
-          password: data.password || '',
-          fromEmail: data.fromEmail || '',
-          fromName: data.fromName || 'Wirez R Us',
-          apiKey: data.apiKey || '',
-          enabled: data.enabled || false,
-        });
-      }
-    }).catch(() => {});
-    // Load Gmail catch-all config
-    getDoc(doc(db, 'settings', 'gmail')).then(snap => {
-      if (snap.exists()) {
-        const data = snap.data();
-        setGmailConfig({
-          emailAddress: data.emailAddress || '',
-          clientId: data.clientId || '',
-          clientSecret: data.clientSecret || '',
-          refreshToken: data.refreshToken || '',
-          pollingInterval: data.pollingInterval || '5',
-          autoCreateJobs: data.autoCreateJobs !== false,
-          markAsRead: data.markAsRead !== false,
-          enabled: data.enabled || false,
-        });
-      }
-    }).catch(() => {});
+    settingsApi.get('sms').then(data => {
+      if (!data) return;
+      setSmsProvider(data.provider || 'twilio');
+      setSmsConfig({ accountSid: data.accountSid || '', authToken: data.authToken || '', fromNumber: data.fromNumber || '', enabled: data.enabled || false });
+    });
+    settingsApi.get('email').then(data => {
+      if (!data) return;
+      setEmailProvider(data.provider || 'smtp');
+      setEmailConfig({ host: data.host || '', port: data.port || '587', username: data.username || '', password: data.password || '', fromEmail: data.fromEmail || '', fromName: data.fromName || 'Wirez R Us', apiKey: data.apiKey || '', enabled: data.enabled || false });
+    });
+    settingsApi.get('gmail').then(data => {
+      if (!data) return;
+      setGmailConfig({ emailAddress: data.emailAddress || '', clientId: data.clientId || '', clientSecret: data.clientSecret || '', refreshToken: data.refreshToken || '', pollingInterval: data.pollingInterval || '5', autoCreateJobs: data.autoCreateJobs !== false, markAsRead: data.markAsRead !== false, enabled: data.enabled || false });
+    });
   }, []);
 
   // ─── Save SMS Settings ──────────────────────────────────────
   const handleSaveSms = async () => {
-    if (!db) { toast.error('Database not connected'); return; }
     setSmsSaving(true);
     try {
-      await setDoc(doc(db, 'settings', 'sms'), {
-        provider: smsProvider,
-        ...smsConfig,
-        updatedAt: new Date().toISOString(),
-      });
+      await settingsApi.save('sms', { provider: smsProvider, ...smsConfig, updatedAt: new Date().toISOString() });
       toast.success('SMS settings saved');
-    } catch (err) {
-      toast.error('Failed to save SMS settings');
-    } finally {
-      setSmsSaving(false);
-    }
+    } catch { toast.error('Failed to save SMS settings'); }
+    finally { setSmsSaving(false); }
   };
 
   const handleTestSms = async () => {
@@ -233,20 +191,12 @@ export function Integrations() {
 
   // ─── Save Email Settings ────────────────────────────────────
   const handleSaveEmail = async () => {
-    if (!db) { toast.error('Database not connected'); return; }
     setEmailSaving(true);
     try {
-      await setDoc(doc(db, 'settings', 'email'), {
-        provider: emailProvider,
-        ...emailConfig,
-        updatedAt: new Date().toISOString(),
-      });
+      await settingsApi.save('email', { provider: emailProvider, ...emailConfig, updatedAt: new Date().toISOString() });
       toast.success('Email settings saved');
-    } catch (err) {
-      toast.error('Failed to save email settings');
-    } finally {
-      setEmailSaving(false);
-    }
+    } catch { toast.error('Failed to save email settings'); }
+    finally { setEmailSaving(false); }
   };
 
   const handleTestEmail = async () => {
@@ -270,19 +220,12 @@ export function Integrations() {
 
   // ─── Save Gmail Catch-All Settings ─────────────────────────
   const handleSaveGmail = async () => {
-    if (!db) { toast.error('Database not connected'); return; }
     setGmailSaving(true);
     try {
-      await setDoc(doc(db, 'settings', 'gmail'), {
-        ...gmailConfig,
-        updatedAt: new Date().toISOString(),
-      });
+      await settingsApi.save('gmail', { ...gmailConfig, updatedAt: new Date().toISOString() });
       toast.success('Gmail catch-all settings saved');
-    } catch (err) {
-      toast.error('Failed to save Gmail settings');
-    } finally {
-      setGmailSaving(false);
-    }
+    } catch { toast.error('Failed to save Gmail settings'); }
+    finally { setGmailSaving(false); }
   };
 
   const handleGmailPollNow = async () => {
@@ -324,34 +267,27 @@ export function Integrations() {
 
   // ─── Load Xero Settings ─────────────────────────────────────
   useEffect(() => {
-    if (!db) return;
-    getDoc(doc(db, 'settings', 'xero')).then(snap => {
-      if (snap.exists()) {
-        const data = snap.data();
-        setXeroConfig({
-          clientId: data.clientId || '',
-          clientSecret: data.clientSecret || '',
-          tenantId: data.tenantId || '',
-          defaultAccountCode: data.defaultAccountCode || '200',
-          defaultTaxType: data.defaultTaxType || 'OUTPUT',
-          invoicePrefix: data.invoicePrefix || 'WRU-',
-          laborDescription: data.laborDescription || 'Electrical Labour',
-          hourlyRate: data.hourlyRate || '120',
-        });
-      }
+    settingsApi.get('xero').then(data => {
+      if (!data) return;
+      setXeroConfig({
+        clientId: data.clientId || '',
+        clientSecret: data.clientSecret || '',
+        tenantId: data.tenantId || '',
+        defaultAccountCode: data.defaultAccountCode || '200',
+        defaultTaxType: data.defaultTaxType || 'OUTPUT',
+        invoicePrefix: data.invoicePrefix || 'WRU-',
+        laborDescription: data.laborDescription || 'Electrical Labour',
+        hourlyRate: data.hourlyRate || '120',
+      });
     }).catch(() => {});
   }, []);
 
   const handleSaveXero = async () => {
-    if (!db) { toast.error('Database not connected'); return; }
     setXeroSaving(true);
     try {
-      await setDoc(doc(db, 'settings', 'xero'), {
-        ...xeroConfig,
-        updatedAt: new Date().toISOString(),
-      });
+      await settingsApi.save('xero', { ...xeroConfig, updatedAt: new Date().toISOString() });
       toast.success('Xero settings saved');
-    } catch (err) {
+    } catch {
       toast.error('Failed to save Xero settings');
     } finally {
       setXeroSaving(false);
@@ -399,14 +335,9 @@ export function Integrations() {
   };
 
   const handleSimulateEmail = async () => {
-    if (!db) {
-      toast.error('Firebase is not connected');
-      return;
-    }
-    
     setIsSimulating(true);
-    
     try {
+      const { jobsApi } = await import('../services/api');
       const now = new Date();
       const newJob = {
         title: 'Emergency: Sparking Outlet in Kitchen',
@@ -424,7 +355,7 @@ export function Integrations() {
         createdAt: now.toISOString()
       };
 
-      const docRef = await addDoc(collection(db, 'jobs'), newJob);
+      await jobsApi.create(newJob);
       toast.success('Inbound email processed! Job created.');
       
       // Navigate to the job board after a short delay so they can see it

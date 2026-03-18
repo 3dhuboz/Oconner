@@ -1,4 +1,51 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import type { AppRequest, AppResponse } from '../_handler';
+import { getDb, newId } from '../_db';
+
+// ─── OpenRouter AI enrichment ─────────────────────────────────────────────────
+async function aiEnrichEmail(subject: string, body: string): Promise<{
+  tenantName?: string; tenantPhone?: string; tenantEmail?: string;
+  propertyAddress?: string; issueDescription?: string;
+  jobType?: string; urgency?: string; preferredDate?: string;
+}> {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) return {};
+
+  try {
+    const prompt = `You are an assistant that extracts job details from real estate work order emails.
+Extract the following fields from the email below. Return ONLY valid JSON, no other text.
+Fields: tenantName, tenantPhone, tenantEmail, propertyAddress (full address with suburb+state), issueDescription (brief), jobType (one of: SMOKE_ALARM, ELECTRICAL, MAINTENANCE, INSPECTION, EMERGENCY), urgency (one of: Routine, Urgent, Emergency), preferredDate.
+If a field is not found, omit it from the JSON.
+
+Subject: ${subject}
+
+${body.substring(0, 3000)}`;
+
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://wireznrus.com.au',
+        'X-Title': 'Wirez R Us Job Parser',
+      },
+      body: JSON.stringify({
+        model: 'openai/gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0,
+        max_tokens: 500,
+      }),
+    });
+
+    if (!res.ok) { console.error('[OpenRouter] HTTP', res.status); return {}; }
+    const data = await res.json();
+    const raw = data?.choices?.[0]?.message?.content || '{}';
+    const cleaned = raw.replace(/```json|```/g, '').trim();
+    return JSON.parse(cleaned);
+  } catch (e: any) {
+    console.error('[OpenRouter] Parse error:', e.message);
+    return {};
+  }
+}
 
 /**
  * Gmail IMAP Polling Endpoint
@@ -15,10 +62,8 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
  *
  * Required env vars:
  *   GMAIL_ADDRESS          — e.g. wirezrusjobs@gmail.com
- *   GMAIL_APP_PASSWORD     — 16-char app password from Google account settings
- *   VITE_FIREBASE_PROJECT_ID
- *   VITE_FIREBASE_API_KEY
- *   OPENAI_API_KEY         — optional, enables AI extraction
+ *   GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN
+ *   OPENROUTER_API_KEY     — optional, enables AI extraction
  */
 
 // ─── Real Estate Software Detection ─────────────────────────────
@@ -271,24 +316,8 @@ function classifyUrgency(text: string): string {
   return 'NORMAL';
 }
 
-// ─── Firestore helpers ──────────────────────────────────────────
-function toFirestoreValue(val: any): any {
-  if (val === null || val === undefined) return { nullValue: null };
-  if (typeof val === 'string') return { stringValue: val };
-  if (typeof val === 'number') return Number.isInteger(val) ? { integerValue: String(val) } : { doubleValue: val };
-  if (typeof val === 'boolean') return { booleanValue: val };
-  if (Array.isArray(val)) return { arrayValue: { values: val.map(toFirestoreValue) } };
-  if (typeof val === 'object') {
-    const fields: any = {};
-    for (const [k, v] of Object.entries(val)) { fields[k] = toFirestoreValue(v); }
-    return { mapValue: { fields } };
-  }
-  return { stringValue: String(val) };
-}
-
 // ─── Gmail API helpers ──────────────────────────────────────────
 async function fetchGmailMessages(accessToken: string, maxResults = 10): Promise<any[]> {
-  // Fetch unread messages — query inbox AND spam separately (spam is excluded from default is:unread)
   const queries = ['is:unread', 'is:unread+in:spam'];
   const seen = new Set<string>();
   const allMessages: any[] = [];
@@ -306,19 +335,14 @@ async function fetchGmailMessages(accessToken: string, maxResults = 10): Promise
   }
 
   if (!allMessages.length) return [];
-  
-  // Fetch each message's full content
+
   const messages = [];
   for (const msg of allMessages.slice(0, maxResults)) {
     const msgUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`;
-    const msgRes = await fetch(msgUrl, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
-    if (msgRes.ok) {
-      messages.push(await msgRes.json());
-    }
+    const msgRes = await fetch(msgUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (msgRes.ok) messages.push(await msgRes.json());
   }
-  
+
   return messages;
 }
 
@@ -394,17 +418,25 @@ async function getGmailAccessToken(): Promise<string> {
 }
 
 // ─── Main handler ───────────────────────────────────────────────
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // GET = diagnostic (with live Gmail test)
-  if (req.method === 'GET') {
+export default async function handler(req: AppRequest, res: AppResponse) {
+  // Cloudflare/Vercel Cron jobs call GET — detect them so we run polling, not diagnostics
+  const getHeader = (name: string) =>
+    typeof req.headers.get === 'function' ? req.headers.get(name) : (req.headers as any)[name];
+  const isCronRequest =
+    getHeader('x-vercel-cron') === '1' ||
+    getHeader('x-cloudflare-cron') === '1' ||
+    (!!process.env.CRON_SECRET && getHeader('authorization') === `Bearer ${process.env.CRON_SECRET}`);
+
+  // GET = diagnostic (with live Gmail test), UNLESS called by Vercel Cron
+  if (req.method === 'GET' && !isCronRequest) {
     const checks: any = {
       GMAIL_ADDRESS: process.env.GMAIL_ADDRESS ? `✅ ${process.env.GMAIL_ADDRESS}` : '❌ MISSING',
       GMAIL_CLIENT_ID: process.env.GMAIL_CLIENT_ID ? '✅ set' : '❌ MISSING',
       GMAIL_CLIENT_SECRET: process.env.GMAIL_CLIENT_SECRET ? '✅ set' : '❌ MISSING',
       GMAIL_REFRESH_TOKEN: process.env.GMAIL_REFRESH_TOKEN ? '✅ set' : '❌ MISSING',
-      OPENAI_API_KEY: process.env.OPENAI_API_KEY ? '✅ set (AI enabled)' : '⚠️ missing (regex-only parsing)',
-      VITE_FIREBASE_PROJECT_ID: process.env.VITE_FIREBASE_PROJECT_ID ? '✅ set' : '❌ MISSING',
-      VITE_FIREBASE_API_KEY: (process.env.VITE_FIREBASE_API_KEY || process.env.VITE_FB_API_KEY) ? '✅ set' : '❌ MISSING',
+      OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY ? '✅ set (AI enrichment enabled)' : '⚠️ missing (regex-only parsing)',
+      database: req.env?.DB ? '✅ D1 binding present' : '⚠️ No DB binding (jobs will not be saved)',
+      CRON_SECRET: process.env.CRON_SECRET ? '✅ set' : '⚠️ missing (endpoint not secured against unauthorised triggers)',
     };
     let gmailLiveTest: any = null;
     try {
@@ -470,11 +502,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       status: 'Email Polling Endpoint',
       checks,
       gmailLiveTest,
-      usage: 'POST to poll inbox. Set up a Vercel Cron to call this every 2-5 minutes.',
+      usage: 'Vercel Cron calls GET every 5 min and triggers polling automatically. POST to manually trigger. GET (no cron header) returns this diagnostic.',
     });
   }
 
-  if (req.method !== 'POST') {
+  if (req.method !== 'POST' && !isCronRequest) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
@@ -504,45 +536,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ success: true, processed: 0, message: 'No new emails' });
     }
 
-    const projectId = process.env.VITE_FIREBASE_PROJECT_ID;
-    const apiKey = process.env.VITE_FIREBASE_API_KEY || process.env.VITE_FB_API_KEY;
-    
-    if (!projectId || !apiKey) {
-      return res.status(200).json({ success: false, error: 'Firebase not configured' });
-    }
-
-    // Auth with Firebase
-    let idToken = '';
-    const webhookEmail = process.env.WEBHOOK_AUTH_EMAIL;
-    const webhookPassword = process.env.WEBHOOK_AUTH_PASSWORD;
-    
-    if (webhookEmail && webhookPassword) {
-      const authRes = await fetch(
-        `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: webhookEmail, password: webhookPassword, returnSecureToken: true }),
-        }
-      );
-      const authData = await authRes.json();
-      if (authData.idToken) idToken = authData.idToken;
-    }
-    
-    if (!idToken) {
-      const anonRes = await fetch(
-        `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ returnSecureToken: true }),
-        }
-      );
-      const anonData = await anonRes.json();
-      if (anonData.idToken) idToken = anonData.idToken;
-      else return res.status(200).json({ success: false, error: 'Firebase auth failed' });
-    }
-
     // ── Step 3: Process each email ──
     const results = [];
     
@@ -559,7 +552,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           /google\.com|firebase|onesignal|usercentrics|courier\.com/i,
           /mailchimp|sendgrid|twilio|base44|hubspot|intercom/i,
           /zendesk|freshdesk|slack|github|gitlab|bitbucket/i,
-          /team@|news@|info@|hello@|support@|digest@|updates@/i,
+          /team@|news@|digest@|updates@/i,
           /stripe\.com|paypal\.com|xero\.com|quickbooks|invoiced\.com/i,
           /failed-payments|invoice\+|billing@|accounts@|payments@/i,
           /no-?reply@.*microsoft|no-?reply@.*apple\.com|@amazon\.com/i,
@@ -590,15 +583,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         
         // Parse based on detected software
         const parsed = parseEmail(subject, body, from, detected.software);
-        
+
+        // OpenRouter AI enrichment — fills any missing fields
+        const aiFields = await aiEnrichEmail(subject, body);
+        if (aiFields.tenantName && !parsed.tenantName) parsed.tenantName = aiFields.tenantName;
+        if (aiFields.tenantPhone && !parsed.tenantPhone) parsed.tenantPhone = aiFields.tenantPhone;
+        if (aiFields.tenantEmail && !parsed.tenantEmail) parsed.tenantEmail = aiFields.tenantEmail;
+        if (aiFields.propertyAddress && !parsed.propertyAddress) parsed.propertyAddress = aiFields.propertyAddress;
+        if (aiFields.issueDescription && !parsed.issueDescription) parsed.issueDescription = aiFields.issueDescription;
+        if (aiFields.preferredDate && !parsed.preferredDate) parsed.preferredDate = aiFields.preferredDate;
+
         // Classify job type and urgency
-        const jobType = parsed.jobType
+        const jobType = (aiFields.jobType as any) || (parsed.jobType
           ? (/smoke/i.test(parsed.jobType) ? 'SMOKE_ALARM' : classifyJobType(parsed.jobType))
-          : classifyJobType(combined);
-        
-        const urgency = parsed.urgency
+          : classifyJobType(combined));
+
+        const urgency = (aiFields.urgency as any) || (parsed.urgency
           ? classifyUrgency(parsed.urgency)
-          : classifyUrgency(combined);
+          : classifyUrgency(combined));
         
         // Build title
         const titleAddr = parsed.propertyAddress ? parsed.propertyAddress.split(',')[0] : '';
@@ -638,26 +640,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           gmailMessageId: message.id,
         };
         
-        // Save to Firestore
-        const fields: any = {};
-        for (const [key, value] of Object.entries(newJob)) {
-          fields[key] = toFirestoreValue(value);
+        // Save to D1
+        const docId = newId();
+        const jobToSave: any = { ...newJob, id: docId };
+        try {
+          if (req.env?.DB) {
+            const db = getDb(req.env);
+            await db.prepare(
+              `INSERT INTO jobs (id, data, status, type, urgency, property_address, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+            ).bind(
+              docId, JSON.stringify(jobToSave),
+              jobToSave.status || 'INTAKE', jobToSave.type || '',
+              jobToSave.urgency || 'NORMAL', jobToSave.propertyAddress || '',
+              now.toISOString(), now.toISOString()
+            ).run();
+          } else {
+            console.warn('[EmailPoll] No DB binding — job not persisted');
+          }
+        } catch (dbErr: any) {
+          console.error(`[EmailPoll] D1 save failed for "${subject}":`, dbErr.message);
+          results.push({ gmailId: message.id, error: `D1 save failed: ${dbErr.message}` });
+          // Do NOT mark as read — will retry on next poll
+          continue;
         }
-        
-        const firestoreUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/jobs?key=${apiKey}`;
-        const fsRes = await fetch(firestoreUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${idToken}`,
-          },
-          body: JSON.stringify({ fields }),
-        });
-        
-        const fsResult = await fsRes.json();
-        const docId = fsResult.name?.split('/').pop() || 'unknown';
-        
-        // Mark email as read
+
+        // Mark email as read ONLY after successful D1 save
         await markAsRead(accessToken, message.id);
         
         results.push({

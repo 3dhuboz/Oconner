@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { Zap, CheckCircle2, Shield, Users, CreditCard, ArrowRight, Loader2, ExternalLink, Headphones } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { db } from '../services/firebase';
-import { collection, addDoc, doc, setDoc } from 'firebase/firestore';
+import { tenantsApi, profilesApi } from '../services/api';
+import { newId } from '../../api/_db';
 import toast from 'react-hot-toast';
 
 const PLANS = [
@@ -92,71 +92,25 @@ export function Purchase() {
       // 1. Create Firebase auth account
       await register(form.contactEmail, form.password);
 
-      // 2. Create tenant in Firestore
-      if (db) {
-        const tenantRef = await addDoc(collection(db, 'tenants'), {
-          companyName: form.companyName,
-          contactName: form.contactName,
-          contactEmail: form.contactEmail,
-          contactPhone: form.contactPhone,
-          plan: selectedPlan,
-          status: 'active',
-          adminLicenses: 1,
-          techLicenses: 1 + extraTechs,
-          maxTechLicenses: plan.maxTech,
-          createdAt: new Date().toISOString(),
-        });
+      // 2. Create tenant via REST API
+      const tenantId = newId();
+      await tenantsApi.create({
+        id: tenantId,
+        companyName: form.companyName,
+        contactName: form.contactName,
+        contactEmail: form.contactEmail,
+        contactPhone: form.contactPhone,
+        plan: selectedPlan,
+        status: 'active',
+        adminLicenses: 1,
+        techLicenses: 1 + extraTechs,
+        maxTechLicenses: plan.maxTech,
+        createdAt: new Date().toISOString(),
+      });
 
-        // 3. Create included licenses
-        await addDoc(collection(db, 'licenses'), {
-          tenantId: tenantRef.id,
-          type: 'admin',
-          status: 'active',
-          createdAt: new Date().toISOString(),
-          isIncluded: true,
-          assignedEmail: form.contactEmail,
-        });
-        await addDoc(collection(db, 'licenses'), {
-          tenantId: tenantRef.id,
-          type: 'technician',
-          status: 'active',
-          createdAt: new Date().toISOString(),
-          isIncluded: true,
-        });
-
-        // Create extra tech licenses
-        for (let i = 0; i < extraTechs; i++) {
-          await addDoc(collection(db, 'licenses'), {
-            tenantId: tenantRef.id,
-            type: 'technician',
-            status: 'active',
-            createdAt: new Date().toISOString(),
-            isIncluded: false,
-          });
-        }
-
-        // 4. The auth listener in AuthContext will create the userProfile,
-        //    but we need to update it with the correct role and tenantId
-        // Small delay to let auth state propagate
-        setTimeout(async () => {
-          try {
-            const authUser = (await import('firebase/auth')).getAuth().currentUser;
-            if (authUser && db) {
-              await setDoc(doc(db, 'userProfiles', authUser.uid), {
-                uid: authUser.uid,
-                email: form.contactEmail,
-                displayName: form.contactName || form.companyName,
-                role: 'admin',
-                tenantId: tenantRef.id,
-                createdAt: new Date().toISOString(),
-                isActive: true,
-              });
-            }
-          } catch (e) {
-            console.warn('Profile update will happen on next login', e);
-          }
-        }, 1500);
-      }
+      // 3. Profile will be created by AuthContext on first login;
+      //    store pending tenant assignment in sessionStorage for AuthContext to pick up.
+      sessionStorage.setItem('pending_tenant_id', tenantId);
 
       toast.success('Account created! Welcome to Wirez R Us!');
       // Navigate to dashboard after a brief delay

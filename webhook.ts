@@ -1,21 +1,7 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import type { AppRequest, AppResponse } from './api/_handler';
 import Stripe from 'stripe';
 
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
-
-async function getRawBody(req: VercelRequest): Promise<Buffer> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of req) {
-    chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
-  }
-  return Buffer.concat(chunks);
-}
-
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: AppRequest, res: AppResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -25,11 +11,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-  const sig = req.headers['stripe-signature'] as string;
+  const sig = req.headers.get ? req.headers.get('stripe-signature') : (req.headers as any)['stripe-signature'];
 
   try {
-    const rawBody = await getRawBody(req);
-    const event = stripe.webhooks.constructEvent(rawBody, sig, process.env.STRIPE_WEBHOOK_SECRET);
+    const rawBody: string | Buffer = typeof req.body === 'string' || Buffer.isBuffer(req.body)
+      ? req.body
+      : JSON.stringify(req.body);
+    const event = stripe.webhooks.constructEvent(rawBody as any, sig as string, process.env.STRIPE_WEBHOOK_SECRET);
 
     switch (event.type) {
       case 'checkout.session.completed':

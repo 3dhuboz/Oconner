@@ -1,0 +1,52 @@
+name = "wirez-r-us"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# Static assets served by Cloudflare Pages
+pages_build_output_dir = "dist"
+
+# Cron trigger — replaces Vercel cron for email polling
+[triggers]
+crons = ["*/5 * * * *"]
+
+# Cloudflare D1 database (replaces Firebase Firestore)
+[[d1_databases]]
+binding = "DB"
+database_name = "wirez-r-us-db"
+database_id = ""   # set after: wrangler d1 create wirez-r-us-db
+
+# Cloudflare R2 bucket (replaces Firebase Storage)
+[[r2_buckets]]
+binding = "R2"
+bucket_name = "wirez-r-us-uploads"
+
+# Environment variables (non-secret — secrets go in Cloudflare dashboard)
+[vars]
+APP_URL = "https://wirezrus.pages.dev"
+GMAIL_ADDRESS = "steve061278@gmail.com"
+COMPANY_PHONE = "1300 WIREZ US"
+
+# ── How to deploy ────────────────────────────────────────────────────────────
+# 1. Install Wrangler:  npm install -g wrangler
+# 2. Login:             wrangler login
+# 3. Build:             npm run build
+# 4. Deploy:            wrangler pages deploy dist
+#
+# ── Required secrets (set via dashboard or CLI) ──────────────────────────────
+# wrangler secret put CLERK_SECRET_KEY
+# wrangler secret put VITE_CLERK_PUBLISHABLE_KEY
+# wrangler secret put GMAIL_CLIENT_ID
+# wrangler secret put GMAIL_CLIENT_SECRET
+# wrangler secret put GMAIL_REFRESH_TOKEN
+# wrangler secret put RESEND_API_KEY
+# wrangler secret put RESEND_FROM_EMAIL
+# wrangler secret put OPENROUTER_API_KEY
+# wrangler secret put TWILIO_ACCOUNT_SID
+# wrangler secret put TWILIO_AUTH_TOKEN
+# wrangler secret put TWILIO_PHONE_NUMBER
+# wrangler secret put STRIPE_SECRET_KEY
+# wrangler secret put STRIPE_WEBHOOK_SECRET
+# wrangler secret put XERO_CLIENT_ID
+# wrangler secret put XERO_CLIENT_SECRET
+# wrangler secret put CRON_SECRET
+# wrangler secret put VITE_GOOGLE_MAPS_API_KEY

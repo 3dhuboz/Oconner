@@ -2,8 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Electrician, CatalogPart } from '../types';
 import { Package, Search, Plus, Minus, BarChart3, ScanBarcode, RefreshCw, ChevronDown, ChevronRight, Truck, Warehouse, ArrowRight, ShoppingCart } from 'lucide-react';
 import { cn } from '../utils';
-import { db } from '../services/firebase';
-import { collection, onSnapshot, doc, setDoc, addDoc, getDoc, updateDoc } from 'firebase/firestore';
+import { stockApi } from '../services/api';
 
 const HQ_ID = '__HQ__';
 const HQ_NAME = 'HQ Warehouse';
@@ -43,34 +42,29 @@ interface StocktakeProps {
   partsCatalog: CatalogPart[];
 }
 
-// ─── Helper: upsert a stock doc (increment or create) ──────────
+// ─── Helper: upsert a stock item via REST API ──────────────
 async function upsertStock(
   locationId: string,
   locationName: string,
   part: CatalogPart,
   qty: number,
+  currentStock: any[],
 ) {
-  if (!db) return;
   const stockKey = `${locationId}_${part.id}`;
-  const stockRef = doc(db, 'techStock', stockKey);
-  const snap = await getDoc(stockRef);
-  if (snap.exists()) {
-    const current = snap.data().quantity || 0;
-    await updateDoc(stockRef, { quantity: Math.max(0, current + qty), lastUpdated: new Date().toISOString() });
-  } else {
-    await setDoc(stockRef, {
-      id: stockKey,
-      partId: part.id,
-      partName: part.name,
-      barcode: part.barcode || null,
-      technicianId: locationId,
-      technicianName: locationName,
-      quantity: Math.max(0, qty),
-      sellPrice: part.sellPrice ?? part.defaultCost,
-      costPrice: part.costPrice ?? part.defaultCost,
-      lastUpdated: new Date().toISOString(),
-    });
-  }
+  const existing = currentStock.find(s => s.id === stockKey);
+  const current = existing?.quantity || 0;
+  await stockApi.upsertItem(stockKey, {
+    id: stockKey,
+    partId: part.id,
+    partName: part.name,
+    barcode: part.barcode || null,
+    technicianId: locationId,
+    technicianName: locationName,
+    quantity: Math.max(0, current + qty),
+    sellPrice: part.sellPrice ?? part.defaultCost,
+    costPrice: part.costPrice ?? part.defaultCost,
+    lastUpdated: new Date().toISOString(),
+  });
 }
 
 export function Stocktake({ electricians, partsCatalog }: StocktakeProps) {
@@ -91,23 +85,27 @@ export function Stocktake({ electricians, partsCatalog }: StocktakeProps) {
   const [formSupplier, setFormSupplier] = useState('');
   const [formSaving, setFormSaving] = useState(false);
 
-  // ─── Firestore listeners ────────────────────────────────────
+  // ─── Poll stock + movements every 30s ────────────────────────────
   useEffect(() => {
-    if (!db) return;
-    const unsub = onSnapshot(collection(db, 'techStock'), (snap) => {
-      setStock(snap.docs.map(d => ({ id: d.id, ...d.data() } as StockItem)));
-    }, () => {});
-    return unsub;
+    const fetch = async () => {
+      try { setStock((await stockApi.listItems()) as StockItem[]); } catch {}
+    };
+    fetch();
+    const id = setInterval(fetch, 30_000);
+    return () => clearInterval(id);
   }, []);
 
   useEffect(() => {
-    if (!db) return;
-    const unsub = onSnapshot(collection(db, 'stockMovements'), (snap) => {
-      const items = snap.docs.map(d => ({ id: d.id, ...d.data() } as StockMovementItem));
-      items.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-      setMovements(items.slice(0, 150));
-    }, () => {});
-    return unsub;
+    const fetch = async () => {
+      try {
+        const items = (await stockApi.listMovements()) as StockMovementItem[];
+        items.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        setMovements(items.slice(0, 150));
+      } catch {}
+    };
+    fetch();
+    const id = setInterval(fetch, 30_000);
+    return () => clearInterval(id);
   }, []);
 
   // ─── Derived data ───────────────────────────────────────────
@@ -154,13 +152,13 @@ export function Stocktake({ electricians, partsCatalog }: StocktakeProps) {
 
   // Receive delivery into HQ
   const handleReceiveToHQ = async () => {
-    if (!db || !formPartId || formQty < 1) return;
+    if (!formPartId || formQty < 1) return;
     setFormSaving(true);
     const part = partsCatalog.find(p => p.id === formPartId);
     if (!part) { setFormSaving(false); return; }
     try {
-      await upsertStock(HQ_ID, HQ_NAME, part, formQty);
-      await addDoc(collection(db, 'stockMovements'), {
+      await upsertStock(HQ_ID, HQ_NAME, part, formQty, stock);
+      await stockApi.addMovement({
         partId: part.id, partName: part.name, barcode: part.barcode || null,
         technicianId: HQ_ID,
         type: 'stock_in', quantity: formQty,
@@ -174,13 +172,12 @@ export function Stocktake({ electricians, partsCatalog }: StocktakeProps) {
 
   // Issue from HQ to tech (deduct HQ, add to tech)
   const handleIssueToTech = async () => {
-    if (!db || !formPartId || !formTechId || formQty < 1) return;
+    if (!formPartId || !formTechId || formQty < 1) return;
     setFormSaving(true);
     const part = partsCatalog.find(p => p.id === formPartId);
     if (!part) { setFormSaving(false); return; }
     const tech = electricians.find(e => e.id === formTechId);
 
-    // Check HQ has enough
     const hqItem = stock.find(s => s.technicianId === HQ_ID && s.partId === formPartId);
     const hqQty = hqItem?.quantity || 0;
     if (hqQty < formQty) {
@@ -190,12 +187,9 @@ export function Stocktake({ electricians, partsCatalog }: StocktakeProps) {
     }
 
     try {
-      // Deduct from HQ
-      await upsertStock(HQ_ID, HQ_NAME, part, -formQty);
-      // Add to tech
-      await upsertStock(formTechId, tech?.name || formTechId, part, formQty);
-      // Log transfer
-      await addDoc(collection(db, 'stockMovements'), {
+      await upsertStock(HQ_ID, HQ_NAME, part, -formQty, stock);
+      await upsertStock(formTechId, tech?.name || formTechId, part, formQty, stock);
+      await stockApi.addMovement({
         partId: part.id, partName: part.name, barcode: part.barcode || null,
         technicianId: formTechId,
         type: 'transfer', quantity: formQty,
@@ -210,15 +204,15 @@ export function Stocktake({ electricians, partsCatalog }: StocktakeProps) {
 
   // Tech picks up from supplier on the road (adds directly to tech, no HQ deduction)
   const handleSupplierPickup = async () => {
-    if (!db || !formPartId || !formTechId || formQty < 1) return;
+    if (!formPartId || !formTechId || formQty < 1) return;
     setFormSaving(true);
     const part = partsCatalog.find(p => p.id === formPartId);
     if (!part) { setFormSaving(false); return; }
     const tech = electricians.find(e => e.id === formTechId);
 
     try {
-      await upsertStock(formTechId, tech?.name || formTechId, part, formQty);
-      await addDoc(collection(db, 'stockMovements'), {
+      await upsertStock(formTechId, tech?.name || formTechId, part, formQty, stock);
+      await stockApi.addMovement({
         partId: part.id, partName: part.name, barcode: part.barcode || null,
         technicianId: formTechId,
         type: 'stock_in', quantity: formQty,
@@ -232,17 +226,16 @@ export function Stocktake({ electricians, partsCatalog }: StocktakeProps) {
 
   // Adjust stock quantity inline (works for HQ or tech)
   const handleAdjust = async (item: StockItem, delta: number) => {
-    if (!db) return;
     const newQty = Math.max(0, item.quantity + delta);
-    const stockRef = doc(db, 'techStock', item.id);
-    await updateDoc(stockRef, { quantity: newQty, lastUpdated: new Date().toISOString() });
-    await addDoc(collection(db, 'stockMovements'), {
+    await stockApi.upsertItem(item.id, { ...item, quantity: newQty, lastUpdated: new Date().toISOString() });
+    await stockApi.addMovement({
       partId: item.partId, partName: item.partName, barcode: item.barcode || null,
       technicianId: item.technicianId,
       type: 'adjust', quantity: delta,
       reason: `Manual ${delta > 0 ? 'increase' : 'decrease'}${item.technicianId === HQ_ID ? ' (HQ)' : ''}`,
       timestamp: new Date().toISOString(),
     });
+    setStock(prev => prev.map(s => s.id === item.id ? { ...s, quantity: newQty } : s));
   };
 
   // ─── Shared stock row renderer ──────────────────────────────

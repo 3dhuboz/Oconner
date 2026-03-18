@@ -86,12 +86,10 @@ export function Pricing() {
     if (parts.length === 0) return;
     const syncToCatalog = async () => {
       try {
-        const { doc, setDoc } = await import('firebase/firestore');
-        const { db } = await import('../services/firebase');
-        if (!db) return;
+        const { partsApi } = await import('../services/api');
         for (const part of parts) {
           const sell = part.sellPrice ?? part.costPrice * (1 + globalMarkup / 100);
-          await setDoc(doc(db, 'partsCatalog', part.partKey), {
+          await partsApi.upsert({
             id: part.partKey,
             name: part.partName,
             defaultCost: sell,
@@ -101,7 +99,7 @@ export function Pricing() {
             sellPrice: sell,
             barcode: part.barcode || null,
             syncedFromPricing: true,
-          }, { merge: true });
+          });
         }
         console.log(`[AutoSync] ${parts.length} parts synced to catalog with sell prices`);
       } catch (err) {
@@ -305,17 +303,14 @@ export function Pricing() {
     }
   };
 
-  // Sync all pricing items to Parts Catalog (Firestore partsCatalog collection)
+  // Sync all pricing items to Parts Catalog (D1 parts table)
   const handleSyncToCatalog = async () => {
     setSyncing(true);
     try {
-      const { doc, setDoc } = await import('firebase/firestore');
-      const { db } = await import('../services/firebase');
-      if (!db) throw new Error('Firestore not available');
-
+      const { partsApi } = await import('../services/api');
       let synced = 0;
       for (const part of parts) {
-        const catalogPart = {
+        await partsApi.upsert({
           id: part.partKey,
           name: part.partName,
           defaultCost: getSellPrice(part),
@@ -325,8 +320,7 @@ export function Pricing() {
           sellPrice: getSellPrice(part),
           barcode: part.barcode || null,
           syncedFromPricing: true,
-        };
-        await setDoc(doc(db, 'partsCatalog', part.partKey), catalogPart, { merge: true });
+        });
         synced++;
       }
       alert(`Synced ${synced} parts to the Parts Catalog. Field techs can now access them.`);

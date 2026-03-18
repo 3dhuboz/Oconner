@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import type { AppRequest, AppResponse } from '../_handler';
 
 interface JobInput {
   id: string;
@@ -43,7 +43,7 @@ function clusterBySuburb(jobs: JobInput[]): Map<string, JobInput[]> {
   return clusters;
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: AppRequest, res: AppResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }

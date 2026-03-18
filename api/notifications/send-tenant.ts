@@ -1,35 +1,28 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import type { AppRequest, AppResponse } from '../_handler';
 import twilio from 'twilio';
+import { Resend } from 'resend';
 
-// ─── Send email via a simple fetch to a transactional email service ──
-// Falls back to simulation if no email provider configured
+// ─── Send email via Resend ──────────────────────────────────────────────────
 async function sendEmail(to: string, subject: string, htmlBody: string): Promise<{ sent: boolean; simulated: boolean }> {
-  // Check for SendGrid
-  const sgKey = process.env.SENDGRID_API_KEY;
-  const fromEmail = process.env.SENDGRID_FROM_EMAIL || process.env.NOTIFICATION_FROM_EMAIL || 'jobs@wireznrus.com.au';
+  const resendKey = process.env.RESEND_API_KEY;
+  const fromEmail = process.env.RESEND_FROM_EMAIL || 'jobs@wireznrus.com.au';
 
-  if (sgKey) {
+  if (resendKey) {
     try {
-      const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${sgKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          personalizations: [{ to: [{ email: to }] }],
-          from: { email: fromEmail, name: 'Wirez R Us' },
-          subject,
-          content: [{ type: 'text/html', value: htmlBody }],
-        }),
+      const resend = new Resend(resendKey);
+      const { error } = await resend.emails.send({
+        from: `Wirez R Us <${fromEmail}>`,
+        to,
+        subject,
+        html: htmlBody,
       });
-      if (res.ok || res.status === 202) {
-        console.log(`[Email Sent] To: ${to} | Subject: ${subject}`);
+      if (!error) {
+        console.log(`[Email Sent via Resend] To: ${to} | Subject: ${subject}`);
         return { sent: true, simulated: false };
       }
-      console.error(`[Email Error] ${res.status}: ${await res.text()}`);
+      console.error(`[Resend Error]`, error);
     } catch (err: any) {
-      console.error('[Email Error]', err.message);
+      console.error('[Resend Error]', err.message);
     }
   }
 
@@ -188,7 +181,7 @@ function buildContent(type: string, data: any): { smsBody: string; emailSubject:
 }
 
 // ─── Main handler ──
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: AppRequest, res: AppResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }

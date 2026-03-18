@@ -32,11 +32,7 @@ export function Login() {
       await login(email, password);
       toast.success('Logged in successfully!');
     } catch (err: any) {
-      if (err.message === 'Firebase not initialized') {
-        setError('System configuration error: Firebase is not connected. Please contact support.');
-      } else {
-        setError(err.message || 'Failed to login. Please check your credentials.');
-      }
+      setError(err.errors?.[0]?.longMessage || err.message || 'Failed to sign in. Please check your credentials.');
     } finally {
       setIsSubmitting(false);
     }

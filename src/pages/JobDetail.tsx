@@ -184,6 +184,12 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
       toast.error('Please select a proposed entry date and time.');
       return;
     }
+    const missingFields: string[] = [];
+    if (!job.tenantName) missingFields.push('Tenant Name');
+    if (!job.propertyAddress) missingFields.push('Property Address');
+    if (missingFields.length > 0) {
+      toast(`Form 9 will be generated but missing: ${missingFields.join(', ')}. Fill in job details for a complete form.`, { icon: '⚠️' });
+    }
 
     try {
       // Call server-side endpoint to generate Form 9 PDF
@@ -196,7 +202,8 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
           tenantEmail: job.tenantEmail,
           propertyManagerEmail: job.propertyManagerEmail,
           proposedEntryDate,
-          jobId: job.id
+          jobId: job.id,
+          jobType: job.type
         })
       });
 
@@ -900,12 +907,49 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
                 Move to Scheduling
               </button>
             )}
-            {job.status === 'SCHEDULING' && (
-              <button onClick={() => handleStatusChange('DISPATCHED')} className="btn-primary text-xs sm:text-sm">
-                Dispatch Electrician
+            {job.status === 'SCHEDULING' && job.scheduledDate && (job.tenantPhone || job.tenantEmail) && (
+              <button
+                disabled={sendingTenantNotif}
+                onClick={async () => {
+                  if (!job.tenantPhone && !job.tenantEmail) { toast.error('No tenant contact — add details first'); return; }
+                  setSendingTenantNotif(true);
+                  try {
+                    const schedDate = new Date(job.scheduledDate!);
+                    const endTime = new Date(schedDate.getTime() + 2 * 60 * 60 * 1000);
+                    const res = await fetch('/api/notifications/send-tenant', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        type: 'schedule_confirmation',
+                        tenantPhone: job.tenantPhone || '',
+                        tenantEmail: job.tenantEmail || '',
+                        tenantName: job.tenantName || '',
+                        propertyAddress: job.propertyAddress || '',
+                        scheduledDate: format(schedDate, 'EEEE d MMMM yyyy'),
+                        scheduledTime: `${format(schedDate, 'h:mm a')} – ${format(endTime, 'h:mm a')}`,
+                        jobId: job.id,
+                      }),
+                    });
+                    const data = await res.json();
+                    updateJob(job.id, { status: 'DISPATCHED' as any, tenantNotifiedAt: new Date().toISOString(), tenantNotificationType: 'schedule_confirmation' } as any);
+                    toast.success(`Tenant notified${data.sms?.simulated || data.email?.simulated ? ' (simulated)' : ''} — job dispatched`);
+                  } catch (err) {
+                    toast.error('Failed to send tenant notification');
+                  } finally {
+                    setSendingTenantNotif(false);
+                  }
+                }}
+                className="btn-primary text-xs sm:text-sm flex items-center gap-1.5 disabled:opacity-50"
+              >
+                <Send className="w-3.5 h-3.5" /> Schedule & Notify Tenant
               </button>
             )}
-            {job.status === 'DISPATCHED' && !isAdmin && (
+            {job.status === 'SCHEDULING' && (
+              <button onClick={() => handleStatusChange('DISPATCHED')} className="px-3 sm:px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs sm:text-sm font-medium transition-colors">
+                Dispatch (Skip Notification)
+              </button>
+            )}
+            {job.status === 'DISPATCHED' && (
               <div className="flex flex-wrap gap-2">
                 <button onClick={() => handleStatusChange('EXECUTION')} className="btn-primary text-xs sm:text-sm">
                   Start Execution
@@ -915,7 +959,7 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
                 </button>
               </div>
             )}
-            {job.status === 'EXECUTION' && !isAdmin && (
+            {job.status === 'EXECUTION' && (
               <div className="flex flex-wrap gap-2">
                 <button onClick={() => handleStatusChange('REVIEW')} className="btn-primary text-xs sm:text-sm">
                   Submit for Review

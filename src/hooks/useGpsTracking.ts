@@ -1,9 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { db } from '../services/firebase';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { locationsApi } from '../services/api';
 
 interface GpsOptions {
-  /** Firestore doc path: techLocations/{uid} */
   uid: string;
   /** Update interval in ms (default 30s) */
   intervalMs?: number;
@@ -22,15 +20,9 @@ export function useGpsTracking({ uid, intervalMs = 30_000, enabled = true }: Gps
   const lastPos = useRef<{ lat: number; lng: number; accuracy: number } | null>(null);
 
   const writeLocation = useCallback(async (lat: number, lng: number, accuracy: number) => {
-    if (!db || !uid) return;
+    if (!uid) return;
     try {
-      await setDoc(doc(db, 'techLocations', uid), {
-        lat,
-        lng,
-        accuracy,
-        updatedAt: serverTimestamp(),
-        uid,
-      }, { merge: true });
+      await locationsApi.upsert(uid, lat, lng, accuracy);
     } catch (err) {
       console.warn('[GPS] Failed to write location:', err);
     }

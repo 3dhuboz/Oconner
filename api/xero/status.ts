@@ -1,8 +1,8 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import type { AppRequest, AppResponse } from '../_handler';
 
 // In serverless, we can't persist state between invocations.
 // This checks if Xero credentials are configured.
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: AppRequest, res: AppResponse) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
   }

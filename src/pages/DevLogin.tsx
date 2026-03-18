@@ -119,7 +119,7 @@ export function DevLogin() {
               Restricted Access. All attempts are logged.
             </p>
             <p className="text-[10px] text-slate-600 font-mono">
-              Project: {import.meta.env.VITE_FIREBASE_PROJECT_ID || 'Not Set'}
+              Auth: {import.meta.env.VITE_CLERK_PUBLISHABLE_KEY ? 'Clerk ✓' : 'Not configured'}
             </p>
           </div>
         </div>

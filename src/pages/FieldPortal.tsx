@@ -5,9 +5,7 @@ import { MapPin, Clock, Camera, Plus, Trash2, CheckCircle2, FileText, ArrowLeft,
 import { useAuth } from '../context/AuthContext';
 import { useGpsTracking } from '../hooks/useGpsTracking';
 import { cn } from '../utils';
-import { storage, db } from '../services/firebase';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { doc, setDoc, getDoc, collection, addDoc, increment, updateDoc } from 'firebase/firestore';
+import { stockApi, storageApi } from '../services/api';
 import jsPDF from 'jspdf';
 import { Html5Qrcode } from 'html5-qrcode';
 
@@ -220,42 +218,34 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
 
     // Log stock movement (deduct from tech's stock)
     const techId = user?.uid || '';
-    if (db && techId && job) {
+    if (techId && job) {
       try {
-        // Record stock_out movement
-        await addDoc(collection(db, 'stockMovements'), {
+        const stockKey = `${techId}_${catalogMatch?.id || barcodePartName.trim()}`;
+        const allStock = await stockApi.listItems().catch(() => []);
+        const existing = allStock.find((s: any) => s.id === stockKey);
+        const current = existing?.quantity || 0;
+        await stockApi.upsertItem(stockKey, {
+          id: stockKey,
           partId: catalogMatch?.id || barcodePartName.trim(),
           partName: barcodePartName.trim(),
           barcode: barcodeValue || null,
           technicianId: techId,
-          type: 'stock_out',
-          quantity: 1,
+          technicianName: user?.email || '',
+          quantity: Math.max(0, current - 1),
+          sellPrice: sellPrice,
+          costPrice: costPrice,
+          lastUpdated: new Date().toISOString(),
+        });
+        await stockApi.addMovement({
+          partId: catalogMatch?.id || barcodePartName.trim(),
+          partName: barcodePartName.trim(),
+          barcode: barcodeValue || null,
+          technicianId: techId,
+          type: 'stock_out', quantity: 1,
           jobId: job.id,
           reason: `Used on job: ${job.propertyAddress || job.title}`,
           timestamp: new Date().toISOString(),
         });
-        // Update tech stock entry (decrement quantity)
-        const stockKey = `${techId}_${catalogMatch?.id || barcodePartName.trim()}`;
-        const stockRef = doc(db, 'techStock', stockKey);
-        const stockSnap = await getDoc(stockRef);
-        if (stockSnap.exists()) {
-          const current = stockSnap.data().quantity || 0;
-          await updateDoc(stockRef, { quantity: Math.max(0, current - 1), lastUpdated: new Date().toISOString() });
-        } else {
-          // Create entry with 0 (just used last one or wasn't tracked yet)
-          await setDoc(stockRef, {
-            id: stockKey,
-            partId: catalogMatch?.id || barcodePartName.trim(),
-            partName: barcodePartName.trim(),
-            barcode: barcodeValue || null,
-            technicianId: techId,
-            technicianName: user?.email || '',
-            quantity: 0,
-            sellPrice: sellPrice,
-            costPrice: costPrice,
-            lastUpdated: new Date().toISOString(),
-          });
-        }
       } catch (err) {
         console.warn('[Stock] Failed to log stock movement:', err);
       }
@@ -369,19 +359,12 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
     const file = e.target.files?.[0];
     if (!file || !job) return;
 
-    if (!storage) {
-      // Fallback: if storage not configured, use blob URL (won't persist to admin)
-      setPhotos(prev => [...prev, URL.createObjectURL(file)]);
-      return;
-    }
-
     setUploading(true);
     try {
       const timestamp = Date.now();
       const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-      const storageRef = ref(storage, `job-photos/${job.id}/${timestamp}_${safeName}`);
-      await uploadBytes(storageRef, file);
-      const downloadUrl = await getDownloadURL(storageRef);
+      const base64 = await storageApi.toBase64(file);
+      const { url: downloadUrl } = await storageApi.upload(`job-photos/${job.id}/${timestamp}_${safeName}`, file.type, base64);
       setPhotos(prev => [...prev, downloadUrl]);
     } catch (err: any) {
       console.error('Photo upload failed:', err);
@@ -584,7 +567,7 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
     <div className="bg-slate-50 pb-4">
       <div className="max-w-lg mx-auto px-4 py-4 space-y-5">
         {/* Back button */}
-        <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-slate-500 hover:text-slate-900 text-sm transition-colors">
+        <button onClick={() => window.history.length > 1 ? navigate(-1) : navigate('/')} className="flex items-center gap-2 text-slate-500 hover:text-slate-900 text-sm transition-colors">
           <ArrowLeft className="w-4 h-4" />
           Back
         </button>
@@ -624,8 +607,6 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
             {job.propertyAddress && job.propertyAddress !== 'See email body' && (
               <a
                 href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(job.propertyAddress)}`}
-                target="_blank"
-                rel="noopener noreferrer"
                 className="mt-2 flex items-center justify-center gap-2 w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm transition-colors shadow-md shadow-blue-600/20 active:scale-[0.98]"
               >
                 <Navigation className="w-5 h-5" /> Navigate to Job

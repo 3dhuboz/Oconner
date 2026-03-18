@@ -8,23 +8,83 @@ import { fileURLToPath } from "url";
 import { requireStripe } from "./src/services/stripe.ts";
 import { PDFDocument } from "pdf-lib";
 import { format } from "date-fns";
+import Database from "better-sqlite3";
+import fs from "fs";
+import emailWebhookHandler from "./api/webhooks/email.ts";
+import pollInboxHandler from "./api/email/poll-inbox.ts";
+import xeroPricingHandler from "./api/xero/pricing.ts";
+import xeroImportCsvHandler from "./api/xero/import-csv.ts";
+import stripeCreatePaymentLinkHandler from "./api/stripe/create-payment-link.ts";
+import stripeWebhookHandler from "./api/stripe/webhook.ts";
+import sendTenantHandler from "./api/notifications/send-tenant.ts";
+import jobsSyncHandler from "./api/jobs/sync.ts";
+import schedulingRunningLateHandler from "./api/scheduling/running-late-check.ts";
+import schedulingOptimiseHandler from "./api/scheduling/optimise-route.ts";
+import dataJobsHandler from "./api/data/jobs.ts";
+import dataElectriciansHandler from "./api/data/electricians.ts";
+import dataPartsHandler from "./api/data/parts.ts";
+import dataProfilesHandler from "./api/data/profiles.ts";
+import dataTenantsHandler from "./api/data/tenants.ts";
+import dataLocationsHandler from "./api/data/locations.ts";
+import dataStockHandler from "./api/data/stock.ts";
+import dataSettingsHandler from "./api/data/settings.ts";
+import storageUploadHandler from "./api/storage/upload.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 dotenv.config();
 
+// ── SQLite / D1 dev setup ───────────────────────────────────────────────────
+// Creates a D1-compatible wrapper around better-sqlite3 so all api/data/* handlers
+// work identically in dev (SQLite file) and prod (Cloudflare D1).
+const DB_PATH = path.resolve('./dev.db');
+const sqliteDb = new Database(DB_PATH);
+sqliteDb.pragma('journal_mode = WAL');
+
+// Run migrations
+const migration = fs.readFileSync(path.resolve('./migrations/001_initial.sql'), 'utf8');
+migration.split(';').map(s => s.trim()).filter(Boolean).forEach(stmt => {
+  try { sqliteDb.prepare(stmt).run(); } catch { /* table exists */ }
+});
+
+// D1-compatible wrapper over better-sqlite3
+const devDb = {
+  prepare(sql: string) {
+    const stmt = sqliteDb.prepare(sql);
+    return {
+      bind(...params: any[]) {
+        return {
+          all: async () => ({ results: stmt.all(...params) }),
+          first: async () => stmt.get(...params) ?? null,
+          run: async () => {
+            const info = stmt.run(...params);
+            return { success: true, meta: { last_row_id: info.lastInsertRowid, changes: info.changes } };
+          },
+        };
+      },
+    };
+  },
+};
+
+// Helper: wrap an api handler with the dev DB in req.env
+function withDb(handler: Function) {
+  return async (req: any, res: any) => {
+    req.env = { DB: devDb };
+    await handler(req, res);
+  };
+}
+
 // In a real production app, these would be stored in a database linked to the user's session.
-// For this live preview, we store them in memory.
 let xeroTokenSet: any = null;
 let xeroTenantId: string | null = null;
-let inboundJobsQueue: any[] = [];
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
   
-  app.use(express.json());
+  app.use(express.json({ limit: '20mb' }));
+  app.use(express.urlencoded({ extended: true }));
 
   // Initialize Xero Client
   const xero = new XeroClient({
@@ -37,6 +97,17 @@ async function startServer() {
     ],
     scopes: 'openid profile email accounting.transactions accounting.contacts offline_access'.split(' ')
   });
+
+  // --- DATA API (Cloudflare D1 in prod / SQLite in dev) ---
+  app.all("/api/data/jobs", withDb(dataJobsHandler));
+  app.all("/api/data/electricians", withDb(dataElectriciansHandler));
+  app.all("/api/data/parts", withDb(dataPartsHandler));
+  app.all("/api/data/profiles", withDb(dataProfilesHandler));
+  app.all("/api/data/tenants", withDb(dataTenantsHandler));
+  app.all("/api/data/locations", withDb(dataLocationsHandler));
+  app.all("/api/data/stock", withDb(dataStockHandler));
+  app.all("/api/data/settings", withDb(dataSettingsHandler));
+  app.all("/api/storage/upload", withDb(storageUploadHandler));
 
   // --- API ROUTES ---
 
@@ -144,41 +215,26 @@ async function startServer() {
     }
   });
 
-  // --- EMAIL INBOX MONITORING (WEBHOOK) ---
-  
-  // 5. Receive Inbound Email (e.g., from SendGrid Inbound Parse or Zapier)
-  app.post("/api/webhooks/email", (req, res) => {
-    const { subject, text, from, tenantName, tenantPhone, address } = req.body;
-    
-    // In a real app, you would parse the email body text to extract the address and tenant details.
-    // Here we use the provided fields or fallback to placeholders.
-    const newJob = {
-      id: `WRU-${Math.floor(1000 + Math.random() * 9000)}`,
-      title: subject || 'New Work Order from Email',
-      type: subject?.toLowerCase().includes('smoke') ? 'SMOKE_ALARM' : 'GENERAL_REPAIR',
-      status: 'INTAKE',
-      createdAt: new Date().toISOString(),
-      tenantName: tenantName || 'Unknown (Parse from email)',
-      tenantPhone: tenantPhone || 'TBD',
-      tenantEmail: 'TBD',
-      propertyAddress: address || 'See email body',
-      propertyManagerEmail: from || 'pm@example.com',
-      contactAttempts: [],
-      materials: [],
-      photos: [],
-      siteNotes: text || 'No description provided.'
-    };
+  // --- EMAIL INBOX MONITORING ---
 
-    inboundJobsQueue.push(newJob);
-    console.log(`[Email Webhook] Received new job: ${newJob.title}`);
-    res.status(200).json({ success: true, job: newJob });
+  // 5. Inbound email webhook (CloudMailIn / SendGrid Inbound Parse)
+  app.post("/api/webhooks/email", withDb(emailWebhookHandler));
+  app.get("/api/webhooks/email", withDb(emailWebhookHandler));
+
+  // 5b. Gmail polling endpoint (mirrors Cloudflare Cron — call GET or POST to trigger)
+  app.get("/api/email/poll-inbox", withDb(pollInboxHandler));
+  app.post("/api/email/poll-inbox", withDb(pollInboxHandler));
+
+  // 5c. Email test (no dedicated handler — simulate)
+  app.post("/api/email/test", (req, res) => {
+    const { to, provider } = req.body || {};
+    console.log(`[Email Test] Simulated send to: ${to} via ${provider || 'default'}`);
+    res.json({ success: true, simulated: true, message: `Test email simulated to ${to} (configure SMTP/SendGrid for real sends)` });
   });
 
-  // 6. Sync new jobs to frontend
-  app.get("/api/jobs/sync", (req, res) => {
-    const jobs = [...inboundJobsQueue];
-    inboundJobsQueue = []; // Clear the queue after sending
-    res.json({ jobs });
+  // 5d. Jobs sync (serverless stub)
+  app.get("/api/jobs/sync", async (req, res) => {
+    await jobsSyncHandler(req as any, res as any);
   });
 
   // --- SMS DISPATCH (TWILIO) ---
@@ -245,6 +301,9 @@ async function startServer() {
 
   // 8. Get active subscription plans
   app.get("/api/stripe/plans", async (req, res) => {
+    if (!process.env.STRIPE_SECRET_KEY) {
+      return res.json({ plans: [], simulated: true });
+    }
     try {
       const prices = await requireStripe().prices.list({
         active: true,
@@ -370,6 +429,42 @@ async function startServer() {
       console.error("Error generating Form 9:", error);
       res.status(500).json({ error: error.message || "Failed to generate Form 9 PDF" });
     }
+  });
+
+  // --- ADDITIONAL API ROUTES (from /api folder) ---
+
+  // Xero: pricing catalog (GET/POST/PATCH)
+  app.all("/api/xero/pricing", withDb(xeroPricingHandler));
+
+  // Xero: import CSV
+  app.post("/api/xero/import-csv", withDb(xeroImportCsvHandler));
+
+  // Xero: disconnect (clear session token)
+  app.post("/api/xero/disconnect", (req, res) => {
+    xeroTokenSet = null;
+    xeroTenantId = null;
+    res.json({ success: true });
+  });
+
+  // Stripe: create payment link
+  app.post("/api/stripe/create-payment-link", async (req, res) => {
+    await stripeCreatePaymentLinkHandler(req as any, res as any);
+  });
+
+  // Stripe: webhook (production handler with D1 update)
+  app.post("/api/stripe/webhook-v2", express.raw({ type: 'application/json' }), withDb(stripeWebhookHandler));
+
+  // Notifications: send tenant SMS/email
+  app.post("/api/notifications/send-tenant", async (req, res) => {
+    await sendTenantHandler(req as any, res as any);
+  });
+
+  // Scheduling
+  app.all("/api/scheduling/running-late-check", async (req, res) => {
+    await schedulingRunningLateHandler(req as any, res as any);
+  });
+  app.all("/api/scheduling/optimise-route", async (req, res) => {
+    await schedulingOptimiseHandler(req as any, res as any);
   });
 
   // --- VITE & SERVING LOGIC ---

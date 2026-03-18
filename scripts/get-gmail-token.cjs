@@ -10,10 +10,12 @@
 
 const http = require('http');
 const https = require('https');
+const fs = require('fs');
+const path = require('path');
 const { URL } = require('url');
 
 const CLIENT_ID = '890226529725-unpc04tn7trche64s1bmk5u9i6ajt5hl.apps.googleusercontent.com';
-const CLIENT_SECRET = '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';
+const CLIENT_SECRET = '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';
 const REDIRECT_URI = 'http://localhost:3333';
 const SCOPE = 'https://www.googleapis.com/auth/gmail.modify';
 
@@ -76,13 +78,32 @@ const server = http.createServer(async (req, res) => {
           console.log('  SUCCESS! Your refresh token:');
           console.log('========================================\n');
           console.log(data.refresh_token);
-          console.log('\nSet this as GMAIL_REFRESH_TOKEN in Vercel.\n');
+
+          // Auto-write to .env
+          const envPath = path.join(__dirname, '..', '.env');
+          try {
+            let envContent = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8') : '';
+            if (envContent.includes('GMAIL_REFRESH_TOKEN=')) {
+              envContent = envContent.replace(/GMAIL_REFRESH_TOKEN=.*/, `GMAIL_REFRESH_TOKEN="${data.refresh_token}"`);
+            } else {
+              envContent += `\nGMAIL_REFRESH_TOKEN="${data.refresh_token}"\n`;
+            }
+            fs.writeFileSync(envPath, envContent, 'utf8');
+            console.log('\n✅ GMAIL_REFRESH_TOKEN written to .env automatically!');
+          } catch (writeErr) {
+            console.warn('\n⚠️  Could not auto-write to .env:', writeErr.message);
+            console.log('Manually add to .env and Vercel:\n  GMAIL_REFRESH_TOKEN=' + data.refresh_token);
+          }
+          console.log('\n📋 Next steps:');
+          console.log('  1. Restart the dev server (npm run dev) to load the new token');
+          console.log('  2. Add GMAIL_REFRESH_TOKEN to Vercel environment variables\n');
 
           res.writeHead(200, { 'Content-Type': 'text/html' });
           res.end(`
             <div style="font-family:sans-serif;max-width:500px;margin:40px auto;text-align:center;">
               <h2 style="color:#16a34a;">Success!</h2>
-              <p>Your refresh token has been printed in the terminal.</p>
+              <p>Your refresh token has been written to <strong>.env</strong> automatically.</p>
+              <p>Also add <code>GMAIL_REFRESH_TOKEN</code> to your Vercel environment variables.</p>
               <p>You can close this tab.</p>
             </div>
           `);

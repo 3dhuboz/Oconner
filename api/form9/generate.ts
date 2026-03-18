@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import type { AppRequest, AppResponse } from '../_handler';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import { format } from 'date-fns';
 import fs from 'fs';
@@ -14,9 +14,10 @@ async function tryFillTemplate(body: any): Promise<Uint8Array | null> {
     const pdfDoc = await PDFDocument.load(uint8);
     const form = pdfDoc.getForm();
 
-    const { tenantName, propertyAddress, proposedEntryDate } = body;
+    const { tenantName, propertyAddress, proposedEntryDate, jobType } = body;
     const today = new Date();
     const entryDateObj = new Date(proposedEntryDate);
+    const isSmokeAlarm = jobType === 'SMOKE_ALARM';
 
     form.getTextField('Name/s of tenant/s').setText(tenantName || '');
     form.getTextField('Address1').setText(propertyAddress || '');
@@ -36,6 +37,27 @@ async function tryFillTemplate(body: any): Promise<Uint8Array | null> {
     form.getTextField('Two hour period from').setText(timeFrom);
     form.getTextField('Two hour period to').setText(timeTo);
     form.getCheckBox('Checkbox3').check();
+
+    // Try to check the smoke alarm entry reason checkbox if this is a smoke alarm job
+    if (isSmokeAlarm) {
+      const smokeAlarmFieldNames = [
+        'Smoke alarm',
+        'Smoke Alarm',
+        'smoke alarm',
+        'CheckboxSmoke',
+        'Checkbox smoke alarm',
+        'Carry out smoke alarm',
+        'Smoke alarm check',
+        'Check smoke alarm',
+      ];
+      for (const fieldName of smokeAlarmFieldNames) {
+        try {
+          form.getCheckBox(fieldName).check();
+          break;
+        } catch { /* field name not in this template, try next */ }
+      }
+    }
+
     form.getTextField('Print name').setText('Wirez R Us');
     form.getTextField('Date of signature (dd/mm/yyyy)').setText(format(today, 'dd/MM/yyyy'));
 
@@ -47,7 +69,11 @@ async function tryFillTemplate(body: any): Promise<Uint8Array | null> {
 }
 
 async function generateFallbackPdf(body: any): Promise<Uint8Array> {
-  const { tenantName, propertyAddress, proposedEntryDate, jobId } = body;
+  const { tenantName, propertyAddress, proposedEntryDate, jobId, jobType } = body;
+  const isSmokeAlarm = jobType === 'SMOKE_ALARM';
+  const entryReason = isSmokeAlarm
+    ? 'Carry out smoke alarm inspection and testing (s. 192)'
+    : 'Carry out routine repairs or maintenance (electrical)';
   const today = new Date();
   const entryDateObj = new Date(proposedEntryDate);
   const timeFrom = format(entryDateObj, 'hh:mm a');
@@ -95,7 +121,7 @@ async function generateFallbackPdf(body: any): Promise<Uint8Array> {
   drawField('Day of Entry', format(entryDateObj, 'EEEE'));
   drawField('Date of Entry', format(entryDateObj, 'dd MMMM yyyy'));
   drawField('Entry Time Window', `${timeFrom} — ${timeTo} (2-hour period)`);
-  drawField('Reason for Entry', 'Carry out routine repairs or maintenance (electrical)');
+  drawField('Reason for Entry', entryReason);
 
   y -= 8;
   page.drawLine({ start: { x: left, y }, end: { x: width - left, y }, thickness: 1, color: rgb(0.8, 0.8, 0.8) });
@@ -126,7 +152,7 @@ async function generateFallbackPdf(body: any): Promise<Uint8Array> {
   return await pdfDoc.save();
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: AppRequest, res: AppResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }

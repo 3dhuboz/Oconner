@@ -5,8 +5,7 @@
  * Also provides a React hook for network status.
  */
 
-import { db } from './firebase';
-import { doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { jobsApi, electriciansApi, partsApi } from './api';
 import { syncQueue, offlineMeta } from './offlineDb';
 import type { SyncQueueItem } from './offlineDb';
 
@@ -55,20 +54,20 @@ async function updatePendingCount() {
 
 // ─── Process a single queue item ────────────────────────────────
 async function processItem(item: SyncQueueItem): Promise<boolean> {
-  if (!db) return false;
-
   try {
-    const docRef = doc(db, item.collection, item.docId);
+    const apiMap: Record<string, any> = { jobs: jobsApi, electricians: electriciansApi, partsCatalog: partsApi };
+    const api = apiMap[item.collection];
+    if (!api) { console.warn(`[Sync] Unknown collection: ${item.collection}`); return true; }
 
     switch (item.operation) {
       case 'set':
-        await setDoc(docRef, item.data || {});
+        await api.create({ ...item.data, id: item.docId });
         break;
       case 'update':
-        await updateDoc(docRef, item.data || {});
+        await api.update(item.docId, item.data || {});
         break;
       case 'delete':
-        await deleteDoc(docRef);
+        await api.delete(item.docId);
         break;
     }
     return true;
@@ -80,7 +79,7 @@ async function processItem(item: SyncQueueItem): Promise<boolean> {
 
 // ─── Flush queue ────────────────────────────────────────────────
 async function flushQueue() {
-  if (isSyncing || !navigator.onLine || !db) return;
+  if (isSyncing || !navigator.onLine) return;
 
   isSyncing = true;
   currentStatus.isSyncing = true;

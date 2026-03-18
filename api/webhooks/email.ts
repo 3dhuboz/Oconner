@@ -1,19 +1,5 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-
-// ─── Firestore REST value encoding ──────────────────────────────
-function toFirestoreValue(val: any): any {
-  if (val === null || val === undefined) return { nullValue: null };
-  if (typeof val === 'string') return { stringValue: val };
-  if (typeof val === 'number') return Number.isInteger(val) ? { integerValue: String(val) } : { doubleValue: val };
-  if (typeof val === 'boolean') return { booleanValue: val };
-  if (Array.isArray(val)) return { arrayValue: { values: val.map(toFirestoreValue) } };
-  if (typeof val === 'object') {
-    const fields: any = {};
-    for (const [k, v] of Object.entries(val)) { fields[k] = toFirestoreValue(v); }
-    return { mapValue: { fields } };
-  }
-  return { stringValue: String(val) };
-}
+import type { AppRequest, AppResponse } from '../_handler';
+import { getDb, newId, decodeRow } from '../_db';
 
 // ─── Regex extraction ──────────────────────────────────────────
 function extractWithRegex(text: string, senderEmail: string) {
@@ -153,18 +139,23 @@ export interface AIExtractionResult {
 }
 
 async function extractWithAI(emailBody: string, subject: string, from: string): Promise<AIExtractionResult | null> {
-  const openaiKey = process.env.OPENAI_API_KEY;
+  const openaiKey = process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY;
   if (!openaiKey) {
-    console.log('[Email Webhook] No OPENAI_API_KEY — skipping AI extraction');
+    console.log('[Email Webhook] No OPENROUTER_API_KEY — skipping AI extraction');
     return null;
   }
 
   try {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    const isOpenRouter = !!process.env.OPENROUTER_API_KEY;
+    const apiUrl = isOpenRouter
+      ? 'https://openrouter.ai/api/v1/chat/completions'
+      : 'https://api.openai.com/v1/chat/completions';
+    const res = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${openaiKey}`,
+        ...(isOpenRouter ? { 'HTTP-Referer': 'https://wireznrus.com.au', 'X-Title': 'Wirez R Us Email Webhook' } : {}),
       },
       body: JSON.stringify({
         model: 'gpt-4o-mini',
@@ -257,17 +248,13 @@ Overall confidence = average of the 5 critical field confidence scores.`
 }
 
 // ─── Main handler ──────────────────────────────────────────────
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: AppRequest, res: AppResponse) {
   // GET = diagnostic check
   if (req.method === 'GET') {
     const checks = {
       endpoint: '✅ /api/webhooks/email is reachable',
-      VITE_FIREBASE_PROJECT_ID: process.env.VITE_FIREBASE_PROJECT_ID ? '✅ set' : '❌ MISSING',
-      VITE_FIREBASE_API_KEY: (process.env.VITE_FIREBASE_API_KEY || process.env.VITE_FB_API_KEY) ? '✅ set' : '❌ MISSING',
-      OPENAI_API_KEY: process.env.OPENAI_API_KEY ? '✅ set' : '⚠️ missing (AI extraction disabled, regex only)',
-      WEBHOOK_AUTH_EMAIL: process.env.WEBHOOK_AUTH_EMAIL ? '✅ set' : '⚠️ missing (will try anonymous auth)',
-      WEBHOOK_AUTH_PASSWORD: process.env.WEBHOOK_AUTH_PASSWORD ? '✅ set' : '⚠️ missing',
-      firebaseReady: (process.env.VITE_FIREBASE_PROJECT_ID && (process.env.VITE_FIREBASE_API_KEY || process.env.VITE_FB_API_KEY)) ? '✅ can write to Firestore' : '❌ CANNOT write to Firestore — add VITE_FIREBASE_PROJECT_ID and VITE_FIREBASE_API_KEY to Vercel env vars',
+      database: req.env?.DB ? '✅ D1 binding present' : '⚠️ No DB binding (jobs will not be saved)',
+      OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY ? '✅ set (AI extraction enabled)' : '⚠️ missing (regex-only extraction)',
     };
     return res.status(200).json({ status: 'Email webhook diagnostic', checks });
   }
@@ -389,182 +376,69 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       newJob.aiConfidence = aiConfidence;
     }
 
-    // ── Step 4: Authenticate with Firebase ──
-    const projectId = process.env.VITE_FIREBASE_PROJECT_ID;
-    const apiKey = process.env.VITE_FIREBASE_API_KEY || process.env.VITE_FB_API_KEY;
-
-    if (!projectId || !apiKey) {
-      console.error('[Email Webhook] Missing VITE_FIREBASE_PROJECT_ID or VITE_FIREBASE_API_KEY');
-      return res.status(200).json({ success: false, warning: 'Firebase not configured on server' });
-    }
-
-    let idToken = '';
-    const webhookEmail = process.env.WEBHOOK_AUTH_EMAIL;
-    const webhookPassword = process.env.WEBHOOK_AUTH_PASSWORD;
-
-    if (webhookEmail && webhookPassword) {
-      const authRes = await fetch(
-        `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: webhookEmail, password: webhookPassword, returnSecureToken: true }),
-        }
-      );
-      const authData = await authRes.json();
-      if (authData.idToken) {
-        idToken = authData.idToken;
-      } else {
-        console.error('[Email Webhook] Auth failed:', authData.error?.message);
-      }
-    }
-
-    if (!idToken) {
-      const anonRes = await fetch(
-        `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ returnSecureToken: true }),
-        }
-      );
-      const anonData = await anonRes.json();
-      if (anonData.idToken) {
-        idToken = anonData.idToken;
-      } else {
-        console.error('[Email Webhook] Anonymous auth failed:', anonData.error?.message);
-        return res.status(200).json({ success: false, warning: 'Authentication failed - enable Anonymous auth in Firebase Console', error: anonData.error?.message });
-      }
-    }
-
-    // ── Step 5: Duplicate detection — check for active jobs at same address ──
+    // ── Step 4: Duplicate detection via D1 ──
     let duplicateJobId: string | null = null;
     let duplicateAction: 'created_new' | 'appended_to_existing' | 'flagged_duplicate' = 'created_new';
 
-    if (propertyAddress) {
+    if (propertyAddress && req.env?.DB) {
       try {
-        // Query Firestore for jobs at this address that are not CLOSED
-        const queryUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents:runQuery?key=${apiKey}`;
-        const queryRes = await fetch(queryUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${idToken}`,
-          },
-          body: JSON.stringify({
-            structuredQuery: {
-              from: [{ collectionId: 'jobs' }],
-              where: {
-                compositeFilter: {
-                  op: 'AND',
-                  filters: [
-                    {
-                      fieldFilter: {
-                        field: { fieldPath: 'propertyAddress' },
-                        op: 'EQUAL',
-                        value: { stringValue: propertyAddress },
-                      },
-                    },
-                    {
-                      fieldFilter: {
-                        field: { fieldPath: 'source' },
-                        op: 'EQUAL',
-                        value: { stringValue: 'email' },
-                      },
-                    },
-                  ],
-                },
-              },
-              limit: 5,
-            },
-          }),
-        });
+        const db = getDb(req.env);
+        const rows = await db.prepare(
+          `SELECT id, data FROM jobs WHERE status != 'CLOSED' AND json_extract(data, '$.propertyAddress') = ? AND json_extract(data, '$.source') = 'email' LIMIT 5`
+        ).bind(propertyAddress).all<{ id: string; data: string }>();
 
-        if (queryRes.ok) {
-          const queryData = await queryRes.json();
-          // Filter to active (non-CLOSED) jobs
-          const activeJobs = (queryData || []).filter((doc: any) => {
-            const status = doc.document?.fields?.status?.stringValue;
-            return status && status !== 'CLOSED';
-          });
+        const activeJobs = rows.results || [];
+        if (activeJobs.length > 0) {
+          const existingJob = decodeRow(activeJobs[0]);
+          const existingId = existingJob.id;
+          console.log(`[Email Webhook] Duplicate detected: active job ${existingId} at ${propertyAddress}`);
 
-          if (activeJobs.length > 0) {
-            const existingDoc = activeJobs[0].document;
-            const existingId = existingDoc.name?.split('/').pop();
-            console.log(`[Email Webhook] Duplicate detected: active job ${existingId} at ${propertyAddress}`);
+          const existingNotes = existingJob.siteNotes || '';
+          const followUpNote = `\n\n━━━ Follow-up email (${now.toISOString()}) ━━━\nFrom: ${from}\nSubject: ${subject}\n${issueDescription || emailContent.substring(0, 500)}`;
+          const updatedJob = { ...existingJob, siteNotes: existingNotes + followUpNote, hasFollowUpEmail: true, lastFollowUpAt: now.toISOString() };
 
-            // Append this email as a follow-up note to the existing job
-            const existingNotes = existingDoc.fields?.siteNotes?.stringValue || '';
-            const followUpNote = `\n\n━━━ Follow-up email (${now.toISOString()}) ━━━\nFrom: ${from}\nSubject: ${subject}\n${issueDescription || emailContent.substring(0, 500)}`;
-            const updatedNotes = existingNotes + followUpNote;
+          await db.prepare(`UPDATE jobs SET data = ?, updated_at = ? WHERE id = ?`)
+            .bind(JSON.stringify(updatedJob), now.toISOString(), existingId).run();
 
-            // Patch the existing job with the follow-up
-            const patchUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/jobs/${existingId}?updateMask.fieldPaths=siteNotes&updateMask.fieldPaths=hasFollowUpEmail&updateMask.fieldPaths=lastFollowUpAt&key=${apiKey}`;
-            await fetch(patchUrl, {
-              method: 'PATCH',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${idToken}`,
-              },
-              body: JSON.stringify({
-                fields: {
-                  siteNotes: { stringValue: updatedNotes },
-                  hasFollowUpEmail: { booleanValue: true },
-                  lastFollowUpAt: { stringValue: now.toISOString() },
-                },
-              }),
-            });
-
-            duplicateJobId = existingId;
-            duplicateAction = 'appended_to_existing';
-            console.log(`[Email Webhook] Follow-up appended to existing job ${existingId}`);
-          }
+          duplicateJobId = existingId;
+          duplicateAction = 'appended_to_existing';
+          console.log(`[Email Webhook] Follow-up appended to existing job ${existingId}`);
         }
       } catch (dupErr: any) {
         console.warn('[Email Webhook] Duplicate check failed (non-fatal):', dupErr.message);
       }
     }
 
-    // If we appended to an existing job, don't create a new one
     if (duplicateJobId && duplicateAction === 'appended_to_existing') {
       return res.status(200).json({
-        success: true,
-        action: 'appended_to_existing',
-        existingJobId: duplicateJobId,
+        success: true, action: 'appended_to_existing', existingJobId: duplicateJobId,
         message: `Follow-up email appended to existing active job ${duplicateJobId} at ${propertyAddress}`,
         extraction: extractionMethod,
       });
     }
 
-    // ── Step 6: Save new job to Firestore ──
+    // ── Step 5: Save new job to D1 ──
     newJob.emailProcessed = true;
     newJob.emailProcessedAt = now.toISOString();
 
-    const fields: any = {};
-    for (const [key, value] of Object.entries(newJob)) {
-      fields[key] = toFirestoreValue(value);
+    const docId = newId();
+    const jobToSave: any = { ...newJob, id: docId };
+
+    if (req.env?.DB) {
+      const db = getDb(req.env);
+      await db.prepare(
+        `INSERT INTO jobs (id, data, status, type, urgency, property_address, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      ).bind(
+        docId, JSON.stringify(jobToSave),
+        jobToSave.status || 'INTAKE', jobToSave.type || '',
+        jobToSave.urgency || 'NORMAL', jobToSave.propertyAddress || '',
+        now.toISOString(), now.toISOString()
+      ).run();
+    } else {
+      console.warn('[Email Webhook] No DB binding — job not persisted');
     }
 
-    const firestoreUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/jobs?key=${apiKey}`;
-    const firestoreRes = await fetch(firestoreUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${idToken}`,
-      },
-      body: JSON.stringify({ fields }),
-    });
-
-    if (!firestoreRes.ok) {
-      const errText = await firestoreRes.text();
-      console.error('[Email Webhook] Firestore REST error:', firestoreRes.status, errText);
-      return res.status(200).json({ success: false, warning: 'Firestore write failed', error: errText });
-    }
-
-    const result = await firestoreRes.json();
-    const docId = result.name?.split('/').pop() || 'unknown';
     console.log(`[Email Webhook] Job saved: ${docId} | Type: ${jobType} | Urgency: ${urgency} | Method: ${extractionMethod}`);
-
     return res.status(200).json({ success: true, jobId: docId, action: 'created_new', extraction: extractionMethod });
 
   } catch (err: any) {

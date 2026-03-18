@@ -1,4 +1,5 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import type { AppRequest, AppResponse } from '../_handler';
+import { getDb, safeJson } from '../_db';
 
 /**
  * Rexel / Supplier CSV Import Endpoint
@@ -142,55 +143,8 @@ function detectSupplier(csvText: string): string {
   return 'Unknown';
 }
 
-// ─── Firestore helpers (duplicated from pricing.ts for dry-run lookups) ──
-function fromFV(fv: any): any {
-  if (!fv) return null;
-  if ('stringValue' in fv) return fv.stringValue;
-  if ('integerValue' in fv) return Number(fv.integerValue);
-  if ('doubleValue' in fv) return fv.doubleValue;
-  if ('booleanValue' in fv) return fv.booleanValue;
-  if ('nullValue' in fv) return null;
-  if ('arrayValue' in fv) return (fv.arrayValue.values || []).map(fromFV);
-  if ('mapValue' in fv) {
-    const obj: any = {};
-    for (const [k, v] of Object.entries(fv.mapValue.fields || {})) obj[k] = fromFV(v);
-    return obj;
-  }
-  return null;
-}
 
-async function getFirebaseAuth() {
-  const projectId = process.env.VITE_FIREBASE_PROJECT_ID;
-  const apiKey = process.env.VITE_FIREBASE_API_KEY || process.env.VITE_FB_API_KEY;
-  if (!projectId || !apiKey) return null;
-
-  let idToken = '';
-  const email = process.env.WEBHOOK_AUTH_EMAIL;
-  const password = process.env.WEBHOOK_AUTH_PASSWORD;
-  if (email && password) {
-    try {
-      const r = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, returnSecureToken: true }),
-      });
-      const d = await r.json();
-      if (d.idToken) idToken = d.idToken;
-    } catch { /* fallback to anon */ }
-  }
-  if (!idToken) {
-    try {
-      const r = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${apiKey}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ returnSecureToken: true }),
-      });
-      const d = await r.json();
-      if (d.idToken) idToken = d.idToken;
-    } catch { return null; }
-  }
-  return idToken ? { projectId, apiKey, idToken } : null;
-}
-
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: AppRequest, res: AppResponse) {
   if (req.method === 'GET') {
     return res.status(200).json({
       endpoint: '/api/xero/import-csv',
@@ -299,18 +253,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // DRY RUN — parse + compare against existing catalog, no writes
     // ═══════════════════════════════════════════════════════════════
     if (dryRun) {
-      const auth = await getFirebaseAuth();
+      const db = req.env?.DB ? getDb(req.env) : null;
       const preview: Array<{
-        partName: string;
-        partKey: string;
-        newPrice: number;
-        oldPrice: number | null;
-        changePercent: number | null;
-        status: 'new' | 'unchanged' | 'price_change';
-        supplier: string;
-        quantity: number;
-        barcode: string | null;
-        itemCode: string | null;
+        partName: string; partKey: string; newPrice: number; oldPrice: number | null;
+        changePercent: number | null; status: 'new' | 'unchanged' | 'price_change';
+        supplier: string; quantity: number; barcode: string | null; itemCode: string | null;
       }> = [];
 
       for (const item of pricingItems) {
@@ -318,23 +265,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         let oldPrice: number | null = null;
         let status: 'new' | 'unchanged' | 'price_change' = 'new';
 
-        if (auth) {
+        if (db) {
           try {
-            const docUrl = `https://firestore.googleapis.com/v1/projects/${auth.projectId}/databases/(default)/documents/parts_catalog/${partKey}?key=${auth.apiKey}`;
-            const existRes = await fetch(docUrl, {
-              headers: { Authorization: `Bearer ${auth.idToken}` },
-            });
-            if (existRes.ok) {
-              const existData = await existRes.json();
-              if (existData.fields?.costPrice) {
-                oldPrice = fromFV(existData.fields.costPrice);
-                if (oldPrice !== null) {
-                  if (Math.abs(oldPrice - item.costPrice) < 0.005) {
-                    status = 'unchanged';
-                  } else {
-                    status = 'price_change';
-                  }
-                }
+            const row = await db.prepare('SELECT data FROM parts_catalog WHERE id = ?').bind(partKey).first<{ data: string }>();
+            if (row) {
+              const existing = safeJson(row.data);
+              oldPrice = existing.costPrice ?? null;
+              if (oldPrice !== null) {
+                status = Math.abs(oldPrice - item.costPrice) < 0.005 ? 'unchanged' : 'price_change';
               }
             }
           } catch { /* part not found = new */ }
@@ -390,9 +328,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ═══════════════════════════════════════════════════════════════
     // REAL IMPORT — forward selected items to pricing API
     // ═══════════════════════════════════════════════════════════════
-    const baseUrl = process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
-      : 'http://localhost:3000';
+    const baseUrl = process.env.APP_URL || 'http://localhost:3000';
 
     const pricingRes = await fetch(`${baseUrl}/api/xero/pricing`, {
       method: 'POST',

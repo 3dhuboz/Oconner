@@ -58,15 +58,28 @@ This system implements the complete **Wirez R Us Operational Workflow**:
 
 3. **Configure environment variables**
    ```bash
-   cp .env.local.example .env.local
+   cp .env.example .env
    ```
-   Edit `.env.local` and add your API keys:
-   - Firebase configuration (required)
+   Edit `.env` and fill in your credentials:
+   - Firebase configuration (required — copy from Firebase Console > Project Settings > Your apps)
+   - Gmail OAuth credentials (required for email polling — see below)
    - Xero credentials (optional)
    - Twilio credentials (optional)
    - Stripe keys (optional)
 
-4. **Run the development server**
+4. **Set up Gmail OAuth for inbox polling**
+   ```bash
+   node scripts/get-gmail-token.cjs
+   ```
+   Open the URL shown in your browser, authorize access, and `GMAIL_REFRESH_TOKEN` will be written to `.env` automatically.
+
+5. **(Optional) Create test accounts**
+   ```bash
+   npx tsx scripts/create-test-accounts.ts
+   ```
+   Creates `testadmin@wirez.test` and `testtech@wirez.test` (password: `TestPass123!`).
+
+6. **Run the development server**
    ```bash
    npm run dev
    ```
@@ -120,7 +133,15 @@ The project includes `vercel.json` configuration for easy deployment.
 - Production start script now uses `tsx` instead of `node`
 - Stripe API version updated to match package version
 - Firebase Auth properly initialized in service layer
-- Created `.env.local.example` template
+- **Email polling**: Vercel Cron calls `GET` but handler only processed `POST` — fixed
+- **Email polling**: Skip patterns were filtering real estate agent emails (info@, support@, hello@) — fixed
+- **Email polling**: Emails were marked as read even when Firestore save failed (lost jobs) — fixed
+- All API routes now properly mounted in dev server (`server.ts`)
+- Stripe `/api/stripe/plans` returns graceful empty response when key not configured
+
+### ⚠️ Firebase Setup Notes
+- **Anonymous Auth** must be enabled in Firebase Console (Authentication → Sign-in methods) for the email polling server to write jobs without `WEBHOOK_AUTH_EMAIL`
+- Without Firebase credentials in `.env`, the app will show the login page but login will fail — fill all `VITE_FIREBASE_*` vars from Firebase Console > Project Settings > Your apps
 
 ## 📄 License
 

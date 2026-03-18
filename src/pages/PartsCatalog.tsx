@@ -2,8 +2,7 @@ import React, { useState, useRef, useCallback } from 'react';
 import { CatalogPart } from '../types';
 import { Plus, Trash2, Package, Search, Edit2, Check, X, ScanBarcode, Upload, Image, Camera, Loader2, CheckCircle2, AlertCircle, StopCircle } from 'lucide-react';
 import { cn } from '../utils';
-import { storage } from '../services/firebase';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { storageApi } from '../services/api';
 import { Html5Qrcode } from 'html5-qrcode';
 
 interface PartsCatalogProps {
@@ -164,10 +163,8 @@ export function PartsCatalog({ parts, setParts }: PartsCatalogProps) {
     if (!file || !editingId) return;
     setUploadingBarcode(true);
     try {
-      const storageRef = ref(storage!, `barcodes/${editingId}_${Date.now()}`);
-      await uploadBytes(storageRef, file);
-      const url = await getDownloadURL(storageRef);
-      // Store the photo URL as the barcode value (prefixed to distinguish)
+      const base64 = await storageApi.toBase64(file);
+      const { url } = await storageApi.upload(`barcodes/${editingId}_${Date.now()}`, file.type, base64);
       setEditBarcode(`photo:${url}`);
     } catch (err) {
       console.error('Barcode photo upload failed:', err);

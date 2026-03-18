@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { APIProvider, Map, AdvancedMarker, InfoWindow } from '@vis.gl/react-google-maps';
-import { db } from '../services/firebase';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { locationsApi } from '../services/api';
 import { Job, Electrician } from '../types';
 import { MapPin, Users, Briefcase, Navigation, Clock, Zap, RefreshCw, Layers } from 'lucide-react';
 import { cn } from '../utils';
@@ -35,19 +34,18 @@ export function LiveMap({ jobs, electricians }: LiveMapProps) {
   const [showTechs, setShowTechs] = useState(true);
   const [lastRefresh, setLastRefresh] = useState(new Date());
 
-  // Listen for tech locations in real-time
+  // Poll tech locations every 15s
   useEffect(() => {
-    if (!db) return;
-    const unsub = onSnapshot(
-      collection(db, 'techLocations'),
-      (snap) => {
-        const locs = snap.docs.map(d => ({ uid: d.id, ...d.data() } as TechLocation));
+    const fetchLocations = async () => {
+      try {
+        const locs = (await locationsApi.list()) as TechLocation[];
         setTechLocations(locs);
         setLastRefresh(new Date());
-      },
-      (err) => console.warn('[LiveMap] Tech locations listener error:', err.message)
-    );
-    return unsub;
+      } catch (err) { console.warn('[LiveMap] Tech locations fetch error'); }
+    };
+    fetchLocations();
+    const id = setInterval(fetchLocations, 15_000);
+    return () => clearInterval(id);
   }, []);
 
   // Active jobs (not closed) for map pins

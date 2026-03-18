@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { ClerkProvider } from '@clerk/react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Login } from './pages/Login';
 import { DevLogin } from './pages/DevLogin';
@@ -28,8 +29,7 @@ import { Pricing } from './pages/Pricing';
 
 
 import { Job, Electrician, CatalogPart } from './types';
-import { db } from './services/firebase';
-import { collection, onSnapshot, doc, updateDoc, deleteDoc, setDoc, addDoc } from 'firebase/firestore';
+import { jobsApi, electriciansApi, partsApi } from './services/api';
 import { Toaster } from 'react-hot-toast';
 import toast from 'react-hot-toast';
 
@@ -64,204 +64,149 @@ function AppContent() {
     });
   }, [user]);
 
-  // Real-time Firestore sync — also persists to IndexedDB + new job notifications
+  // ── Polling: jobs (30s interval) ─────────────────────────────────────────
   const knownJobIds = React.useRef<Set<string>>(new Set());
   const isFirstLoad = React.useRef(true);
 
-  useEffect(() => {
-    if (!user || !db) return;
-    const isAdmin = user.role === 'admin' || user.role === 'dev';
-    const unsubscribe = onSnapshot(
-      collection(db, 'jobs'),
-      (snapshot) => {
-        const jobsData = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Job));
-        setJobs(jobsData);
-        offlineJobs.putAll(jobsData);
+  const fetchJobs = React.useCallback(async () => {
+    if (!user) return;
+    try {
+      const jobsData = (await jobsApi.list()) as Job[];
+      setJobs(jobsData);
+      offlineJobs.putAll(jobsData);
 
-        // Detect genuinely new jobs (skip initial load)
-        if (isFirstLoad.current) {
-          jobsData.forEach(j => knownJobIds.current.add(j.id));
-          isFirstLoad.current = false;
-          return;
-        }
+      if (isFirstLoad.current) {
+        jobsData.forEach(j => knownJobIds.current.add(j.id));
+        isFirstLoad.current = false;
+        return;
+      }
 
-        if (isAdmin) {
-          snapshot.docChanges().forEach(change => {
-            if (change.type === 'added') {
-              const job = { id: change.doc.id, ...change.doc.data() } as Job;
-              if (knownJobIds.current.has(job.id)) return;
-              knownJobIds.current.add(job.id);
-
-              const isUrgent = ['urgent', 'emergency', 'URGENT', 'EMERGENCY'].some(
-                u => (job.urgency || '').toLowerCase().includes(u.toLowerCase()) ||
-                     (job.title || '').toLowerCase().includes('emergency') ||
-                     (job.title || '').toLowerCase().includes('urgent')
-              );
-
-              if (isUrgent) {
-                toast.custom(
-                  (t) => (
-                    <div
-                      className={`${t.visible ? 'animate-enter' : 'animate-leave'} max-w-sm w-full bg-red-600 text-white shadow-2xl rounded-2xl pointer-events-auto flex ring-2 ring-red-400 cursor-pointer`}
-                      onClick={() => { window.location.href = `/jobs/${job.id}`; toast.dismiss(t.id); }}
-                    >
-                      <div className="flex-1 p-4">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-lg">🚨</span>
-                          <span className="font-black uppercase tracking-wide text-sm">Urgent Job Received</span>
-                        </div>
-                        <p className="font-semibold text-sm truncate">{job.title}</p>
-                        <p className="text-red-200 text-xs truncate">{job.propertyAddress}</p>
-                      </div>
-                      <div className="flex items-center pr-4">
-                        <span className="text-red-200 text-xs font-bold">View →</span>
-                      </div>
+      if (user.role === 'admin' || user.role === 'dev') {
+        for (const job of jobsData) {
+          if (knownJobIds.current.has(job.id)) continue;
+          knownJobIds.current.add(job.id);
+          const isUrgent = /urgent|emergency/i.test(`${job.urgency} ${job.title}`);
+          if (isUrgent) {
+            toast.custom(
+              (t) => (
+                <div
+                  className={`${t.visible ? 'animate-enter' : 'animate-leave'} max-w-sm w-full bg-red-600 text-white shadow-2xl rounded-2xl pointer-events-auto flex ring-2 ring-red-400 cursor-pointer`}
+                  onClick={() => { window.location.href = `/jobs/${job.id}`; toast.dismiss(t.id); }}
+                >
+                  <div className="flex-1 p-4">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-lg">🚨</span>
+                      <span className="font-black uppercase tracking-wide text-sm">Urgent Job Received</span>
                     </div>
-                  ),
-                  { duration: 12000, position: 'top-right' }
-                );
-                // Browser notification if permitted
-                if (Notification.permission === 'granted') {
-                  new Notification('🚨 Urgent Job Received', {
-                    body: `${job.title} — ${job.propertyAddress}`,
-                    icon: '/favicon.ico',
-                  });
-                }
-              } else {
-                toast.custom(
-                  (t) => (
-                    <div
-                      className={`${t.visible ? 'animate-enter' : 'animate-leave'} max-w-sm w-full bg-slate-900 text-white shadow-xl rounded-2xl pointer-events-auto flex cursor-pointer`}
-                      onClick={() => { window.location.href = `/jobs/${job.id}`; toast.dismiss(t.id); }}
-                    >
-                      <div className="flex-1 p-4">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-base">📋</span>
-                          <span className="font-bold text-sm">New Job</span>
-                        </div>
-                        <p className="text-slate-200 text-xs truncate">{job.title}</p>
-                        <p className="text-slate-400 text-xs truncate">{job.propertyAddress}</p>
-                      </div>
-                      <div className="flex items-center pr-4">
-                        <span className="text-slate-400 text-xs font-bold">View →</span>
-                      </div>
-                    </div>
-                  ),
-                  { duration: 6000, position: 'top-right' }
-                );
-              }
+                    <p className="font-semibold text-sm truncate">{job.title}</p>
+                    <p className="text-red-200 text-xs truncate">{job.propertyAddress}</p>
+                  </div>
+                  <div className="flex items-center pr-4"><span className="text-red-200 text-xs font-bold">View →</span></div>
+                </div>
+              ),
+              { duration: 12000, position: 'top-right' }
+            );
+            if (Notification.permission === 'granted') {
+              new Notification('🚨 Urgent Job Received', { body: `${job.title} — ${job.propertyAddress}`, icon: '/favicon.ico' });
             }
-          });
+          } else {
+            toast.custom(
+              (t) => (
+                <div
+                  className={`${t.visible ? 'animate-enter' : 'animate-leave'} max-w-sm w-full bg-slate-900 text-white shadow-xl rounded-2xl pointer-events-auto flex cursor-pointer`}
+                  onClick={() => { window.location.href = `/jobs/${job.id}`; toast.dismiss(t.id); }}
+                >
+                  <div className="flex-1 p-4">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-base">📋</span>
+                      <span className="font-bold text-sm">New Job</span>
+                    </div>
+                    <p className="text-slate-200 text-xs truncate">{job.title}</p>
+                    <p className="text-slate-400 text-xs truncate">{job.propertyAddress}</p>
+                  </div>
+                  <div className="flex items-center pr-4"><span className="text-slate-400 text-xs font-bold">View →</span></div>
+                </div>
+              ),
+              { duration: 6000, position: 'top-right' }
+            );
+          }
         }
-      },
-      (error) => {
-        console.warn('[Offline] Firestore jobs listener error, using cached data:', error.message);
       }
-    );
-    return unsubscribe;
+    } catch (err) {
+      console.warn('[Poll] Jobs fetch failed, using cached data');
+    }
   }, [user]);
 
-  // Firestore sync — parts catalog
   useEffect(() => {
-    if (!user || !db) return;
-    const unsubscribe = onSnapshot(
-      collection(db, 'partsCatalog'),
-      (snapshot) => {
-        const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as CatalogPart));
-        setPartsCatalog(data);
-      },
-      (error) => {
-        console.warn('[Offline] Firestore partsCatalog listener error:', error.message);
-      }
-    );
-    return unsubscribe;
+    fetchJobs();
+    const id = setInterval(fetchJobs, 30_000);
+    return () => clearInterval(id);
+  }, [fetchJobs]);
+
+  // ── Polling: parts catalog (60s interval) ────────────────────────────────
+  useEffect(() => {
+    if (!user) return;
+    const fetchParts = async () => {
+      try { setPartsCatalog((await partsApi.list()) as CatalogPart[]); } catch {}
+    };
+    fetchParts();
+    const id = setInterval(fetchParts, 60_000);
+    return () => clearInterval(id);
   }, [user]);
 
-  // Persist parts catalog changes to Firestore
+  // Persist parts catalog changes via REST API
   const setPartsCatalogWithSync = ((updater: React.SetStateAction<CatalogPart[]>) => {
     setPartsCatalog(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
-      // Sync to Firestore
-      if (db) {
-        // Find added/updated
-        for (const part of next) {
-          const old = prev.find(p => p.id === part.id);
-          if (!old || JSON.stringify(old) !== JSON.stringify(part)) {
-            setDoc(doc(db, 'partsCatalog', part.id), part).catch(() => {});
-          }
-        }
-        // Find deleted
-        for (const old of prev) {
-          if (!next.find(p => p.id === old.id)) {
-            deleteDoc(doc(db, 'partsCatalog', old.id)).catch(() => {});
-          }
-        }
+      for (const part of next) {
+        const old = prev.find(p => p.id === part.id);
+        if (!old || JSON.stringify(old) !== JSON.stringify(part)) partsApi.upsert(part).catch(() => {});
+      }
+      for (const old of prev) {
+        if (!next.find(p => p.id === old.id)) partsApi.delete(old.id).catch(() => {});
       }
       return next;
     });
   }) as React.Dispatch<React.SetStateAction<CatalogPart[]>>;
 
+  // ── Polling: electricians (60s interval) ─────────────────────────────────
   useEffect(() => {
-    if (!user || !db) return;
-    const unsubscribe = onSnapshot(
-      collection(db, 'electricians'),
-      (snapshot) => {
-        const electriciansData = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Electrician));
-        setElectricians(electriciansData);
-        offlineElectricians.putAll(electriciansData); // cache locally
-      },
-      (error) => {
-        console.warn('[Offline] Firestore electricians listener error, using cached data:', error.message);
-      }
-    );
-    return unsubscribe;
+    if (!user) return;
+    const fetchElectricians = async () => {
+      try {
+        const data = (await electriciansApi.list()) as Electrician[];
+        setElectricians(data);
+        offlineElectricians.putAll(data);
+      } catch { console.warn('[Poll] Electricians fetch failed, using cached data'); }
+    };
+    fetchElectricians();
+    const id = setInterval(fetchElectricians, 60_000);
+    return () => clearInterval(id);
   }, [user]);
 
   // Offline-aware job update
   const updateJob = async (id: string, updates: Partial<Job>) => {
-    // Optimistic local update
     setJobs(prev => prev.map(j => j.id === id ? { ...j, ...updates } : j));
     const allJobs = await offlineJobs.getAll();
     const existing = allJobs.find((j: any) => j.id === id);
-    if (existing) {
-      await offlineJobs.put({ ...existing, ...updates });
+    if (existing) await offlineJobs.put({ ...existing, ...updates });
+
+    if (navigator.onLine) {
+      try { await jobsApi.update(id, updates); return; }
+      catch (error: any) { console.warn('[Offline] API update failed, queuing:', error.message); }
     }
 
-    // Try Firestore, queue if offline
-    if (navigator.onLine && db) {
-      try {
-        const jobRef = doc(db, 'jobs', id);
-        await updateDoc(jobRef, updates);
-        return;
-      } catch (error: any) {
-        console.warn('[Offline] Firestore update failed, queuing:', error.message);
-      }
-    }
-
-    // Queue for background sync
-    await syncQueue.add({
-      collection: 'jobs',
-      docId: id,
-      operation: 'update',
-      data: updates,
-    });
+    await syncQueue.add({ collection: 'jobs', docId: id, operation: 'update', data: updates });
     toast('Saved offline — will sync when connection returns', { icon: '📡' });
   };
 
   // Admin-only job deletion
   const deleteJob = async (id: string) => {
-    // Remove from local state
     setJobs(prev => prev.filter(j => j.id !== id));
     await offlineJobs.delete(id);
-
-    // Delete from Firestore
-    if (navigator.onLine && db) {
-      try {
-        await deleteDoc(doc(db, 'jobs', id));
-      } catch (error: any) {
-        console.error('[Delete] Firestore delete failed:', error.message);
-        toast.error('Failed to delete from server');
-      }
+    if (navigator.onLine) {
+      try { await jobsApi.delete(id); }
+      catch (error: any) { console.error('[Delete] API delete failed:', error.message); toast.error('Failed to delete from server'); }
     }
   };
 
@@ -378,14 +323,17 @@ function AppContent() {
   );
 }
 function App() {
+  const clerkKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
   return (
-    <Router>
-      <AuthProvider>
-        <AppContentWrapper />
-        <NetworkStatusBar />
-        <Toaster position="bottom-right" />
-      </AuthProvider>
-    </Router>
+    <ClerkProvider publishableKey={clerkKey || ''}>
+      <Router>
+        <AuthProvider>
+          <AppContentWrapper />
+          <NetworkStatusBar />
+          <Toaster position="bottom-right" />
+        </AuthProvider>
+      </Router>
+    </ClerkProvider>
   );
 }
 

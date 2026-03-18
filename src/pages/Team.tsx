@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { Electrician } from '../types';
 import { Users, Plus, Edit2, Save, X, Phone, Mail, Trash2 } from 'lucide-react';
-import { db } from '../services/firebase';
-import { doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { electriciansApi } from '../services/api';
 import toast from 'react-hot-toast';
 
 interface TeamProps {
@@ -39,8 +38,6 @@ export function Team({ electricians, setElectricians }: TeamProps) {
       toast.error('Name and phone are required.');
       return;
     }
-    if (!db) { toast.error('Database not connected'); return; }
-
     const normalisedPhone = normalisePhone(editForm.phone);
 
     setSaving(true);
@@ -52,12 +49,14 @@ export function Team({ electricians, setElectricians }: TeamProps) {
           phone: normalisedPhone,
           email: editForm.email?.trim() || '',
         };
-        await setDoc(doc(db, 'electricians', newElectrician.id), newElectrician);
+        await electriciansApi.create(newElectrician);
+        setElectricians(prev => [...prev, newElectrician]);
         toast.success(`${newElectrician.name} added — phone saved as ${normalisedPhone}`);
         setIsAdding(false);
       } else if (editingId) {
         const updated = { name: editForm.name.trim(), phone: normalisedPhone, email: editForm.email?.trim() || '' };
-        await updateDoc(doc(db, 'electricians', editingId), updated);
+        await electriciansApi.update(editingId, updated);
+        setElectricians(prev => prev.map(e => e.id === editingId ? { ...e, ...updated } : e));
         toast.success(`Technician updated — phone saved as ${normalisedPhone}`);
         setEditingId(null);
       }
@@ -70,10 +69,10 @@ export function Team({ electricians, setElectricians }: TeamProps) {
   };
 
   const handleDelete = async (electrician: Electrician) => {
-    if (!db) { toast.error('Database not connected'); return; }
     if (!window.confirm(`Remove ${electrician.name} from the team? This cannot be undone.`)) return;
     try {
-      await deleteDoc(doc(db, 'electricians', electrician.id));
+      await electriciansApi.delete(electrician.id);
+      setElectricians(prev => prev.filter(e => e.id !== electrician.id));
       toast.success(`${electrician.name} removed`);
     } catch (err: any) {
       toast.error(`Failed to delete: ${err.message}`);
