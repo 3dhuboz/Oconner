@@ -379,6 +379,26 @@ Output ONLY the post text, nothing else. No commentary, no "Here is your post:",
   }
 });
 
+app.post('/api/images/generate', requireAuth, async (c) => {
+  const { prompt } = await c.req.json<{ prompt: string }>();
+  if (!prompt) return c.json({ error: 'Prompt required' }, 400);
+  try {
+    const result = await c.env.AI.run('@cf/black-forest-labs/flux-1-schnell', {
+      prompt,
+      num_steps: 4,
+    }) as { image: string };
+    const binary = atob(result.image);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const key = `products/${crypto.randomUUID()}.png`;
+    await c.env.IMAGES.put(key, bytes, { httpMetadata: { contentType: 'image/png' } });
+    const url = `https://images.oconner.com.au/${key}`;
+    return c.json({ url, key });
+  } catch {
+    return c.json({ error: 'Image generation failed' }, 500);
+  }
+});
+
 app.post('/api/images/upload', requireAuth, async (c) => {
   const formData = await c.req.formData();
   const file = formData.get('file') as File | null;

@@ -134,5 +134,9 @@ export const api = {
       const data = await res.json() as { url: string; key: string };
       return data.url;
     },
+    generate: async (prompt: string): Promise<string> => {
+      const data = await request<{ url: string }>('POST', '/api/images/generate', { prompt });
+      return data.url;
+    },
   },
 };

@@ -69,16 +69,21 @@ export default function ProductsPage() {
     }
   };
 
-  const handleAIGenerate = () => {
+  const handleAIGenerate = async () => {
     if (!editing?.name) { toast('Enter a product name first', 'info'); return; }
     setImgGenerating(true);
-    const prompt = encodeURIComponent(`${editing.name}, premium quality meat, food photography, dark background, restaurant quality, high resolution`);
-    const url = `https://image.pollinations.ai/prompt/${prompt}?width=800&height=600&nologo=true&seed=${Date.now()}`;
-    setImgLoading(true);
     setImgError(false);
-    setEditing((prev) => prev ? { ...prev, imageUrl: url } : prev);
-    toast('AI image generating — preview will appear when ready');
-    setImgGenerating(false);
+    try {
+      const prompt = `${editing.name}, premium quality meat, food photography, dark background, restaurant quality, high resolution`;
+      const url = await api.images.generate(prompt);
+      setImgLoading(true);
+      setEditing((prev) => prev ? { ...prev, imageUrl: url } : prev);
+      toast('AI image generated');
+    } catch {
+      toast('Failed to generate image', 'error');
+    } finally {
+      setImgGenerating(false);
+    }
   };
 
   return (
