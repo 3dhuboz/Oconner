@@ -419,15 +419,14 @@ async function getGmailAccessToken(): Promise<string> {
 
 // ─── Main handler ───────────────────────────────────────────────
 export default async function handler(req: AppRequest, res: AppResponse) {
-  // Cloudflare/Vercel Cron jobs call GET — detect them so we run polling, not diagnostics
+  // Cron jobs call GET — detect them so we run polling, not diagnostics
   const getHeader = (name: string) =>
     typeof req.headers.get === 'function' ? req.headers.get(name) : (req.headers as any)[name];
   const isCronRequest =
-    getHeader('x-vercel-cron') === '1' ||
     getHeader('x-cloudflare-cron') === '1' ||
     (!!process.env.CRON_SECRET && getHeader('authorization') === `Bearer ${process.env.CRON_SECRET}`);
 
-  // GET = diagnostic (with live Gmail test), UNLESS called by Vercel Cron
+  // GET = diagnostic (with live Gmail test), UNLESS called by cron trigger
   if (req.method === 'GET' && !isCronRequest) {
     const checks: any = {
       GMAIL_ADDRESS: process.env.GMAIL_ADDRESS ? `✅ ${process.env.GMAIL_ADDRESS}` : '❌ MISSING',
