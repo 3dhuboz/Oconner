@@ -3,7 +3,7 @@ import { cors } from 'hono/cors';
 import type { Env, AuthUser } from './types';
 import { requireAuth, requireRole, verifyClerkToken } from './middleware/auth';
 import { drizzle } from 'drizzle-orm/d1';
-import { eq, desc, asc } from 'drizzle-orm';
+import { eq, desc, asc, and, gte } from 'drizzle-orm';
 import { orders as ordersTable, customers as customersTable, products as productsTable, deliveryDays as deliveryDaysTable, subscriptions as subscriptionsTable } from '@butcher/db';
 import ordersRouter from './routes/orders';
 import productsRouter from './routes/products';
@@ -117,8 +117,61 @@ app.get('/api/products/:id', async (c) => {
 
 app.get('/api/delivery-days', async (c) => {
   const db = drizzle(c.env.DB);
-  const rows = await db.select().from(deliveryDaysTable).where(eq(deliveryDaysTable.active, true)).orderBy(asc(deliveryDaysTable.date));
+  const { upcoming } = c.req.query();
+  const now = Date.now();
+  const rows = upcoming === 'true'
+    ? await db.select().from(deliveryDaysTable)
+        .where(and(eq(deliveryDaysTable.active, true), eq(deliveryDaysTable.frozen, false), gte(deliveryDaysTable.date, now)))
+        .orderBy(asc(deliveryDaysTable.date))
+    : await db.select().from(deliveryDaysTable)
+        .where(eq(deliveryDaysTable.active, true))
+        .orderBy(asc(deliveryDaysTable.date));
   return c.json(rows);
+});
+
+app.get('/api/orders/:id', async (c) => {
+  const db = drizzle(c.env.DB);
+  const [order] = await db.select().from(ordersTable).where(eq(ordersTable.id, c.req.param('id'))).limit(1);
+  if (!order) return c.json({ error: 'Not found' }, 404);
+  return c.json({ ...order, items: JSON.parse(order.items), deliveryAddress: JSON.parse(order.deliveryAddress) });
+});
+
+app.post('/api/orders', async (c) => {
+  const db = drizzle(c.env.DB);
+  const body = await c.req.json<typeof ordersTable.$inferInsert & { deliveryAddress: object; items: object[]; clerkId?: string }>();
+  const now = Date.now();
+  const orderId = crypto.randomUUID();
+  let customerId = body.customerId;
+  if (!customerId) {
+    const [existing] = await db.select().from(customersTable).where(eq(customersTable.email, body.customerEmail)).limit(1);
+    if (existing) {
+      customerId = existing.id;
+      if (body.clerkId && !existing.clerkId)
+        await db.update(customersTable).set({ clerkId: body.clerkId, updatedAt: now }).where(eq(customersTable.id, existing.id));
+    } else {
+      customerId = crypto.randomUUID();
+      await db.insert(customersTable).values({
+        id: customerId, email: body.customerEmail, name: body.customerName ?? '',
+        phone: body.customerPhone ?? '', clerkId: body.clerkId ?? null,
+        accountType: 'registered', orderCount: 0, totalSpent: 0, blacklisted: false, notes: '', createdAt: now, updatedAt: now,
+      });
+    }
+  }
+  await db.insert(ordersTable).values({ ...body, id: orderId, customerId, items: JSON.stringify(body.items), deliveryAddress: JSON.stringify(body.deliveryAddress), createdAt: now, updatedAt: now });
+  const [day] = await db.select().from(deliveryDaysTable).where(eq(deliveryDaysTable.id, body.deliveryDayId)).limit(1);
+  if (day) await db.update(deliveryDaysTable).set({ orderCount: day.orderCount + 1 }).where(eq(deliveryDaysTable.id, day.id));
+  const [cust] = await db.select().from(customersTable).where(eq(customersTable.id, customerId)).limit(1);
+  if (cust) await db.update(customersTable).set({ orderCount: cust.orderCount + 1, totalSpent: cust.totalSpent + (body.total ?? 0), updatedAt: now }).where(eq(customersTable.id, customerId));
+  return c.json({ id: orderId }, 201);
+});
+
+app.post('/api/subscriptions', async (c) => {
+  const db = drizzle(c.env.DB);
+  const body = await c.req.json<{ email: string; boxId: string; boxName: string; frequency: string; status?: string }>();
+  const now = Date.now();
+  const id = crypto.randomUUID();
+  await db.insert(subscriptionsTable).values({ id, customerId: null, email: body.email, boxId: body.boxId, boxName: body.boxName, frequency: body.frequency, status: body.status ?? 'pending', createdAt: now, updatedAt: now });
+  return c.json({ id }, 201);
 });
 
 app.route('/api/push', pushRouter);
