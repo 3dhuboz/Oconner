@@ -4,7 +4,7 @@
 
 # ⚡ Wirez R Us - Electrical Field Management System
 
-A complete electrical contractor workflow management system built with React, TypeScript, Firebase, and integrated with Xero, Twilio, and Stripe.
+A complete electrical contractor workflow management system built with React 19, TypeScript, Clerk auth, and Cloudflare D1/R2/Pages — integrated with Xero, Twilio, and Stripe.
 
 ## 🎯 Customer Workflow Implementation
 
@@ -12,7 +12,7 @@ This system implements the complete **Wirez R Us Operational Workflow**:
 
 ### Phase 1: Intake & Coordination ✅
 - **Email Monitoring**: Automatic job creation from inbound emails
-- **Job Logging**: All work orders logged in Firebase CRM
+- **Job Logging**: All work orders logged in Cloudflare D1 (SQLite)
 - **Three-Try Contact Rule**: Track contact attempts with tenants
 - **Form 9 Generation**: Automatic RTA Form 9 (Entry Notice) generation and email
 - **Legal Entry Lock-in**: Email tenant + CC property manager with entry time
@@ -39,9 +39,10 @@ This system implements the complete **Wirez R Us Operational Workflow**:
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Node.js 18+ 
-- Firebase account
-- (Optional) Xero, Twilio, Stripe accounts for integrations
+- Node.js 18+
+- [Clerk](https://clerk.com) account (free tier is fine)
+- [Cloudflare](https://cloudflare.com) account (for production: D1 database, R2 storage, Pages)
+- (Optional) Xero, Twilio, Stripe, OpenRouter accounts for integrations
 
 ### Installation
 
@@ -61,8 +62,9 @@ This system implements the complete **Wirez R Us Operational Workflow**:
    cp .env.example .env
    ```
    Edit `.env` and fill in your credentials:
-   - Firebase configuration (required — copy from Firebase Console > Project Settings > Your apps)
+   - Clerk keys (required — from [Clerk Dashboard](https://dashboard.clerk.com) > API Keys)
    - Gmail OAuth credentials (required for email polling — see below)
+   - OpenRouter API key (optional, enables AI email parsing)
    - Xero credentials (optional)
    - Twilio credentials (optional)
    - Stripe keys (optional)
@@ -73,11 +75,8 @@ This system implements the complete **Wirez R Us Operational Workflow**:
    ```
    Open the URL shown in your browser, authorize access, and `GMAIL_REFRESH_TOKEN` will be written to `.env` automatically.
 
-5. **(Optional) Create test accounts**
-   ```bash
-   npx tsx scripts/create-test-accounts.ts
-   ```
-   Creates `testadmin@wirez.test` and `testtech@wirez.test` (password: `TestPass123!`).
+5. **(Development database)** The SQLite dev database (`dev.db`) is auto-created on first run.
+   To seed test data: `npx tsx scripts/create-test-accounts.ts`
 
 6. **Run the development server**
    ```bash
@@ -87,15 +86,18 @@ This system implements the complete **Wirez R Us Operational Workflow**:
 
 ## 🔧 Tech Stack
 
-- **Frontend**: React 19, TypeScript, TailwindCSS, Vite
-- **Backend**: Express.js, Node.js
-- **Database**: Firebase Firestore (real-time)
-- **Authentication**: Firebase Auth
+- **Frontend**: React 19, TypeScript, TailwindCSS v4, Vite
+- **Backend**: Express.js (dev) / Cloudflare Pages Functions (prod)
+- **Database**: Cloudflare D1 (SQLite-compatible) — better-sqlite3 in dev
+- **Storage**: Cloudflare R2 (file uploads)
+- **Authentication**: Clerk
 - **Integrations**:
   - Xero (Accounting & Invoicing)
   - Twilio (SMS Dispatch)
   - Stripe (Billing & Subscriptions)
-  - PDF Generation (jsPDF, pdf-lib)
+  - Resend (Transactional email)
+  - OpenRouter (AI email parsing)
+  - PDF Generation (pdf-lib)
 
 ## 📱 Key Features
 
@@ -111,37 +113,45 @@ This system implements the complete **Wirez R Us Operational Workflow**:
 
 ## 🔐 Security
 
-- Firebase Authentication with custom claims
-- Role-based route protection
-- Environment variable configuration
-- Secure API key management
+- Clerk Authentication with JWT verification
+- Role-based route protection (admin / tech / dev)
+- Environment variable configuration (secrets via Cloudflare dashboard)
+- API keys never exposed to client bundle
 
 ## 📦 Deployment
 
-### Production Build
+### Development
 ```bash
-npm run build
-npm start
+npm run dev
+# Express server + Vite HMR at http://localhost:3000
+# SQLite dev.db created automatically on first run
 ```
 
-### Deploy to Vercel
-The project includes `vercel.json` configuration for easy deployment.
+### Production (Cloudflare Pages)
+```bash
+# 1. Create D1 database
+npx wrangler d1 create wirez-r-us-db
+# Copy the database_id into wrangler.toml
 
-## 🐛 Known Issues & Fixes
+# 2. Run migrations
+npx wrangler d1 execute wirez-r-us-db --file=migrations/001_initial.sql
 
-✅ **Fixed Issues**:
-- Production start script now uses `tsx` instead of `node`
-- Stripe API version updated to match package version
-- Firebase Auth properly initialized in service layer
-- **Email polling**: Vercel Cron calls `GET` but handler only processed `POST` — fixed
-- **Email polling**: Skip patterns were filtering real estate agent emails (info@, support@, hello@) — fixed
-- **Email polling**: Emails were marked as read even when Firestore save failed (lost jobs) — fixed
-- All API routes now properly mounted in dev server (`server.ts`)
-- Stripe `/api/stripe/plans` returns graceful empty response when key not configured
+# 3. Create R2 bucket
+npx wrangler r2 bucket create wirez-r-us-uploads
 
-### ⚠️ Firebase Setup Notes
-- **Anonymous Auth** must be enabled in Firebase Console (Authentication → Sign-in methods) for the email polling server to write jobs without `WEBHOOK_AUTH_EMAIL`
-- Without Firebase credentials in `.env`, the app will show the login page but login will fail — fill all `VITE_FIREBASE_*` vars from Firebase Console > Project Settings > Your apps
+# 4. Set secrets
+npx wrangler secret put CLERK_SECRET_KEY
+# ... (see wrangler.toml for full list)
+
+# 5. Build & deploy
+npm run build
+npx wrangler pages deploy dist
+```
+
+### Email Polling Cron
+Cloudflare Pages doesn't support cron triggers. Choose one of:
+- **Option A**: Set up an external service (e.g. [cron-job.org](https://cron-job.org)) to POST to `/api/email/poll-inbox` every 5 minutes with `Authorization: Bearer <CRON_SECRET>`
+- **Option B**: Create a separate Cloudflare Worker with `[triggers] crons = ["*/5 * * * *"]` that calls the endpoint
 
 ## 📄 License
 
