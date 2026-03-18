@@ -28,7 +28,7 @@ interface LicenseInfo {
 interface AuthContextType {
   user: User | null;
   license: LicenseInfo | null;
-  backendStatus: { firebase: boolean; api: boolean; latency: number };
+  backendStatus: { database: boolean; api: boolean; latency: number };
   login: (email: string, pass: string) => Promise<void>;
   register: (email: string, pass: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -46,9 +46,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const [user, setUser] = useState<User | null>(null);
   const [license, setLicense] = useState<LicenseInfo | null>(null);
-  const [backendStatus, setBackendStatus] = useState({ firebase: true, api: true, latency: 45 });
+  const [backendStatus, setBackendStatus] = useState({ database: true, api: true, latency: 45 });
 
-  // Sync Clerk user → Firestore profile → app user state
+  // Sync Clerk user → D1 profile → app user state
   useEffect(() => {
     if (!clerkLoaded) return;
 
@@ -124,7 +124,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Backend health monitor
   useEffect(() => {
     const interval = setInterval(() => {
-      setBackendStatus(prev => ({ ...prev, firebase: navigator.onLine, api: navigator.onLine, latency: navigator.onLine ? prev.latency : 0 }));
+      setBackendStatus(prev => ({ ...prev, database: navigator.onLine, api: navigator.onLine, latency: navigator.onLine ? prev.latency : 0 }));
     }, 10000);
     return () => clearInterval(interval);
   }, []);

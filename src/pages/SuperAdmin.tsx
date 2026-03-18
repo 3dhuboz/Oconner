@@ -148,7 +148,7 @@ function OverviewTab({ backendStatus, tenants, users, licenses, logs }: any) {
           </h3>
           <div className="space-y-4">
             <StatusRow icon={<Server className="w-3 h-3" />} label="API Latency" value={`${backendStatus.latency}ms`} ok={backendStatus.latency < 100} />
-            <StatusRow icon={<Database className="w-3 h-3" />} label="Firebase" value={backendStatus.firebase ? 'Connected' : 'Disconnected'} ok={backendStatus.firebase} />
+            <StatusRow icon={<Database className="w-3 h-3" />} label="Database (D1)" value={backendStatus.database ? 'Connected' : 'Disconnected'} ok={backendStatus.database} />
             <StatusRow icon={<Wifi className="w-3 h-3" />} label="Connection" value="Stable" ok={true} />
             <StatusRow icon={<CreditCard className="w-3 h-3" />} label="Stripe" value={import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY ? 'Configured' : 'Not Set'} ok={!!import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY} />
           </div>

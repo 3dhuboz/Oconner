@@ -787,8 +787,8 @@ export function Integrations() {
                   <li>Enable the <strong>Gmail API</strong> in your Google Cloud project</li>
                   <li>Use the <a href="https://developers.google.com/oauthplayground" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-medium">OAuth Playground</a> to generate a refresh token with scope <code className="bg-amber-100 px-1 rounded text-[10px]">https://www.googleapis.com/auth/gmail.modify</code></li>
                   <li>Paste credentials above and click <strong>Save Gmail Settings</strong></li>
-                  <li>Set these as environment variables on Vercel: <code className="bg-amber-100 px-1 rounded text-[10px]">GMAIL_ADDRESS</code>, <code className="bg-amber-100 px-1 rounded text-[10px]">GMAIL_CLIENT_ID</code>, <code className="bg-amber-100 px-1 rounded text-[10px]">GMAIL_CLIENT_SECRET</code>, <code className="bg-amber-100 px-1 rounded text-[10px]">GMAIL_REFRESH_TOKEN</code></li>
-                  <li>Add a <a href="https://vercel.com/docs/cron-jobs" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-medium">Vercel Cron</a> to call <code className="bg-amber-100 px-1 rounded text-[10px]">POST /api/email/poll-inbox</code> every 2–5 minutes</li>
+                  <li>Set these as Cloudflare secrets: <code className="bg-amber-100 px-1 rounded text-[10px]">GMAIL_ADDRESS</code>, <code className="bg-amber-100 px-1 rounded text-[10px]">GMAIL_CLIENT_ID</code>, <code className="bg-amber-100 px-1 rounded text-[10px]">GMAIL_CLIENT_SECRET</code>, <code className="bg-amber-100 px-1 rounded text-[10px]">GMAIL_REFRESH_TOKEN</code></li>
+                  <li>Set up a cron via <a href="https://cron-job.org" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-medium">cron-job.org</a> to POST to <code className="bg-amber-100 px-1 rounded text-[10px]">/api/email/poll-inbox</code> every 5 minutes with <code className="bg-amber-100 px-1 rounded text-[10px]">Authorization: Bearer &lt;CRON_SECRET&gt;</code></li>
                 </ol>
               </div>
             )}
@@ -797,12 +797,12 @@ export function Integrations() {
 
         <IntegrationCard
           icon={Database}
-          title="Firebase Database"
-          status={{ text: backendStatus.firebase ? 'Connected' : 'Not Configured', color: backendStatus.firebase ? 'green' : 'amber' }}
-          statusColor={{ bg: 'bg-[#F5A623]/10', text: 'text-[#F5A623]' }}
+          title="Cloudflare D1 Database"
+          status={{ text: backendStatus.database ? 'Connected' : 'Not Configured', color: backendStatus.database ? 'green' : 'amber' }}
+          statusColor={{ bg: 'bg-orange-500/10', text: 'text-orange-600' }}
         >
-          <p>Connect your Firebase project to sync job data, photos, and electrician field updates in real-time.</p>
-          <p className="text-xs">Configuration is managed in the <Link to="/admin" className="text-blue-600 underline">Dev Console</Link>.</p>
+          <p>Job data, profiles, and field updates are stored in Cloudflare D1 (SQLite). Fully offline-capable with local IndexedDB cache.</p>
+          <p className="text-xs">Managed via <code className="bg-slate-100 px-1 rounded">wrangler d1</code> — see <code>wrangler.toml</code> for config.</p>
         </IntegrationCard>
 
         {/* ─── SMS Provider Settings ─────────────────────────── */}
