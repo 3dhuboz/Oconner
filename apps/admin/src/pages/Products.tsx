@@ -68,11 +68,27 @@ export default function ProductsPage() {
   const handleAIGenerate = async () => {
     if (!editing?.name) { toast('Enter a product name first', 'info'); return; }
     setImgGenerating(true);
-    const prompt = encodeURIComponent(`${editing.name}, premium quality meat, food photography, dark background, restaurant quality, high resolution`);
-    const url = `https://image.pollinations.ai/prompt/${prompt}?width=800&height=600&nologo=true&seed=${Date.now()}`;
-    setEditing((prev) => prev ? { ...prev, imageUrl: url } : prev);
-    toast('AI image generating — may take a few seconds', 'info');
-    setImgGenerating(false);
+    try {
+      const prompt = encodeURIComponent(`${editing.name}, premium quality meat, food photography, dark background, restaurant quality, high resolution`);
+      const generateUrl = `https://image.pollinations.ai/prompt/${prompt}?width=800&height=600&nologo=true&seed=${Date.now()}`;
+      
+      // Download the generated image
+      const response = await fetch(generateUrl);
+      if (!response.ok) throw new Error('Failed to generate image');
+      
+      const blob = await response.blob();
+      const file = new File([blob], `${editing.name.replace(/\s+/g, '_').toLowerCase()}_ai_generated.jpg`, { type: 'image/jpeg' });
+      
+      // Upload to R2
+      const url = await api.images.upload(file, 'products');
+      setEditing((prev) => prev ? { ...prev, imageUrl: url } : prev);
+      toast('AI image generated and uploaded successfully');
+    } catch (error) {
+      console.error('AI image generation failed:', error);
+      toast('Failed to generate AI image', 'error');
+    } finally {
+      setImgGenerating(false);
+    }
   };
 
   return (

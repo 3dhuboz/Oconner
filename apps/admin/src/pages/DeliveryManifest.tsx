@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api, formatCurrency } from '@butcher/shared';
 import type { Stop, Order } from '@butcher/shared';
+import { toast } from '../lib/toast';
 import {
   ArrowLeft, Route, Printer, Bell, Package, FileText,
   CheckCircle, Clock, Navigation, AlertTriangle, User, Camera,
@@ -150,6 +151,7 @@ export default function DeliveryManifestPage() {
   const [stops, setStops] = useState<Stop[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [optimizing, setOptimizing] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [notifying, setNotifying] = useState(false);
   const [notifySent, setNotifySent] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -171,6 +173,26 @@ export default function DeliveryManifestPage() {
       setOrders((ordersData as Order[]).filter((o) => (o as any).deliveryDayId === dayId));
     }).catch(() => {});
   }, [dayId]);
+
+  const generateStops = async () => {
+    if (!dayId) return;
+    setGenerating(true);
+    try {
+      const result = await api.deliveryDays.generateStops(dayId);
+      // Refresh stops data
+      const stopsData = await api.stops.list(dayId);
+      setStops(stopsData as Stop[]);
+      if (result.created > 0) {
+        toast(`${result.created} stops generated successfully`);
+      } else {
+        toast('All orders already have stops');
+      }
+    } catch (error) {
+      toast('Failed to generate stops', 'error');
+    } finally {
+      setGenerating(false);
+    }
+  };
 
   const optimizeRoute = async () => {
     if (!dayId || stops.length === 0) return;
@@ -279,6 +301,14 @@ export default function DeliveryManifestPage() {
       )}
 
       <div className="flex flex-wrap gap-3 mb-6">
+        <button
+          onClick={generateStops}
+          disabled={generating}
+          className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
+        >
+          <Package className="h-4 w-4" />
+          {generating ? 'Generating…' : 'Generate Stops'}
+        </button>
         <button
           onClick={optimizeRoute}
           disabled={optimizing || stops.length === 0}
