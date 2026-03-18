@@ -89,7 +89,7 @@ export function Purchase() {
 
     setIsProcessing(true);
     try {
-      // 1. Create Firebase auth account
+      // 1. Create Clerk account
       await register(form.contactEmail, form.password);
 
       // 2. Create tenant via REST API

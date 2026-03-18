@@ -11,7 +11,7 @@ interface GpsOptions {
 
 /**
  * Background GPS tracker for technicians.
- * Writes { lat, lng, accuracy, updatedAt } to Firestore every N seconds.
+ * Writes { lat, lng, accuracy, updatedAt } to D1 via REST API every N seconds.
  * Runs via the browser Geolocation API — works on mobile Chrome/Safari.
  */
 export function useGpsTracking({ uid, intervalMs = 30_000, enabled = true }: GpsOptions) {
@@ -58,7 +58,7 @@ export function useGpsTracking({ uid, intervalMs = 30_000, enabled = true }: Gps
       { enableHighAccuracy: true, maximumAge: 15000 }
     );
 
-    // Write to Firestore on interval (not every GPS tick — saves writes)
+    // Write to D1 on interval (not every GPS tick — saves writes)
     intervalId.current = setInterval(() => {
       if (lastPos.current) {
         writeLocation(lastPos.current.lat, lastPos.current.lng, lastPos.current.accuracy);

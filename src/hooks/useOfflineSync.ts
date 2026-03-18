@@ -26,13 +26,13 @@ export function useSyncStatus(): SyncStatus {
 // ─── Offline-aware job update ───────────────────────────────────
 export function useOfflineJobUpdate() {
   /**
-   * Updates a job. If online + Firestore is available, updates normally.
+   * Updates a job. If online, updates via REST API.
    * If offline, writes to IndexedDB and queues for sync.
    */
   const updateJobOffline = useCallback(async (
     id: string,
     updates: Record<string, any>,
-    firestoreUpdate: (id: string, updates: Record<string, any>) => Promise<void>
+    apiUpdate: (id: string, updates: Record<string, any>) => Promise<void>
   ) => {
     // Always write to local IndexedDB first
     const allJobs = await offlineJobs.getAll();
@@ -43,10 +43,10 @@ export function useOfflineJobUpdate() {
 
     if (navigator.onLine) {
       try {
-        await firestoreUpdate(id, updates);
+        await apiUpdate(id, updates);
         return;
       } catch (error) {
-        console.warn('[Offline] Firestore update failed, queuing for sync:', error);
+        console.warn('[Offline] API update failed, queuing for sync:', error);
       }
     }
 

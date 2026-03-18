@@ -62,7 +62,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const uid = clerkUser.id;
     const displayName = clerkUser.fullName || clerkUser.firstName || 'User';
 
-    // Dev shortcut — no Firestore lookup needed
+    // Dev shortcut — no D1 lookup needed
     if (DEV_EMAILS.includes(email)) {
       setUser({ email, name: displayName, role: 'dev', uid });
       setLicense({ status: 'Active', plan: 'Developer', type: 'dev' });
