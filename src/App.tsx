@@ -2,30 +2,30 @@ import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { ClerkProvider } from '@clerk/react';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { Login } from './pages/Login';
-import { DevLogin } from './pages/DevLogin';
 import { Layout } from './components/Layout';
-import { Dashboard } from './pages/Dashboard';
-import { JobBoard } from './pages/JobBoard';
-import { JobDetail } from './pages/JobDetail';
-import { Integrations } from './pages/Integrations';
-import { Calendar } from './pages/Calendar';
-import { Team } from './pages/Team';
-import { FieldPortal } from './pages/FieldPortal';
-import { SuperAdmin } from './pages/SuperAdmin';
-import { Billing } from './pages/Billing';
-import { PromoFlyer } from './pages/PromoFlyer';
-import { Purchase } from './pages/Purchase';
-import { DashboardWidget } from './pages/DashboardWidget';
-import { LiveMap } from './pages/LiveMap';
-import { TechDashboard } from './pages/TechDashboard';
-import { TechToday } from './pages/TechToday';
-import { TechProfile } from './pages/TechProfile';
-import { PartsCatalog } from './pages/PartsCatalog';
-import { Stocktake } from './pages/Stocktake';
-import { NewJob } from './pages/NewJob';
-import { PropertyHistory } from './pages/PropertyHistory';
-import { Pricing } from './pages/Pricing';
+const Login          = React.lazy(() => import('./pages/Login').then(m => ({ default: m.Login })));
+const DevLogin       = React.lazy(() => import('./pages/DevLogin').then(m => ({ default: m.DevLogin })));
+const Dashboard      = React.lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })));
+const JobBoard       = React.lazy(() => import('./pages/JobBoard').then(m => ({ default: m.JobBoard })));
+const JobDetail      = React.lazy(() => import('./pages/JobDetail').then(m => ({ default: m.JobDetail })));
+const Integrations   = React.lazy(() => import('./pages/Integrations').then(m => ({ default: m.Integrations })));
+const Calendar       = React.lazy(() => import('./pages/Calendar').then(m => ({ default: m.Calendar })));
+const Team           = React.lazy(() => import('./pages/Team').then(m => ({ default: m.Team })));
+const FieldPortal    = React.lazy(() => import('./pages/FieldPortal').then(m => ({ default: m.FieldPortal })));
+const SuperAdmin     = React.lazy(() => import('./pages/SuperAdmin').then(m => ({ default: m.SuperAdmin })));
+const Billing        = React.lazy(() => import('./pages/Billing').then(m => ({ default: m.Billing })));
+const PromoFlyer     = React.lazy(() => import('./pages/PromoFlyer').then(m => ({ default: m.PromoFlyer })));
+const Purchase       = React.lazy(() => import('./pages/Purchase').then(m => ({ default: m.Purchase })));
+const DashboardWidget = React.lazy(() => import('./pages/DashboardWidget').then(m => ({ default: m.DashboardWidget })));
+const LiveMap        = React.lazy(() => import('./pages/LiveMap').then(m => ({ default: m.LiveMap })));
+const TechDashboard  = React.lazy(() => import('./pages/TechDashboard').then(m => ({ default: m.TechDashboard })));
+const TechToday      = React.lazy(() => import('./pages/TechToday').then(m => ({ default: m.TechToday })));
+const TechProfile    = React.lazy(() => import('./pages/TechProfile').then(m => ({ default: m.TechProfile })));
+const PartsCatalog   = React.lazy(() => import('./pages/PartsCatalog').then(m => ({ default: m.PartsCatalog })));
+const Stocktake      = React.lazy(() => import('./pages/Stocktake').then(m => ({ default: m.Stocktake })));
+const NewJob         = React.lazy(() => import('./pages/NewJob').then(m => ({ default: m.NewJob })));
+const PropertyHistory = React.lazy(() => import('./pages/PropertyHistory').then(m => ({ default: m.PropertyHistory })));
+const Pricing        = React.lazy(() => import('./pages/Pricing').then(m => ({ default: m.Pricing })));
 
 
 import { Job, Electrician, CatalogPart } from './types';
@@ -211,6 +211,11 @@ function AppContent() {
   };
 
   return (
+    <React.Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    }>
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/dev/login" element={<DevLogin />} />
@@ -320,6 +325,7 @@ function AppContent() {
       
       <Route path="*" element={<div className="p-8 text-slate-500">Page not found or under construction.</div>} />
     </Routes>
+    </React.Suspense>
   );
 }
 function App() {
