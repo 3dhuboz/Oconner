@@ -382,16 +382,38 @@ Output ONLY the post text, nothing else. No commentary, no "Here is your post:",
 app.post('/api/images/generate', requireAuth, async (c) => {
   const { prompt } = await c.req.json<{ prompt: string }>();
   if (!prompt) return c.json({ error: 'Prompt required' }, 400);
+  if (!c.env.OPENROUTER_API_KEY) return c.json({ error: 'Image generation not configured' }, 503);
   try {
-    const result = await c.env.AI.run('@cf/black-forest-labs/flux-1-schnell', {
-      prompt,
-      num_steps: 4,
-    }) as { image: string };
-    const binary = atob(result.image);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const res = await fetch('https://openrouter.ai/api/v1/images/generations', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${c.env.OPENROUTER_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'black-forest-labs/flux-schnell-free',
+        prompt,
+        n: 1,
+        size: '1024x1024',
+      }),
+    });
+    if (!res.ok) return c.json({ error: `OpenRouter error: ${res.status}` }, 500);
+    const data = await res.json() as { data: Array<{ url?: string; b64_json?: string }> };
+    const item = data.data?.[0];
+    if (!item) return c.json({ error: 'No image returned' }, 500);
+    let imageBytes: Uint8Array;
+    if (item.b64_json) {
+      const binary = atob(item.b64_json);
+      imageBytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) imageBytes[i] = binary.charCodeAt(i);
+    } else if (item.url) {
+      const imgRes = await fetch(item.url);
+      imageBytes = new Uint8Array(await imgRes.arrayBuffer());
+    } else {
+      return c.json({ error: 'No image data in response' }, 500);
+    }
     const key = `products/${crypto.randomUUID()}.png`;
-    await c.env.IMAGES.put(key, bytes, { httpMetadata: { contentType: 'image/png' } });
+    await c.env.IMAGES.put(key, imageBytes, { httpMetadata: { contentType: 'image/png' } });
     const url = `https://images.oconner.com.au/${key}`;
     return c.json({ url, key });
   } catch {

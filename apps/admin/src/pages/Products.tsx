@@ -23,6 +23,12 @@ export default function ProductsPage() {
       .catch(() => {});
   }, []);
 
+  useEffect(() => {
+    if (!imgLoading) return;
+    const t = setTimeout(() => { setImgLoading(false); setImgError(true); }, 15000);
+    return () => clearTimeout(t);
+  }, [imgLoading]);
+
   const handleSave = async () => {
     if (!editing) return;
     setSaving(true);
@@ -136,7 +142,13 @@ export default function ProductsPage() {
                   </button>
                 </td>
                 <td className="px-4 py-3 text-right">
-                  <button onClick={() => { setEditing({ ...p }); setImgLoading(!!(p as any).imageUrl); setImgError(false); }} className="text-brand hover:underline text-xs font-medium">
+                  <button onClick={() => {
+                    const url = (p as any).imageUrl ?? '';
+                    const isStale = url.includes('pollinations.ai');
+                    setEditing({ ...p });
+                    setImgLoading(!isStale && !!url);
+                    setImgError(isStale && !!url);
+                  }} className="text-brand hover:underline text-xs font-medium">
                     <Pencil className="h-3.5 w-3.5" />
                   </button>
                 </td>
