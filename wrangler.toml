@@ -5,9 +5,11 @@ compatibility_flags = ["nodejs_compat"]
 # Static assets served by Cloudflare Pages
 pages_build_output_dir = "dist"
 
-# Cron trigger — replaces Vercel cron for email polling
-[triggers]
-crons = ["*/5 * * * *"]
+# NOTE: Cloudflare Pages does not support [triggers] crons.
+# To poll Gmail every 5 minutes, use one of:
+#   a) A separate Cloudflare Worker (wrangler deploy) with a cron trigger calling POST /api/email/poll-inbox
+#   b) An external service like cron-job.org hitting: https://wirezrus.pages.dev/api/email/poll-inbox
+#      with Authorization: Bearer <CRON_SECRET>
 
 # Cloudflare D1 database (replaces Firebase Firestore)
 [[d1_databases]]
