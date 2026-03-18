@@ -120,10 +120,54 @@ export default function StopsPage() {
 
       <main className="flex-1 overflow-y-auto">
         {stops.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-gray-400 p-8">
-            <Truck className="h-12 w-12 mb-3 opacity-30" />
-            <p className="font-medium">No stops for today</p>
-            <p className="text-sm mt-1">Check back when orders are assigned.</p>
+          <div className="flex flex-col h-full">
+            <div
+              className="relative flex flex-col items-center justify-center px-6 py-12 text-white overflow-hidden"
+              style={{
+                background: 'linear-gradient(160deg, #2d5016 0%, #4a7c2f 40%, #6aaa45 100%)',
+                minHeight: '55%',
+              }}
+            >
+              <div className="absolute inset-0 opacity-10"
+                style={{
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
+                }}
+              />
+              <div className="relative text-center">
+                <div className="w-20 h-20 bg-white/20 backdrop-blur rounded-full flex items-center justify-center mx-auto mb-4 border-2 border-white/30">
+                  <Truck className="h-10 w-10 text-white" />
+                </div>
+                <p className="text-white/70 text-sm font-medium uppercase tracking-widest mb-1">Welcome back</p>
+                <h2 className="text-3xl font-black mb-1">
+                  {user?.firstName ?? user?.primaryEmailAddress?.emailAddress?.split('@')[0] ?? 'Driver'}
+                </h2>
+                <p className="text-white/60 text-sm">
+                  {new Date().toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex-1 bg-gray-50 px-4 py-6">
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-4 flex items-center gap-4">
+                <div className="w-12 h-12 bg-green-50 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <CheckCircle className="h-6 w-6 text-green-500" />
+                </div>
+                <div>
+                  <p className="font-semibold text-gray-800">All clear for today</p>
+                  <p className="text-sm text-gray-500 mt-0.5">No deliveries have been assigned yet. Check back soon.</p>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 flex items-center gap-4">
+                <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <Clock className="h-6 w-6 text-blue-500" />
+                </div>
+                <div>
+                  <p className="font-semibold text-gray-800">Delivery time</p>
+                  <p className="text-sm text-gray-500 mt-0.5">Your route will appear here once the admin assigns orders.</p>
+                </div>
+              </div>
+            </div>
           </div>
         ) : (
           <div className="divide-y">
