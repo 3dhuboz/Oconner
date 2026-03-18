@@ -84,9 +84,7 @@ export default async function handler(req: AppRequest, res: AppResponse) {
     // Send running-late notification if not already sent
     if (autoNotify && !job.runningLateNotified && (job.tenantPhone || job.tenantEmail)) {
       try {
-        const baseUrl = process.env.VERCEL_URL
-          ? `https://${process.env.VERCEL_URL}`
-          : 'http://localhost:3000';
+        const baseUrl = process.env.APP_URL || req.env?.APP_URL || 'http://localhost:3000';
 
         const notifResp = await fetch(`${baseUrl}/api/notifications/send-tenant`, {
           method: 'POST',

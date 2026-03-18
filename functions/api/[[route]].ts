@@ -105,6 +105,13 @@ interface Env {
 
 export const onRequest = async (context: { request: Request; env: Env }): Promise<Response> => {
   const { request, env } = context;
+
+  // Inject CF Worker env bindings (secrets/vars) into process.env so handlers
+  // using process.env work correctly in production (nodejs_compat makes it writable).
+  for (const [k, v] of Object.entries(env)) {
+    if (typeof v === 'string' && !process.env[k]) process.env[k] = v;
+  }
+
   const url = new URL(request.url);
   const pathname = url.pathname;
 
