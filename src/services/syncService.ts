@@ -1,7 +1,7 @@
 /**
  * Background sync service.
  * Runs a cron interval that checks for network connectivity and
- * flushes the offline sync queue to Firestore when online.
+ * flushes the offline sync queue to the REST API when online.
  * Also provides a React hook for network status.
  */
 

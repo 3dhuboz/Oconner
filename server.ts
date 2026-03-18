@@ -344,7 +344,7 @@ async function startServer() {
       return res.sendStatus(400);
     }
 
-    // Handle the event (production handler is api/stripe/webhook.ts which updates Firestore)
+    // Handle the event (production handler is api/stripe/webhook.ts which updates D1)
     switch (event.type) {
       case 'checkout.session.completed':
         console.log('[Stripe] Payment successful for session:', event.data.object.id);
