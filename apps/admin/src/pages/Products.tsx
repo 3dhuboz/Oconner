@@ -13,6 +13,7 @@ export default function ProductsPage() {
   const [saving, setSaving] = useState(false);
   const [imgUploading, setImgUploading] = useState(false);
   const [imgGenerating, setImgGenerating] = useState(false);
+  const [imgLoading, setImgLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -56,6 +57,7 @@ export default function ProductsPage() {
     setImgUploading(true);
     try {
       const url = await api.images.upload(file, 'products');
+      setImgLoading(true);
       setEditing((prev) => prev ? { ...prev, imageUrl: url } : prev);
       toast('Image uploaded');
     } catch {
@@ -65,19 +67,15 @@ export default function ProductsPage() {
     }
   };
 
-  const handleAIGenerate = async () => {
+  const handleAIGenerate = () => {
     if (!editing?.name) { toast('Enter a product name first', 'info'); return; }
     setImgGenerating(true);
-    try {
-      const prompt = encodeURIComponent(`${editing.name}, premium quality meat, food photography, dark background, restaurant quality, high resolution`);
-      const url = `https://image.pollinations.ai/prompt/${prompt}?width=800&height=600&nologo=true&seed=${Date.now()}`;
-      setEditing((prev) => prev ? { ...prev, imageUrl: url } : prev);
-      toast('AI image generated — save product to store it');
-    } catch {
-      toast('Failed to generate AI image', 'error');
-    } finally {
-      setImgGenerating(false);
-    }
+    const prompt = encodeURIComponent(`${editing.name}, premium quality meat, food photography, dark background, restaurant quality, high resolution`);
+    const url = `https://image.pollinations.ai/prompt/${prompt}?width=800&height=600&nologo=true&seed=${Date.now()}`;
+    setImgLoading(true);
+    setEditing((prev) => prev ? { ...prev, imageUrl: url } : prev);
+    toast('AI image generating — preview will appear when ready');
+    setImgGenerating(false);
   };
 
   return (
@@ -107,7 +105,7 @@ export default function ProductsPage() {
               <tr key={p.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3">
                   {(p as any).imageUrl ? (
-                    <img src={(p as any).imageUrl} alt={p.name} className="w-10 h-10 rounded-lg object-cover" />
+                    <img src={(p as any).imageUrl} alt={p.name} className="w-10 h-10 rounded-lg object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
                   ) : (
                     <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center">
                       <Image className="h-4 w-4 text-gray-300" />
@@ -130,7 +128,7 @@ export default function ProductsPage() {
                   </button>
                 </td>
                 <td className="px-4 py-3 text-right">
-                  <button onClick={() => setEditing({ ...p })} className="text-brand hover:underline text-xs font-medium">
+                  <button onClick={() => { setEditing({ ...p }); setImgLoading(!!(p as any).imageUrl); }} className="text-brand hover:underline text-xs font-medium">
                     <Pencil className="h-3.5 w-3.5" />
                   </button>
                 </td>
@@ -156,14 +154,21 @@ export default function ProductsPage() {
                 <p className="text-xs font-medium text-gray-500">Product Image</p>
                 {(editing as any).imageUrl ? (
                   <div className="relative">
+                    {imgLoading && (
+                      <div className="w-full h-40 rounded-lg bg-gray-100 flex items-center justify-center gap-2">
+                        <div className="animate-spin rounded-full h-8 w-8 border-2 border-brand border-t-transparent" />
+                        <span className="text-xs text-gray-400">Loading image…</span>
+                      </div>
+                    )}
                     <img
                       src={(editing as any).imageUrl}
                       alt="preview"
-                      className="w-full h-40 object-cover rounded-lg bg-gray-100"
-                      onError={(e) => { (e.currentTarget as HTMLImageElement).src = ''; (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                      className={`w-full h-40 object-cover rounded-lg bg-gray-100 ${imgLoading ? 'hidden' : ''}`}
+                      onLoad={() => setImgLoading(false)}
+                      onError={() => setImgLoading(false)}
                     />
                     <button
-                      onClick={() => setEditing((prev) => prev ? { ...prev, imageUrl: '' } : prev)}
+                      onClick={() => { setEditing((prev) => prev ? { ...prev, imageUrl: '' } : prev); setImgLoading(false); }}
                       className="absolute top-2 right-2 w-6 h-6 bg-black/50 text-white rounded-full flex items-center justify-center"
                     >
                       <X className="h-3 w-3" />
@@ -205,7 +210,7 @@ export default function ProductsPage() {
                 <input
                   placeholder="https://example.com/image.jpg"
                   value={(editing as any).imageUrl ?? ''}
-                  onChange={(e) => setEditing((prev) => prev ? { ...prev, imageUrl: e.target.value } : prev)}
+                  onChange={(e) => { setImgLoading(!!e.target.value); setEditing((prev) => prev ? { ...prev, imageUrl: e.target.value } : prev); }}
                   className="w-full border rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand"
                 />
               </div>
