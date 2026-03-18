@@ -15,7 +15,7 @@ bucket_name = "oconner-images"
 [vars]
 ENVIRONMENT = "production"
 STOREFRONT_URL = "https://oconner.pages.dev"
-FROM_EMAIL = "orders@oconner.com.au"
+FROM_EMAIL = "orders@oconnoragriculture.com.au"
 
 # Secrets — set via: npx wrangler secret put KEY_NAME
 # CLERK_SECRET_KEY
