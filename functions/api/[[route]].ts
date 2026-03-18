@@ -9,6 +9,7 @@
  */
 
 import { fromCfRequest, makeCfResponse } from '../../api/_handler';
+import { isPublicRoute, verifyClerkJwt } from '../../api/_auth';
 
 // ─── Data CRUD handlers ────────────────────────────────────────
 import dataJobsHandler        from '../../api/data/jobs';
@@ -115,6 +116,17 @@ export const onRequest = async (context: { request: Request; env: Env }): Promis
       status: 404,
       headers: { 'Content-Type': 'application/json' },
     });
+  }
+
+  // Verify Clerk JWT for protected routes
+  if (!isPublicRoute(pathname)) {
+    const userId = await verifyClerkJwt(request, env);
+    if (!userId) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
   }
 
   // Convert CF request → AppRequest, inject D1/R2 bindings
