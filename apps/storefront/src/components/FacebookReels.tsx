@@ -34,10 +34,15 @@ function FbIcon({ className }: { className?: string }) {
   );
 }
 
-// Compact Facebook page-videos embed sized to the card — shows actual reels as a snippet
-function buildFbSnippetSrc(w: number, h: number, fbVideoUrl: string | null) {
-  if (fbVideoUrl) {
-    return `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(fbVideoUrl)}&show_text=false&autoplay=1&mute=1&width=${w}`;
+// Only use video.php for actual reel/video URLs; page URLs fall back to page plugin
+function buildFbSnippetSrc(w: number, h: number, fbUrl: string | null) {
+  const isVideoUrl = !!fbUrl && (
+    fbUrl.includes('/reel/') ||
+    fbUrl.includes('/videos/') ||
+    fbUrl.includes('/watch/')
+  );
+  if (isVideoUrl) {
+    return `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(fbUrl!)}&show_text=false&autoplay=1&mute=1&width=${w}`;
   }
   const pageHref = encodeURIComponent(`https://www.facebook.com/profile.php?id=${FB_PAGE_ID}`);
   return `https://www.facebook.com/plugins/page.php?href=${pageHref}&tabs=videos&width=${w}&height=${h}&small_header=true&adapt_container_width=false&hide_cover=true&show_facepile=false`;
