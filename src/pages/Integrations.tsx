@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Database, DollarSign, CheckCircle2, AlertCircle, Loader2, Mail, MessageSquare, ExternalLink, Copy, PlayCircle, Phone, Send, Eye, EyeOff, Save, TestTube2, Inbox, RefreshCw, Clock, Zap } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { cn } from '../utils';
-import { settingsApi, jobsApi, getClerkToken } from '../services/api';
+import { settingsApi, jobsApi, apiFetch } from '../services/api';
 import toast from 'react-hot-toast';
 
 const IntegrationCard = ({ icon: Icon, title, status, statusColor, children, onAction, actionText, actionDisabled, isConnecting }: any) => {
@@ -159,12 +159,6 @@ export function Integrations() {
     });
   }, []);
 
-  // Helper: add Clerk JWT to any raw fetch() call
-  const authHeaders = async (): Promise<Record<string, string>> => {
-    const token = await getClerkToken();
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
-
   // ─── Save SMS Settings ──────────────────────────────────────
   const handleSaveSms = async () => {
     setSmsSaving(true);
@@ -179,9 +173,9 @@ export function Integrations() {
     if (!smsTestNumber.trim()) { toast.error('Enter a test phone number'); return; }
     setSmsTesting(true);
     try {
-      const res = await fetch('/api/sms/test', {
+      const res = await apiFetch('/api/sms/test', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...await authHeaders() },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ to: smsTestNumber, provider: smsProvider, ...smsConfig }),
       });
       const data = await res.json();
@@ -209,9 +203,9 @@ export function Integrations() {
     if (!emailTestAddress.trim()) { toast.error('Enter a test email address'); return; }
     setEmailTesting(true);
     try {
-      const res = await fetch('/api/email/test', {
+      const res = await apiFetch('/api/email/test', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...await authHeaders() },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ to: emailTestAddress, provider: emailProvider, ...emailConfig }),
       });
       const data = await res.json();
@@ -303,7 +297,7 @@ export function Integrations() {
   const handleDisconnectXero = async () => {
     if (!confirm('Disconnect Xero? This will revoke the OAuth token.')) return;
     try {
-      await fetch('/api/xero/disconnect', { method: 'POST', headers: await authHeaders() });
+      await apiFetch('/api/xero/disconnect', { method: 'POST' });
       setXeroConnected(false);
       toast.success('Xero disconnected');
     } catch {
@@ -312,7 +306,7 @@ export function Integrations() {
   };
 
   useEffect(() => {
-    authHeaders().then(h => fetch('/api/xero/status', { headers: h }).then(res => res.json()).then(data => setXeroConnected(data.connected)).catch(() => {}));
+    apiFetch('/api/xero/status').then(res => res.json()).then(data => setXeroConnected(data.connected)).catch(() => {});
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type === 'OAUTH_AUTH_SUCCESS') {
         setXeroConnected(true);
@@ -326,7 +320,7 @@ export function Integrations() {
   const handleConnectXero = async () => {
     setIsConnecting(true);
     try {
-      const response = await fetch('/api/auth/xero/url', { headers: await authHeaders() });
+      const response = await apiFetch('/api/auth/xero/url');
       const data = await response.json();
       if (data.error) {
         alert(`Configuration Error: ${data.error}`);
