@@ -50,7 +50,6 @@ import schedulingLateHandler  from '../../api/scheduling/running-late-check';
 import schedulingOptHandler   from '../../api/scheduling/optimise-route';
 
 // ─── Misc ──────────────────────────────────────────────────────
-import jobsSyncHandler        from '../../api/jobs/sync';
 import form9Handler           from '../../api/form9/generate';
 
 // ─── Route table: path prefix → handler ────────────────────────
@@ -92,7 +91,6 @@ const ROUTES: Array<{ path: string; handler: Function; exact?: boolean }> = [
   { path: '/api/scheduling/running-late-check',  handler: schedulingLateHandler },
   { path: '/api/scheduling/optimise-route',      handler: schedulingOptHandler },
   // Misc
-  { path: '/api/jobs/sync',   handler: jobsSyncHandler },
   { path: '/api/form9/generate', handler: form9Handler },
 ];
 

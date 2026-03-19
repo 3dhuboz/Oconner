@@ -17,7 +17,6 @@ import xeroImportCsvHandler from "./api/xero/import-csv.ts";
 import stripeCreatePaymentLinkHandler from "./api/stripe/create-payment-link.ts";
 import stripeWebhookHandler from "./api/stripe/webhook.ts";
 import sendTenantHandler from "./api/notifications/send-tenant.ts";
-import jobsSyncHandler from "./api/jobs/sync.ts";
 import schedulingRunningLateHandler from "./api/scheduling/running-late-check.ts";
 import schedulingOptimiseHandler from "./api/scheduling/optimise-route.ts";
 import dataJobsHandler from "./api/data/jobs.ts";
@@ -235,11 +234,6 @@ async function startServer() {
     const { to, provider } = req.body || {};
     console.log(`[Email Test] Simulated send to: ${to} via ${provider || 'default'}`);
     res.json({ success: true, simulated: true, message: `Test email simulated to ${to} (configure RESEND_API_KEY for real sends)` });
-  });
-
-  // 5d. Jobs sync (serverless stub)
-  app.get("/api/jobs/sync", async (req, res) => {
-    await jobsSyncHandler(req as any, res as any);
   });
 
   // --- SMS DISPATCH (TWILIO) ---
