@@ -103,15 +103,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
           await profilesApi.upsert(uid, { lastLogin: new Date().toISOString() });
         } else {
-          // First login — create profile
+          // First login — check for pending tenant from Purchase.tsx signup
+          const pendingTenantId = sessionStorage.getItem('pending_tenant_id');
+          if (pendingTenantId) sessionStorage.removeItem('pending_tenant_id');
+
           await profilesApi.upsert(uid, {
             uid, email, displayName,
-            role: 'user',
+            role: pendingTenantId ? 'admin' : 'user',
+            tenantId: pendingTenantId || undefined,
             createdAt: new Date().toISOString(),
             isActive: true,
           });
-          setUser({ email, name: displayName, role: 'user', uid });
-          setLicense({ status: 'No License', plan: 'None' });
+          setUser({ email, name: displayName, role: pendingTenantId ? 'admin' : 'user', uid });
+          setLicense({ status: pendingTenantId ? 'Active' : 'No License', plan: pendingTenantId ? 'Pending' : 'None' });
         }
       } catch {
         // API not available yet (first boot / dev)
