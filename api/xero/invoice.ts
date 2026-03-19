@@ -13,7 +13,7 @@ export default async function handler(req: AppRequest, res: AppResponse) {
   try {
     const { job } = req.body;
 
-    const lineItems = job.materials.map((m: any) => ({
+    const lineItems = (job.materials || []).map((m: any) => ({
       description: m.name,
       quantity: m.quantity,
       unitAmount: m.cost,

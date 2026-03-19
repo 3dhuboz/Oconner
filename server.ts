@@ -189,7 +189,7 @@ async function startServer() {
       const { job } = req.body;
       
       // Build the Xero Invoice object
-      const lineItems = job.materials.map((m: any) => ({
+      const lineItems = (job.materials || []).map((m: any) => ({
         description: m.name,
         quantity: m.quantity,
         unitAmount: m.cost,
