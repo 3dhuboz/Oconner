@@ -80,7 +80,10 @@ export function makeCfResponse(): { res: AppResponse; getResponse(): Response } 
     status(code) { statusCode = code; return res; },
     json(data) { responseBody = JSON.stringify(data); resolved = true; },
     send(data) {
-      responseBody = typeof data === 'string' ? data : JSON.stringify(data);
+      // Pass binary data (Buffer / Uint8Array) through as-is; stringify everything else
+      responseBody = (typeof data === 'string' || data instanceof Uint8Array || data instanceof ArrayBuffer)
+        ? data
+        : JSON.stringify(data);
       resolved = true;
     },
     setHeader(name, value) { responseHeaders.set(name, value); },
