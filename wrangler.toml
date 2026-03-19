@@ -27,6 +27,7 @@ bucket_name = "wirez-r-us-uploads"
 APP_URL = "https://wirezrus.pages.dev"
 GMAIL_ADDRESS = "steve061278@gmail.com"
 COMPANY_PHONE = "1300 WIREZ US"
+R2_PUBLIC_URL = ""   # set after enabling public access on the R2 bucket: https://pub-<hash>.r2.dev
 
 # ── How to deploy ────────────────────────────────────────────────────────────
 # 1. Install Wrangler:  npm install -g wrangler
