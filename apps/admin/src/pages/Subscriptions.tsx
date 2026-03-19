@@ -1,13 +1,16 @@
 import { useEffect, useState, useRef } from 'react';
 import { api } from '@butcher/shared';
 import type { Product } from '@butcher/shared';
-import { RefreshCcw, Check, X, Phone, Mail, Plus, Upload, Image, Save } from 'lucide-react';
+import { RefreshCcw, Check, X, Phone, Mail, Plus, Upload, Image, Save, ArrowLeftRight, PackageCheck } from 'lucide-react';
 import { toast } from '../lib/toast';
 
 interface Subscription {
   id: string;
   boxId: string;
   boxName: string;
+  alternateBoxId?: string | null;
+  alternateBoxName?: string | null;
+  nextIsAlternate?: boolean;
   frequency: string;
   customerName?: string | null;
   customerPhone?: string | null;
@@ -119,6 +122,16 @@ export default function SubscriptionsPage() {
     }
   };
 
+  const markSent = async (id: string) => {
+    try {
+      const res = await api.post<{ nextIsAlternate: boolean }>(`/api/subscriptions/${id}/mark-sent`, {});
+      setSubs((prev) => prev.map((s) => s.id === id ? { ...s, nextIsAlternate: res.nextIsAlternate } : s));
+      toast('Next box updated');
+    } catch {
+      toast('Failed to update', 'error');
+    }
+  };
+
   const handleCreate = async () => {
     if (!form.email || !form.boxId) { toast('Email and box are required', 'error'); return; }
     setSaving(true);
@@ -179,7 +192,23 @@ export default function SubscriptionsPage() {
                     <div className="flex items-start justify-between gap-3 mb-1">
                       <div>
                         <p className="font-semibold">{s.customerName || s.email}</p>
-                        <p className="text-sm text-brand font-medium">{s.boxName} · {s.frequency}</p>
+                        {s.alternateBoxId ? (
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <p className="text-sm text-brand font-medium flex items-center gap-1">
+                              <ArrowLeftRight className="h-3.5 w-3.5" />
+                              {s.boxName} ⇄ {s.alternateBoxName} · {s.frequency}
+                            </p>
+                            <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${
+                              s.nextIsAlternate
+                                ? 'bg-purple-100 text-purple-700'
+                                : 'bg-brand/10 text-brand'
+                            }`}>
+                              Next: {s.nextIsAlternate ? s.alternateBoxName : s.boxName}
+                            </span>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-brand font-medium">{s.boxName} · {s.frequency}</p>
+                        )}
                       </div>
                       <span className={`text-xs font-medium px-2 py-1 rounded-full flex-shrink-0 ${STATUS_STYLE[s.status] ?? STATUS_STYLE.pending}`}>
                         {s.status}
@@ -190,18 +219,35 @@ export default function SubscriptionsPage() {
                       {s.customerPhone && <span className="flex items-center gap-1"><Phone className="h-3.5 w-3.5" />{s.customerPhone}</span>}
                     </div>
                   </div>
-                  {s.status === 'pending' && (
-                    <div className="flex flex-col gap-2 flex-shrink-0">
-                      <button onClick={() => setStatus(s.id, 'active')}
-                        className="flex items-center gap-1 bg-green-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-green-700">
-                        <Check className="h-3.5 w-3.5" /> Activate
+                  <div className="flex flex-col gap-2 flex-shrink-0">
+                    {s.status === 'pending' && (
+                      <>
+                        <button onClick={() => setStatus(s.id, 'active')}
+                          className="flex items-center gap-1 bg-green-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-green-700">
+                          <Check className="h-3.5 w-3.5" /> Activate
+                        </button>
+                        <button onClick={() => setStatus(s.id, 'cancelled')}
+                          className="flex items-center gap-1 bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-gray-200">
+                          <X className="h-3.5 w-3.5" /> Decline
+                        </button>
+                      </>
+                    )}
+                    {s.status === 'active' && s.alternateBoxId && (
+                      <button
+                        onClick={() => markSent(s.id)}
+                        className="flex items-center gap-1 bg-purple-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-purple-700"
+                        title="Mark this delivery as sent and flip to the other box for next time"
+                      >
+                        <PackageCheck className="h-3.5 w-3.5" /> Mark Sent
                       </button>
+                    )}
+                    {s.status === 'active' && (
                       <button onClick={() => setStatus(s.id, 'cancelled')}
-                        className="flex items-center gap-1 bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-gray-200">
-                        <X className="h-3.5 w-3.5" /> Decline
+                        className="flex items-center gap-1 bg-gray-100 text-gray-500 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-gray-200">
+                        <X className="h-3.5 w-3.5" /> Cancel
                       </button>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               );
             })}

@@ -5,7 +5,7 @@ export const runtime = 'edge';
 import { useState, useEffect } from 'react';
 import { api } from '@butcher/shared';
 import type { Product } from '@butcher/shared';
-import { CheckCircle, Package, RefreshCcw, Truck, Clock, Leaf, Star, ChevronRight } from 'lucide-react';
+import { CheckCircle, Package, RefreshCcw, Truck, Clock, Leaf, Star, ChevronRight, ArrowLeftRight } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { useCart } from '@/lib/cart';
@@ -32,6 +32,8 @@ const VALUE_PROPS = [
 export default function SubscribePage() {
   const [step, setStep] = useState<'select' | 'details' | 'done'>('select');
   const [selectedBox, setSelectedBox] = useState('family');
+  const [alternateBox, setAlternateBox] = useState<string | null>(null);
+  const [alternating, setAlternating] = useState(false);
   const [frequency, setFrequency] = useState('fortnightly');
   const [form, setForm] = useState({ name: '', email: '', phone: '', address: '', suburb: '', postcode: '', notes: '' });
   const [saving, setSaving] = useState(false);
@@ -61,9 +63,12 @@ export default function SubscribePage() {
     e.preventDefault();
     setSaving(true);
     try {
+      const altBox = alternating && alternateBox ? BOX_DEFS.find((b) => b.id === alternateBox) : null;
       await api.subscriptions.create({
         boxId: selectedBox,
         boxName: BOX_DEFS.find((b) => b.id === selectedBox)?.name,
+        alternateBoxId: altBox?.id ?? undefined,
+        alternateBoxName: altBox?.name ?? undefined,
         frequency,
         ...form,
         status: 'pending',
@@ -208,9 +213,79 @@ export default function SubscribePage() {
                 </div>
               </div>
 
+              {/* Alternate box toggle */}
+              <div>
+                <h2 className="text-xl font-black text-brand mb-1">2. Mix it up?</h2>
+                <p className="text-sm text-gray-500 mb-4">Some customers love alternating between two boxes — variety keeps things fresh.</p>
+
+                <div className="flex gap-3 mb-4">
+                  <button
+                    onClick={() => { setAlternating(false); setAlternateBox(null); }}
+                    className={`flex-1 py-3 px-4 rounded-2xl border-2 text-sm font-semibold transition-all ${!alternating ? 'border-brand bg-brand text-white shadow-lg shadow-brand/20' : 'border-gray-200 bg-white text-gray-600 hover:border-brand/40'}`}
+                  >
+                    Same box every time
+                  </button>
+                  <button
+                    onClick={() => setAlternating(true)}
+                    className={`flex-1 py-3 px-4 rounded-2xl border-2 text-sm font-semibold transition-all flex items-center justify-center gap-2 ${alternating ? 'border-brand bg-brand text-white shadow-lg shadow-brand/20' : 'border-gray-200 bg-white text-gray-600 hover:border-brand/40'}`}
+                  >
+                    <ArrowLeftRight className="h-4 w-4" /> Alternate two boxes
+                  </button>
+                </div>
+
+                {alternating && (
+                  <div className="bg-brand/5 rounded-2xl p-4 space-y-3">
+                    <p className="text-sm font-semibold text-brand">Choose your alternate box (delivered on the opposite week):</p>
+                    <div className="space-y-2">
+                      {BOX_DEFS.filter((b) => b.id !== selectedBox).map((b) => (
+                        <button
+                          key={b.id}
+                          onClick={() => setAlternateBox(b.id)}
+                          className={`w-full text-left flex items-center gap-3 rounded-xl border-2 p-3 transition-all ${
+                            alternateBox === b.id
+                              ? 'border-brand bg-white shadow-sm'
+                              : 'border-gray-200 bg-white hover:border-brand/40'
+                          }`}
+                        >
+                          <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${b.gradient} flex items-center justify-center text-lg flex-shrink-0 overflow-hidden`}>
+                            {productImages[b.id]
+                              ? <img src={productImages[b.id]} alt={b.name} className="w-full h-full object-cover" />
+                              : '🥩'
+                            }
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold text-sm text-brand">{b.name}</p>
+                            <p className="text-xs text-gray-400">{b.weight} · ${b.price}</p>
+                          </div>
+                          {alternateBox === b.id && <CheckCircle className="h-5 w-5 text-brand flex-shrink-0" />}
+                        </button>
+                      ))}
+                    </div>
+
+                    {alternateBox && (() => {
+                      const primary = BOX_DEFS.find((b) => b.id === selectedBox)!;
+                      const alt = BOX_DEFS.find((b) => b.id === alternateBox)!;
+                      return (
+                        <div className="mt-3 bg-white rounded-xl border border-brand/20 px-4 py-3">
+                          <p className="text-xs font-bold text-brand mb-2 uppercase tracking-wide">Your rotation preview</p>
+                          <div className="flex items-center gap-2 text-sm">
+                            <span className="bg-brand text-white px-2.5 py-1 rounded-lg font-semibold text-xs">Delivery 1</span>
+                            <span className="font-medium">{primary.name}</span>
+                            <ArrowLeftRight className="h-3.5 w-3.5 text-gray-400 flex-shrink-0" />
+                            <span className="bg-brand/20 text-brand px-2.5 py-1 rounded-lg font-semibold text-xs">Delivery 2</span>
+                            <span className="font-medium">{alt.name}</span>
+                          </div>
+                          <p className="text-xs text-gray-400 mt-1.5">…then repeats. You can switch anytime.</p>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+              </div>
+
               {/* Frequency */}
               <div>
-                <h2 className="text-xl font-black text-brand mb-1">2. How often?</h2>
+                <h2 className="text-xl font-black text-brand mb-1">3. How often?</h2>
                 <p className="text-sm text-gray-500 mb-4">More frequent = fresher beef, always stocked.</p>
                 <div className="grid grid-cols-3 gap-3">
                   {FREQUENCIES.map((f) => (
@@ -234,7 +309,11 @@ export default function SubscribePage() {
               <div className="bg-brand rounded-2xl p-6 text-white">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
-                    <p className="text-xl font-black">{box.name} — {freq.label}</p>
+                    {alternating && alternateBox ? (
+                      <p className="text-xl font-black">{box.name} ⇄ {BOX_DEFS.find((b) => b.id === alternateBox)?.name} — {freq.label}</p>
+                    ) : (
+                      <p className="text-xl font-black">{box.name} — {freq.label}</p>
+                    )}
                     <p className="text-white/70 text-sm mt-0.5">${box.price} per delivery · Free delivery included</p>
                     <p className="text-white/80 text-sm mt-1">
                       {freq.deliveries} deliveries/year · approx. ${annualSpend.toLocaleString()}/year

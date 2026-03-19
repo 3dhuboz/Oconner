@@ -213,6 +213,9 @@ export const subscriptions = sqliteTable('subscriptions', {
   email: text('email').notNull(),
   boxId: text('box_id').notNull(),
   boxName: text('box_name').notNull(),
+  alternateBoxId: text('alternate_box_id'),
+  alternateBoxName: text('alternate_box_name'),
+  nextIsAlternate: integer('next_is_alternate', { mode: 'boolean' }).notNull().default(false),
   frequency: text('frequency').notNull(), // 'weekly' | 'fortnightly' | 'monthly'
   status: text('status').notNull().default('active'), // 'active' | 'paused' | 'cancelled'
   createdAt: integer('created_at').notNull(),

@@ -14,6 +14,9 @@ app.get('/', async (c) => {
     email: subscriptions.email,
     boxId: subscriptions.boxId,
     boxName: subscriptions.boxName,
+    alternateBoxId: subscriptions.alternateBoxId,
+    alternateBoxName: subscriptions.alternateBoxName,
+    nextIsAlternate: subscriptions.nextIsAlternate,
     frequency: subscriptions.frequency,
     status: subscriptions.status,
     createdAt: subscriptions.createdAt,
@@ -31,7 +34,9 @@ app.post('/', async (c) => {
   const body = await c.req.json<{
     email: string; name?: string; phone?: string; address?: string;
     suburb?: string; postcode?: string; notes?: string;
-    boxId: string; boxName: string; frequency: string; status?: string;
+    boxId: string; boxName: string;
+    alternateBoxId?: string; alternateBoxName?: string;
+    frequency: string; status?: string;
   }>();
   const now = Date.now();
   const id = crypto.randomUUID();
@@ -42,6 +47,9 @@ app.post('/', async (c) => {
     email: body.email,
     boxId: body.boxId,
     boxName: body.boxName,
+    alternateBoxId: body.alternateBoxId ?? null,
+    alternateBoxName: body.alternateBoxName ?? null,
+    nextIsAlternate: false,
     frequency: body.frequency,
     status: body.status ?? 'pending',
     createdAt: now,
@@ -53,9 +61,21 @@ app.post('/', async (c) => {
 
 app.patch('/:id', async (c) => {
   const db = drizzle(c.env.DB);
-  const body = await c.req.json<{ status?: string }>();
-  await db.update(subscriptions).set({ status: body.status, updatedAt: Date.now() }).where(eq(subscriptions.id, c.req.param('id')));
+  const body = await c.req.json<{ status?: string; alternateBoxId?: string | null; alternateBoxName?: string | null; nextIsAlternate?: boolean }>();
+  await db.update(subscriptions).set({ ...body, updatedAt: Date.now() }).where(eq(subscriptions.id, c.req.param('id')));
   return c.json({ ok: true });
+});
+
+// Flip next delivery box (alternate ↔ primary)
+app.post('/:id/mark-sent', async (c) => {
+  const db = drizzle(c.env.DB);
+  const [sub] = await db.select().from(subscriptions).where(eq(subscriptions.id, c.req.param('id'))).limit(1);
+  if (!sub) return c.json({ error: 'Not found' }, 404);
+  if (!sub.alternateBoxId) return c.json({ error: 'No alternate box configured' }, 400 );
+  await db.update(subscriptions)
+    .set({ nextIsAlternate: !sub.nextIsAlternate, updatedAt: Date.now() })
+    .where(eq(subscriptions.id, sub.id));
+  return c.json({ nextIsAlternate: !sub.nextIsAlternate });
 });
 
 export default app;
