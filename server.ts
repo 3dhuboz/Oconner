@@ -166,6 +166,13 @@ async function startServer() {
     res.json({ connected: !!xeroTokenSet });
   });
 
+  // 3b. Disconnect Xero
+  app.post("/api/xero/disconnect", (req, res) => {
+    xeroTokenSet = null;
+    xeroTenantId = null;
+    res.json({ disconnected: true });
+  });
+
   // 4. Create Invoice in Xero
   app.post("/api/xero/invoice", async (req, res) => {
     if (!xeroTokenSet || !xeroTenantId) {

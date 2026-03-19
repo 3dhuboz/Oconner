@@ -31,6 +31,7 @@ import xeroPricingHandler     from '../../api/xero/pricing';
 import xeroImportCsvHandler   from '../../api/xero/import-csv';
 import xeroInvoiceHandler     from '../../api/xero/invoice';
 import xeroStatusHandler      from '../../api/xero/status';
+import xeroDisconnectHandler  from '../../api/xero/disconnect';
 import xeroAuthUrlHandler     from '../../api/auth/xero/url';
 import xeroAuthCallbackHandler from '../../api/auth/xero/callback';
 
@@ -76,7 +77,7 @@ const ROUTES: Array<{ path: string; handler: Function; exact?: boolean }> = [
   { path: '/api/xero/pricing',       handler: xeroPricingHandler },
   { path: '/api/xero/invoice',       handler: xeroInvoiceHandler },
   { path: '/api/xero/status',        handler: xeroStatusHandler },
-  { path: '/api/xero/disconnect',    handler: (_req: any, res: any) => res.json({ success: true }) },
+  { path: '/api/xero/disconnect',    handler: xeroDisconnectHandler },
   // Stripe
   { path: '/api/stripe/webhook-v2',              handler: stripeWebhookHandler },
   { path: '/api/stripe/webhook',                 handler: stripeWebhookHandler },
