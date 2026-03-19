@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { api } from '@butcher/shared';
 import { Sparkles, Copy, Check, RefreshCw, Facebook, Instagram, Linkedin, ExternalLink } from 'lucide-react';
 
-const SOCIAL_STUDIO_URL = 'https://studio.d-id.com'; // Replace with your Social AI Studio URL
+const SOCIAL_STUDIO_URL = `https://creators.facebook.com/tools/reels?page_id=61574996320860`;
 
 const PLATFORMS = [
   { id: 'facebook', label: 'Facebook', icon: Facebook, color: 'text-blue-600' },
