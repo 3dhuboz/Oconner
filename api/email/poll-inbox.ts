@@ -501,7 +501,7 @@ export default async function handler(req: AppRequest, res: AppResponse) {
       status: 'Email Polling Endpoint',
       checks,
       gmailLiveTest,
-      usage: 'Vercel Cron calls GET every 5 min and triggers polling automatically. POST to manually trigger. GET (no cron header) returns this diagnostic.',
+      usage: 'Cron (cron-job.org) POSTs every 5 min to trigger polling. GET (no cron header) returns this diagnostic.',
     });
   }
 
