@@ -121,7 +121,7 @@ app.get('/api/delivery-days', async (c) => {
   const now = Date.now();
   const rows = upcoming === 'true'
     ? await db.select().from(deliveryDaysTable)
-        .where(and(eq(deliveryDaysTable.active, true), eq(deliveryDaysTable.frozen, false), gte(deliveryDaysTable.date, now)))
+        .where(and(eq(deliveryDaysTable.active, true), gte(deliveryDaysTable.date, now)))
         .orderBy(asc(deliveryDaysTable.date))
     : await db.select().from(deliveryDaysTable)
         .where(eq(deliveryDaysTable.active, true))

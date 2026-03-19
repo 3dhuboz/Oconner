@@ -49,10 +49,10 @@ export default function ShopPage() {
             <button
               key={cat}
               onClick={() => setCategory(cat)}
-              className={`px-4 py-2 rounded-full text-sm font-medium transition-colors capitalize ${
+              className={`px-5 py-2 rounded-full text-sm font-semibold transition-all duration-200 capitalize ${
                 category === cat
-                  ? 'bg-brand text-white'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  ? 'bg-brand text-white shadow-lg shadow-brand/30 scale-110 -translate-y-0.5'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200 hover:scale-105'
               }`}
             >
               {cat}
