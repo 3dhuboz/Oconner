@@ -2,8 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Activity, Shield, Server, Database, Lock, Users, Save, Wifi, AlertTriangle, Flame, KeyRound, Plus, Pencil, Trash2, CreditCard, Building2, UserPlus, ChevronDown, ChevronUp, Eye, EyeOff, ExternalLink } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { cn } from '../utils';
-import { tenantsApi, usersApi, profilesApi } from '../services/api';
-import { newId } from '../../api/_db';
+import { tenantsApi, usersApi, profilesApi, newId } from '../services/api';
 import type { Tenant, License, UserProfile, UserRole } from '../types';
 import toast from 'react-hot-toast';
 

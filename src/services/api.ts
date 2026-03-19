@@ -6,6 +6,11 @@
 
 const BASE = '/api/data';
 
+/** Generate a short unique ID (collision-resistant for client-side use) */
+export function newId(): string {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
+}
+
 /** Get the current Clerk JWT — Clerk sets window.Clerk after mounting */
 export async function getClerkToken(): Promise<string | null> {
   try {

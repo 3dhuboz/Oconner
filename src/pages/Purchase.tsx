@@ -2,8 +2,7 @@ import React, { useState } from 'react';
 import { Zap, CheckCircle2, Shield, Users, CreditCard, ArrowRight, Loader2, ExternalLink, Headphones } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { tenantsApi, profilesApi } from '../services/api';
-import { newId } from '../../api/_db';
+import { tenantsApi, profilesApi, newId } from '../services/api';
 import toast from 'react-hot-toast';
 
 const PLANS = [
