@@ -114,7 +114,7 @@ export const onRequest = async (context: { request: Request; env: Env }): Promis
   const pathname = url.pathname;
 
   // Match route (exact first, then prefix)
-  const match = ROUTES.find(r => pathname === r.path || pathname.startsWith(r.path + '/') || pathname.startsWith(r.path + '?'));
+  const match = ROUTES.find(r => pathname === r.path || pathname.startsWith(r.path + '/'));
 
   if (!match) {
     return new Response(JSON.stringify({ error: `No handler for ${pathname}` }), {
