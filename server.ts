@@ -234,7 +234,7 @@ async function startServer() {
   app.post("/api/email/test", (req, res) => {
     const { to, provider } = req.body || {};
     console.log(`[Email Test] Simulated send to: ${to} via ${provider || 'default'}`);
-    res.json({ success: true, simulated: true, message: `Test email simulated to ${to} (configure SMTP/SendGrid for real sends)` });
+    res.json({ success: true, simulated: true, message: `Test email simulated to ${to} (configure RESEND_API_KEY for real sends)` });
   });
 
   // 5d. Jobs sync (serverless stub)
