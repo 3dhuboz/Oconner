@@ -1,6 +1,24 @@
 import type { Address, OrderItem } from './order';
 
 export type StopStatus = 'pending' | 'en_route' | 'arrived' | 'delivered' | 'failed' | 'skipped';
+export type RunStatus = 'pending' | 'in_progress' | 'completed';
+
+export interface DeliveryRun {
+  id: string;
+  deliveryDayId: string;
+  name: string;
+  zone?: string;
+  color: string;
+  driverUid?: string;
+  status: RunStatus;
+  sequence: number;
+  notes?: string;
+  createdAt: number;
+  /** Populated by API join */
+  driver?: { id: string; name: string; email: string } | null;
+  stopCount?: number;
+  completedCount?: number;
+}
 
 export type FlagReason = 'nobody_home' | 'wrong_address' | 'damaged' | 'refused' | 'other';
 
@@ -27,6 +45,7 @@ export interface Stop {
   id: string;
   orderId: string;
   deliveryDayId: string;
+  runId?: string;
   customerId: string;
   customerName: string;
   customerPhone: string;

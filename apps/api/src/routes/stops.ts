@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/d1';
-import { eq, asc } from 'drizzle-orm';
+import { eq, asc, and, isNull } from 'drizzle-orm';
 import { stops, orders, driverSessions } from '@butcher/db';
 import type { Env, AuthUser } from '../types';
 
@@ -8,10 +8,20 @@ const app = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
 
 app.get('/', async (c) => {
   const db = drizzle(c.env.DB);
-  const { deliveryDayId } = c.req.query();
-  if (!deliveryDayId) return c.json({ error: 'deliveryDayId required' }, 400);
+  const { deliveryDayId, runId, unassigned } = c.req.query();
+  if (!deliveryDayId && !runId) return c.json({ error: 'deliveryDayId or runId required' }, 400);
+
+  let condition;
+  if (runId) {
+    condition = eq(stops.runId, runId);
+  } else if (unassigned === 'true') {
+    condition = and(eq(stops.deliveryDayId, deliveryDayId!), isNull(stops.runId));
+  } else {
+    condition = eq(stops.deliveryDayId, deliveryDayId!);
+  }
+
   const rows = await db.select().from(stops)
-    .where(eq(stops.deliveryDayId, deliveryDayId))
+    .where(condition)
     .orderBy(asc(stops.sequence));
   return c.json(rows.map((s) => ({ ...s, address: JSON.parse(s.address), items: JSON.parse(s.items) })));
 });
@@ -63,6 +73,13 @@ app.patch('/:id/sequence', async (c) => {
   const db = drizzle(c.env.DB);
   const { sequence } = await c.req.json<{ sequence: number }>();
   await db.update(stops).set({ sequence }).where(eq(stops.id, c.req.param('id')));
+  return c.json({ ok: true });
+});
+
+app.patch('/:id/run', async (c) => {
+  const db = drizzle(c.env.DB);
+  const { runId } = await c.req.json<{ runId: string | null }>();
+  await db.update(stops).set({ runId: runId ?? null }).where(eq(stops.id, c.req.param('id')));
   return c.json({ ok: true });
 });
 

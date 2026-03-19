@@ -3,10 +3,11 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { api, formatCurrency } from '@butcher/shared';
 import type { Stop, Order } from '@butcher/shared';
 import { toast } from '../lib/toast';
+import DeliveryRunsTab from './DeliveryRunsTab';
 import {
   ArrowLeft, Route, Printer, Bell, Package, FileText,
   CheckCircle, Clock, Navigation, AlertTriangle, User, Camera,
-  Eye, MapPin, Timer, TrendingUp, ChevronUp, ChevronDown, Info, Send,
+  Eye, MapPin, Timer, TrendingUp, ChevronUp, ChevronDown, Info, Send, Layers,
 } from 'lucide-react';
 
 const DRIVER_URL = import.meta.env.VITE_DRIVER_URL ?? 'https://butcher-driver.pages.dev';
@@ -249,9 +250,11 @@ export default function DeliveryManifestPage() {
     ? new Date(day.date as unknown as number).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
     : '—';
 
+  const [activeTab, setActiveTab] = useState<'manifest' | 'runs'>('manifest');
+
   return (
     <div>
-      <div className="flex items-center gap-3 mb-6">
+      <div className="flex items-center gap-3 mb-4">
         <button onClick={() => navigate('/delivery-days')} className="w-9 h-9 bg-gray-100 rounded-lg flex items-center justify-center hover:bg-gray-200">
           <ArrowLeft className="h-4 w-4" />
         </button>
@@ -272,7 +275,18 @@ export default function DeliveryManifestPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <div className="flex gap-1 mb-5 bg-gray-100 rounded-xl p-1 w-fit">
+        <button onClick={() => setActiveTab('manifest')} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'manifest' ? 'bg-white text-brand shadow-sm' : 'text-gray-500 hover:text-brand'}`}>
+          <Package className="h-4 w-4" /> Manifest
+        </button>
+        <button onClick={() => setActiveTab('runs')} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'runs' ? 'bg-white text-brand shadow-sm' : 'text-gray-500 hover:text-brand'}`}>
+          <Layers className="h-4 w-4" /> Delivery Runs
+        </button>
+      </div>
+
+      {activeTab === 'runs' && dayId && <DeliveryRunsTab dayId={dayId} />}
+
+      {activeTab === 'manifest' && <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         {[
           { label: 'Total Stops', value: total, icon: Package },
           { label: 'Delivered', value: delivered, icon: CheckCircle },
@@ -590,7 +604,7 @@ export default function DeliveryManifestPage() {
             })}
           </div>
         )}
-      </div>
+      </div>}
     </div>
   );
 }

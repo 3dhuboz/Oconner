@@ -12,6 +12,7 @@ import stopsRouter from './routes/stops';
 import customersRouter from './routes/customers';
 import usersRouter from './routes/users';
 import driversRouter from './routes/drivers';
+import deliveryRunsRouter from './routes/deliveryRuns';
 import stripeRouter from './routes/stripe';
 import stockRouter from './routes/stock';
 import subscriptionsRouter from './routes/subscriptions';
@@ -212,6 +213,7 @@ app.route('/api/stops', stopsRouter);
 app.route('/api/customers', customersRouter);
 app.route('/api/users', usersRouter);
 app.route('/api/drivers', driversRouter);
+app.route('/api/delivery-runs', deliveryRunsRouter);
 app.route('/api/stock', stockRouter);
 app.route('/api/subscriptions', subscriptionsRouter);
 

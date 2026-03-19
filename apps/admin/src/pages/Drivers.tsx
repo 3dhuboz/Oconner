@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api } from '@butcher/shared';
-import { Plus, X, Truck, User, ToggleLeft, ToggleRight, Mail, Send } from 'lucide-react';
+import { Plus, X, Truck, User, ToggleLeft, ToggleRight, Mail, Send, Map } from 'lucide-react';
 import { toast } from '../lib/toast';
+import MapPage from './Map';
 
 const EMPTY_FORM = { name: '', email: '', sendInvite: true };
 
@@ -89,18 +90,33 @@ export default function DriversPage() {
     }
   };
 
+  const [tab, setTab] = useState<'list' | 'map'>('list');
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-bold text-brand">Drivers</h1>
-        <button
-          onClick={() => { setShowForm(true); setError(''); setForm(EMPTY_FORM); }}
-          className="flex items-center gap-2 bg-brand text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-mid transition-colors"
-        >
-          <Plus className="h-4 w-4" /> Add Driver
+        {tab === 'list' && (
+          <button
+            onClick={() => { setShowForm(true); setError(''); setForm(EMPTY_FORM); }}
+            className="flex items-center gap-2 bg-brand text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-mid transition-colors"
+          >
+            <Plus className="h-4 w-4" /> Add Driver
+          </button>
+        )}
+      </div>
+
+      <div className="flex gap-1 mb-5 bg-gray-100 rounded-xl p-1 w-fit">
+        <button onClick={() => setTab('list')} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === 'list' ? 'bg-white text-brand shadow-sm' : 'text-gray-500 hover:text-brand'}`}>
+          <Truck className="h-4 w-4" /> Driver List
+        </button>
+        <button onClick={() => setTab('map')} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === 'map' ? 'bg-white text-brand shadow-sm' : 'text-gray-500 hover:text-brand'}`}>
+          <Map className="h-4 w-4" /> Live Map
         </button>
       </div>
 
+      {tab === 'map' ? <MapPage /> : (
+      <div>
       <div className="bg-white rounded-xl border overflow-hidden">
         {drivers.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-gray-400">
@@ -211,6 +227,8 @@ export default function DriversPage() {
             </div>
           </div>
         </div>
+      )}
+      </div>
       )}
     </div>
   );

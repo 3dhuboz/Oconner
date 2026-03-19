@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useUser } from '@clerk/clerk-react';
 import { api } from '@butcher/shared';
-import type { Stop, DeliveryDay } from '@butcher/shared';
+import type { Stop, DeliveryDay, DeliveryRun } from '@butcher/shared';
 import { useGPS, type GPSStatus } from '../hooks/useGPS';
 import { MapPin, Navigation, User, CheckCircle, Clock, Truck } from 'lucide-react';
 
@@ -32,11 +32,25 @@ export default function StopsPage() {
     }
   }, [user, paramDayId]);
 
+  const [myRun, setMyRun] = useState<DeliveryRun | null>(null);
+
   useEffect(() => {
     if (!deliveryDay?.id) return;
-    api.stops.list(deliveryDay.id)
+    // Try to find a run assigned to this driver for the day
+    api.deliveryRuns.myRun(deliveryDay.id)
+      .then((run) => {
+        if (run) {
+          setMyRun(run as DeliveryRun);
+          return api.stops.listByRun((run as DeliveryRun).id);
+        }
+        return api.stops.list(deliveryDay.id);
+      })
       .then((data) => setStops(data as Stop[]))
-      .catch(() => {});
+      .catch(() => {
+        api.stops.list(deliveryDay.id)
+          .then((data) => setStops(data as Stop[]))
+          .catch(() => {});
+      });
   }, [deliveryDay?.id]);
 
   const handleStartDay = async () => {

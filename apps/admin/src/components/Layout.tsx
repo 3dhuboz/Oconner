@@ -21,7 +21,6 @@ const NAV_ITEMS = [
   { to: '/drivers', icon: UserCog, label: 'Drivers' },
   { to: '/staff', icon: ShieldCheck, label: 'Staff & Admins' },
   { to: '/subscriptions', icon: RefreshCcw, label: 'Subscriptions' },
-  { to: '/map', icon: Map, label: 'Driver Map' },
   { to: '/audit', icon: FileText, label: 'Audit Log' },
   { to: '/settings', icon: Settings, label: 'Site Settings' },
   { to: '/social-hub', icon: Sparkles, label: 'Social AI Studio' },

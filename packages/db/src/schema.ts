@@ -117,11 +117,28 @@ export const orders = sqliteTable('orders', {
   updatedAt: integer('updated_at').notNull(),
 });
 
+// ── Delivery Runs ─────────────────────────────────────────────────────────────
+// A "run" is a geographic grouping of stops for one driver on one delivery day.
+// One delivery day can have multiple runs (e.g. Rockhampton + Gladstone).
+export const deliveryRuns = sqliteTable('delivery_runs', {
+  id: text('id').primaryKey(),
+  deliveryDayId: text('delivery_day_id').notNull().references(() => deliveryDays.id),
+  name: text('name').notNull(),           // e.g. "Rockhampton North"
+  zone: text('zone'),                     // postcode zone label
+  color: text('color').notNull().default('#1B3A2E'), // hex for map/UI
+  driverUid: text('driver_uid').references(() => users.id),
+  status: text('status').notNull().default('pending'), // 'pending'|'in_progress'|'completed'
+  sequence: integer('sequence').notNull().default(0),
+  notes: text('notes'),
+  createdAt: integer('created_at').notNull(),
+});
+
 // ── Stops ─────────────────────────────────────────────────────────────────────
 export const stops = sqliteTable('stops', {
   id: text('id').primaryKey(),
   orderId: text('order_id').notNull().references(() => orders.id),
   deliveryDayId: text('delivery_day_id').notNull().references(() => deliveryDays.id),
+  runId: text('run_id').references(() => deliveryRuns.id), // nullable; null = unassigned
   customerId: text('customer_id').notNull().references(() => customers.id),
   customerName: text('customer_name').notNull(),
   customerPhone: text('customer_phone').notNull().default(''),

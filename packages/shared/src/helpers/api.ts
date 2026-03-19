@@ -72,10 +72,25 @@ export const api = {
 
   stops: {
     list: (deliveryDayId: string) => api.get(`/api/stops?deliveryDayId=${deliveryDayId}`),
+    listByRun: (runId: string) => api.get(`/api/stops?runId=${runId}`),
+    listUnassigned: (deliveryDayId: string) => api.get(`/api/stops?deliveryDayId=${deliveryDayId}&unassigned=true`),
     create: (data: unknown) => api.post('/api/stops', data),
     updateStatus: (id: string, data: { status: string; driverNote?: string; flagReason?: string; proofUrl?: string }) =>
       api.patch(`/api/stops/${id}/status`, data),
     updateSequence: (id: string, sequence: number) => api.patch(`/api/stops/${id}/sequence`, { sequence }),
+    assignRun: (id: string, runId: string | null) => api.patch(`/api/stops/${id}/run`, { runId }),
+  },
+
+  deliveryRuns: {
+    list: (deliveryDayId: string) => api.get(`/api/delivery-runs?deliveryDayId=${deliveryDayId}`),
+    myRun: (deliveryDayId: string) => api.get(`/api/delivery-runs/my-run?deliveryDayId=${deliveryDayId}`),
+    create: (data: { deliveryDayId: string; name: string; zone?: string; color?: string; driverUid?: string; notes?: string }) =>
+      api.post('/api/delivery-runs', data),
+    update: (id: string, data: Partial<{ name: string; zone: string; color: string; driverUid: string | null; status: string; notes: string; sequence: number }>) =>
+      api.patch(`/api/delivery-runs/${id}`, data),
+    remove: (id: string) => api.delete(`/api/delivery-runs/${id}`),
+    assignStop: (runId: string, stopId: string) => api.patch(`/api/delivery-runs/${runId}/assign-stop`, { stopId }),
+    autoAssign: (runId: string, postcodes: string[]) => api.post(`/api/delivery-runs/${runId}/auto-assign`, { postcodes }),
   },
 
   customers: {
