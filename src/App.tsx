@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { ClerkProvider } from '@clerk/react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Layout } from './components/Layout';
@@ -45,6 +45,7 @@ function AppContent() {
   const [electricians, setElectricians] = useState<Electrician[]>([]);
   const [partsCatalog, setPartsCatalog] = useState<CatalogPart[]>([]);
   const { user } = useAuth();
+  const navigate = useNavigate();
   const syncStatus = useSyncStatus();
 
   // Start background sync cron on mount
@@ -91,7 +92,7 @@ function AppContent() {
               (t) => (
                 <div
                   className={`${t.visible ? 'animate-enter' : 'animate-leave'} max-w-sm w-full bg-red-600 text-white shadow-2xl rounded-2xl pointer-events-auto flex ring-2 ring-red-400 cursor-pointer`}
-                  onClick={() => { window.location.href = `/jobs/${job.id}`; toast.dismiss(t.id); }}
+                  onClick={() => { navigate(`/jobs/${job.id}`); toast.dismiss(t.id); }}
                 >
                   <div className="flex-1 p-4">
                     <div className="flex items-center gap-2 mb-1">
@@ -114,7 +115,7 @@ function AppContent() {
               (t) => (
                 <div
                   className={`${t.visible ? 'animate-enter' : 'animate-leave'} max-w-sm w-full bg-slate-900 text-white shadow-xl rounded-2xl pointer-events-auto flex cursor-pointer`}
-                  onClick={() => { window.location.href = `/jobs/${job.id}`; toast.dismiss(t.id); }}
+                  onClick={() => { navigate(`/jobs/${job.id}`); toast.dismiss(t.id); }}
                 >
                   <div className="flex-1 p-4">
                     <div className="flex items-center gap-2 mb-1">
