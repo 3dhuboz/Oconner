@@ -422,9 +422,10 @@ app.post('/api/images/generate', requireAuth, async (c) => {
         for (const chunk of chunks) { imageBytes.set(chunk, off); off += chunk.length; }
       }
     }
-    const key = `products/${crypto.randomUUID()}.png`;
+    const key = `${crypto.randomUUID()}.png`;
     await c.env.IMAGES.put(key, imageBytes, { httpMetadata: { contentType: 'image/png' } });
-    return c.json({ url: `https://images.oconner.com.au/${key}` });
+    const baseUrl = new URL(c.req.url).origin;
+    return c.json({ url: `${baseUrl}/images/${key}` });
   } catch (e: any) {
     return c.json({ error: e?.message ?? 'Image generation failed' }, 500);
   }
@@ -437,12 +438,13 @@ app.post('/api/images/upload', requireAuth, async (c) => {
   const ext = file.name.split('.').pop() ?? 'jpg';
   const key = `${crypto.randomUUID()}.${ext}`;
   await c.env.IMAGES.put(key, await file.arrayBuffer(), { httpMetadata: { contentType: file.type } });
-  const url = `https://images.oconner.com.au/${key}`;
-  return c.json({ url, key });
+  const baseUrl = new URL(c.req.url).origin;
+  return c.json({ url: `${baseUrl}/images/${key}`, key });
 });
 
-app.get('/images/:key', async (c) => {
-  const obj = await c.env.IMAGES.get(c.req.param('key'));
+app.get('/images/*', async (c) => {
+  const key = c.req.path.slice('/images/'.length);
+  const obj = await c.env.IMAGES.get(key);
   if (!obj) return c.json({ error: 'Not found' }, 404);
   return new Response(obj.body, { headers: { 'Content-Type': obj.httpMetadata?.contentType ?? 'image/jpeg', 'Cache-Control': 'public, max-age=31536000' } });
 });
