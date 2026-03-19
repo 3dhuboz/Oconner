@@ -156,42 +156,49 @@ export default function SubscribePage() {
               {/* Box selection */}
               <div>
                 <h2 className="text-xl font-black text-brand mb-1">1. Choose your box</h2>
-                <p className="text-sm text-gray-500 mb-5">All boxes packed fresh. Prices include delivery.</p>
-                <div className="grid sm:grid-cols-2 gap-4">
+                <p className="text-sm text-gray-500 mb-4">All boxes packed fresh. Prices include delivery.</p>
+                <div className="space-y-3">
                   {BOX_DEFS.map((b) => (
                     <button
                       key={b.id}
                       onClick={() => setSelectedBox(b.id)}
-                      className={`relative text-left rounded-2xl border-2 overflow-hidden transition-all duration-200 ${
+                      className={`relative w-full text-left rounded-2xl border-2 overflow-hidden transition-all duration-200 flex ${
                         selectedBox === b.id
-                          ? 'border-brand shadow-xl shadow-brand/20 scale-[1.02]'
-                          : 'border-gray-200 bg-white hover:border-brand/40 hover:shadow-md'
+                          ? 'border-brand bg-brand/5 shadow-lg shadow-brand/15'
+                          : 'border-gray-200 bg-white hover:border-brand/40 hover:shadow-sm'
                       }`}
                     >
-                      {b.popular && (
-                        <div className="absolute top-3 right-3 bg-brand text-white text-xs font-bold px-2 py-1 rounded-full z-10">
-                          Most Popular
-                        </div>
-                      )}
-                      {productImages[b.id] ? (
-                        <img src={productImages[b.id]} alt={b.name} className="w-full h-40 object-cover" />
-                      ) : (
-                        <div className={`w-full h-40 bg-gradient-to-br ${b.gradient} flex items-center justify-center text-5xl`}>
-                          🥩
-                        </div>
-                      )}
-                      <div className="p-4 bg-white">
-                        <div className="flex items-start justify-between mb-1">
-                          <div>
-                            <p className="font-black text-brand text-lg">{b.name}</p>
-                            <p className="text-xs text-gray-400">{b.weight}</p>
+                      {/* Image */}
+                      <div className="flex-shrink-0 w-28 sm:w-36">
+                        {productImages[b.id] ? (
+                          <img src={productImages[b.id]} alt={b.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className={`w-full h-full min-h-[96px] bg-gradient-to-br ${b.gradient} flex items-center justify-center text-3xl`}>
+                            🥩
                           </div>
-                          <span className="text-xl font-black text-brand">${b.price}</span>
+                        )}
+                      </div>
+
+                      {/* Content */}
+                      <div className="flex-1 px-4 py-3 min-w-0">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="font-black text-brand text-base leading-tight">{b.name}</p>
+                              {b.popular && (
+                                <span className="bg-brand text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                                  Popular
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-gray-400 mt-0.5">{b.weight}</p>
+                          </div>
+                          <span className="text-xl font-black text-brand flex-shrink-0">${b.price}</span>
                         </div>
-                        <p className="text-xs text-brand font-semibold mb-1">{b.highlight}</p>
-                        <p className="text-sm text-gray-500 leading-relaxed">{b.desc}</p>
+                        <p className="text-xs font-semibold text-brand mt-1">{b.highlight}</p>
+                        <p className="text-xs text-gray-500 mt-0.5 leading-relaxed line-clamp-2">{b.desc}</p>
                         {selectedBox === b.id && (
-                          <div className="mt-2 flex items-center gap-1 text-xs text-brand font-bold">
+                          <div className="mt-1.5 flex items-center gap-1 text-xs text-brand font-bold">
                             <CheckCircle className="h-3.5 w-3.5" /> Selected
                           </div>
                         )}
