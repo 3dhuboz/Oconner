@@ -17,6 +17,7 @@ import xeroImportCsvHandler from "./api/xero/import-csv.ts";
 import stripeCreatePaymentLinkHandler from "./api/stripe/create-payment-link.ts";
 import stripeWebhookHandler from "./api/stripe/webhook.ts";
 import sendTenantHandler from "./api/notifications/send-tenant.ts";
+import smsSendHandler from "./api/sms/send.ts";
 import smsTestHandler from "./api/sms/test.ts";
 import schedulingRunningLateHandler from "./api/scheduling/running-late-check.ts";
 import schedulingOptimiseHandler from "./api/scheduling/optimise-route.ts";
@@ -248,26 +249,7 @@ async function startServer() {
   
   // 7. Send SMS to Electrician
   app.post("/api/sms/send", async (req, res) => {
-    const { to, message } = req.body;
-    const sid = process.env.TWILIO_ACCOUNT_SID;
-    const token = process.env.TWILIO_AUTH_TOKEN;
-    const from = process.env.TWILIO_PHONE_NUMBER;
-
-    if (!sid || !token || !from) {
-      // Simulate success if not configured
-      console.log(`[SMS Simulation] To: ${to} | Message: ${message}`);
-      return res.json({ success: true, simulated: true });
-    }
-
-    try {
-      const client = twilio(sid, token);
-      await client.messages.create({ body: message, from, to });
-      console.log(`[SMS Sent] To: ${to}`);
-      res.json({ success: true, simulated: false });
-    } catch (e: any) {
-      console.error("Twilio Error:", e);
-      res.status(500).json({ error: e.message });
-    }
+    await smsSendHandler(req as any, res as any);
   });
 
   // 7b. Test SMS from Integrations page
