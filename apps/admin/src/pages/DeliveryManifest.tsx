@@ -286,7 +286,8 @@ export default function DeliveryManifestPage() {
 
       {activeTab === 'runs' && dayId && <DeliveryRunsTab dayId={dayId} />}
 
-      {activeTab === 'manifest' && <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      {activeTab === 'manifest' && (<>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         {[
           { label: 'Total Stops', value: total, icon: Package },
           { label: 'Delivered', value: delivered, icon: CheckCircle },
@@ -604,7 +605,8 @@ export default function DeliveryManifestPage() {
             })}
           </div>
         )}
-      </div>}
+      </div>
+      </>)}
     </div>
   );
 }
