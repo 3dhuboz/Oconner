@@ -50,10 +50,12 @@ const sqliteDb = new Database(DB_PATH);
 sqliteDb.pragma('journal_mode = WAL');
 
 // Run migrations
-const migration = fs.readFileSync(path.resolve('./migrations/001_initial.sql'), 'utf8');
-migration.split(';').map(s => s.trim()).filter(Boolean).forEach(stmt => {
-  try { sqliteDb.prepare(stmt).run(); } catch { /* table exists */ }
-});
+for (const file of ['001_initial.sql', '002_add_indexes.sql']) {
+  const migration = fs.readFileSync(path.resolve(`./migrations/${file}`), 'utf8');
+  migration.split(';').map(s => s.trim()).filter(Boolean).forEach(stmt => {
+    try { sqliteDb.prepare(stmt).run(); } catch { /* already applied */ }
+  });
+}
 
 // D1-compatible wrapper over better-sqlite3
 const devDb = {
