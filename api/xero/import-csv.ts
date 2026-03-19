@@ -8,7 +8,7 @@ import { getDb, safeJson } from '../_db';
  * Body: { csvData: "raw CSV text", supplier?: "Rexel" | "Middys" | ... , invoiceRef?: string }
  *
  * Parses CSV rows, detects column layout (Rexel, Middy's, L&H, generic),
- * then forwards parsed items to /api/xero/pricing for Firestore persistence.
+ * then forwards parsed items to /api/xero/pricing for D1 persistence.
  *
  * Supports common Rexel CSV formats:
  *   - "Item Code","Description","Qty","Unit Price","Total"
