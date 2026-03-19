@@ -1,5 +1,5 @@
 import type { AppRequest, AppResponse } from '../_handler';
-import { getDb, newId } from '../_db';
+import { getDb, newId, safeJson } from '../_db';
 import { classifyJobType, classifyUrgency } from '../_lib/helpers';
 
 // ─── OpenRouter AI enrichment ─────────────────────────────────────────────────
@@ -366,11 +366,25 @@ function extractGmailBody(message: any): { subject: string; from: string; body: 
   return { subject, from, body: textBody, html: htmlBody };
 }
 
-// ─── Get Gmail OAuth token using refresh token ──────────────────
-async function getGmailAccessToken(): Promise<string> {
-  const refreshToken = process.env.GMAIL_REFRESH_TOKEN;
-  const clientId = process.env.GMAIL_CLIENT_ID;
-  const clientSecret = process.env.GMAIL_CLIENT_SECRET;
+// ─── Get Gmail OAuth token using refresh token ──────────────
+async function getGmailAccessToken(env?: any): Promise<string> {
+  // Prefer wrangler secrets; fall back to D1 settings saved via Integrations UI
+  let refreshToken = process.env.GMAIL_REFRESH_TOKEN;
+  let clientId = process.env.GMAIL_CLIENT_ID;
+  let clientSecret = process.env.GMAIL_CLIENT_SECRET;
+
+  if ((!refreshToken || !clientId || !clientSecret) && env?.DB) {
+    try {
+      const db = getDb(env);
+      const row = await db.prepare('SELECT value FROM settings WHERE key = ?').bind('gmail').first<{ value: string }>();
+      if (row) {
+        const saved = safeJson(row.value);
+        refreshToken = refreshToken || saved.refreshToken || '';
+        clientId = clientId || saved.clientId || '';
+        clientSecret = clientSecret || saved.clientSecret || '';
+      }
+    } catch { /* settings table may not exist yet */ }
+  }
   
   if (refreshToken && clientId && clientSecret) {
     const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
@@ -418,7 +432,7 @@ export default async function handler(req: AppRequest, res: AppResponse) {
     };
     let gmailLiveTest: any = null;
     try {
-      const accessToken = await getGmailAccessToken();
+      const accessToken = await getGmailAccessToken(req.env);
       // Verify which account this token belongs to
       const profileRes = await fetch(
         'https://gmail.googleapis.com/gmail/v1/users/me/profile',
@@ -505,7 +519,7 @@ export default async function handler(req: AppRequest, res: AppResponse) {
 
   try {
     // ── Step 1: Get Gmail access token ──
-    const accessToken = await getGmailAccessToken();
+    const accessToken = await getGmailAccessToken(req.env);
     
     // ── Step 2: Fetch unread messages ──
     const messages = await fetchGmailMessages(accessToken, 10);
