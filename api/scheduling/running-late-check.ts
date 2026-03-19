@@ -114,6 +114,12 @@ export default async function handler(req: AppRequest, res: AppResponse) {
       try {
         // Call the notification handler directly (avoids self-referential HTTP + JWT issues)
         let notifOk = false;
+        // Compute a human-readable ETA string from overrun minutes
+        const newEtaMinutes = Math.round(overrunMin / 15) * 15; // round to nearest 15min
+        const newEta = newEtaMinutes > 0
+          ? `in approximately ${newEtaMinutes} minutes`
+          : 'shortly';
+
         const notifBody = {
           type: 'running_late',
           tenantName: job.tenantName || 'Tenant',
@@ -124,6 +130,7 @@ export default async function handler(req: AppRequest, res: AppResponse) {
           scheduledDate: new Date(scheduledStart).toLocaleDateString('en-AU'),
           scheduledTime: new Date(scheduledStart).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }),
           delayMinutes: overrunMin,
+          newEta,
         };
         const mockReq: AppRequest = { method: 'POST', headers: { get: () => null }, body: notifBody, query: {}, url: '', env: req.env };
         const mockRes: AppResponse = {
