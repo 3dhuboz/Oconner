@@ -4,6 +4,7 @@ import { getDb, newId, decodeRow, encodeRow } from '../_db';
 export default async function handler(req: AppRequest, res: AppResponse) {
   const db = getDb(req.env);
   const id = (req.query.id as string) || '';
+  const status = (req.query.status as string) || ''
 
   try {
     // ── GET /api/data/jobs          → list all
@@ -14,7 +15,9 @@ export default async function handler(req: AppRequest, res: AppResponse) {
         if (!row) return res.status(404).json({ error: 'Not found' });
         return res.json(decodeRow(row));
       }
-      const { results } = await db.prepare('SELECT * FROM jobs ORDER BY created_at DESC').bind().all<any>();
+      const { results } = status
+        ? await db.prepare('SELECT * FROM jobs WHERE status = ? ORDER BY created_at DESC LIMIT 1000').bind(status).all<any>()
+        : await db.prepare('SELECT * FROM jobs ORDER BY created_at DESC LIMIT 1000').bind().all<any>();
       return res.json(results.map(decodeRow));
     }
 
