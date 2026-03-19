@@ -5,6 +5,8 @@ param(
 $WRANGLER = "node node_modules\wrangler\bin\wrangler.js"
 $ErrorActionPreference = "Stop"
 
+$env:PATH = "$PSScriptRoot\node_modules\.bin;$env:PATH"
+
 function Deploy-API {
     Write-Host "`n[API] Deploying worker..." -ForegroundColor Cyan
     Invoke-Expression "$WRANGLER deploy --config apps\api\wrangler.toml"
@@ -13,17 +15,21 @@ function Deploy-API {
 
 function Deploy-Admin {
     Write-Host "`n[Admin] Building..." -ForegroundColor Cyan
-    pnpm --filter "@butcher/admin" run build
+    Push-Location "$PSScriptRoot\apps\admin"
+    node ..\..\node_modules\vite\bin\vite.js build
+    Pop-Location
     Write-Host "[Admin] Deploying to Cloudflare Pages..." -ForegroundColor Cyan
-    Invoke-Expression "$WRANGLER pages deploy apps\admin\dist --project-name butcher-admin --branch main"
+    Invoke-Expression "$WRANGLER pages deploy apps\admin\dist --project-name butcher-admin --branch main --commit-dirty=true"
     Write-Host "[Admin] Done" -ForegroundColor Green
 }
 
 function Deploy-Driver {
     Write-Host "`n[Driver] Building..." -ForegroundColor Cyan
-    pnpm --filter "@butcher/driver" run build
+    Push-Location "$PSScriptRoot\apps\driver"
+    node ..\..\node_modules\vite\bin\vite.js build
+    Pop-Location
     Write-Host "[Driver] Deploying to Cloudflare Pages..." -ForegroundColor Cyan
-    Invoke-Expression "$WRANGLER pages deploy apps\driver\dist --project-name butcher-driver --branch main"
+    Invoke-Expression "$WRANGLER pages deploy apps\driver\dist --project-name butcher-driver --branch main --commit-dirty=true"
     Write-Host "[Driver] Done" -ForegroundColor Green
 }
 
