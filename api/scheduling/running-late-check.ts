@@ -9,7 +9,8 @@ import { getDb, safeJson } from '../_db';
  * a "running late" notification to the tenant.
  *
  * POST /api/scheduling/running-late-check
- * Body: { jobs: JobInput[] }   — active execution jobs with schedule info
+ * Body: { jobs?: JobInput[], autoNotify?: boolean }
+ *   jobs — if omitted, EXECUTION jobs are loaded directly from D1 (cron-safe)
  *
  * For each overrunning job it calls the tenant notification endpoint.
  */
@@ -43,12 +44,26 @@ export default async function handler(req: AppRequest, res: AppResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { jobs, autoNotify = true } = req.body as {
-    jobs: JobInput[];
+  const { jobs: bodyJobs, autoNotify = true } = (req.body || {}) as {
+    jobs?: JobInput[];
     autoNotify?: boolean;
   };
 
-  if (!jobs?.length) {
+  // If no jobs supplied, load EXECUTION jobs from D1 (enables direct cron calling)
+  let jobs: JobInput[] = bodyJobs || [];
+  if (!jobs.length && req.env?.DB) {
+    try {
+      const db = getDb(req.env);
+      const { results } = await db.prepare(
+        `SELECT data FROM jobs WHERE status = 'EXECUTION' LIMIT 100`
+      ).bind().all<{ data: string }>();
+      jobs = results.map(r => safeJson(r.data) as JobInput);
+    } catch (dbErr: any) {
+      console.error('[running-late-check] Failed to load jobs from D1:', dbErr.message);
+    }
+  }
+
+  if (!jobs.length) {
     return res.status(200).json({ overruns: [], message: 'No jobs to check' });
   }
 
