@@ -21,6 +21,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/" element={<RequireDriver><StopsPage /></RequireDriver>} />
+      <Route path="/run/:dayId" element={<RequireDriver><StopsPage /></RequireDriver>} />
       <Route path="/stop/:stopId" element={<RequireDriver><StopDetailPage /></RequireDriver>} />
       <Route path="/profile" element={<RequireDriver><ProfilePage /></RequireDriver>} />
     </Routes>

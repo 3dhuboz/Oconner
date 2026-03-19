@@ -565,7 +565,7 @@ export default function DeliveryManifestPage() {
                     <div className="mt-2 flex flex-wrap gap-1">
                       {stop.items?.map((item, i) => (
                         <span key={i} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
-                          {item.productName} {item.isMeatPack ? `×${item.quantity}` : `${item.weight}g`}
+                          {item.productName}{item.isMeatPack && item.quantity ? ` ×${item.quantity}` : item.weight ? ` ${item.weight >= 1000 ? `${(item.weight / 1000).toFixed(1)}kg` : `${item.weight}g`}` : ''}
                         </span>
                       ))}
                     </div>

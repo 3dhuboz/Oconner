@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useUser } from '@clerk/clerk-react';
 import { api } from '@butcher/shared';
 import type { Stop, DeliveryDay } from '@butcher/shared';
@@ -9,6 +9,7 @@ import { MapPin, Navigation, User, CheckCircle, Clock, Truck } from 'lucide-reac
 export default function StopsPage() {
   const navigate = useNavigate();
   const { user } = useUser();
+  const { dayId: paramDayId } = useParams<{ dayId?: string }>();
   const [deliveryDay, setDeliveryDay] = useState<DeliveryDay | null>(null);
   const [stops, setStops] = useState<Stop[]>([]);
   const [trackingEnabled, setTrackingEnabled] = useState(false);
@@ -20,10 +21,16 @@ export default function StopsPage() {
 
   useEffect(() => {
     if (!user) return;
-    api.deliveryDays.today()
-      .then((day) => { if (day) setDeliveryDay(day as DeliveryDay); })
-      .catch(() => {});
-  }, [user]);
+    if (paramDayId) {
+      api.deliveryDays.get(paramDayId)
+        .then((day) => { if (day) setDeliveryDay(day as DeliveryDay); })
+        .catch(() => {});
+    } else {
+      api.deliveryDays.today()
+        .then((day) => { if (day) setDeliveryDay(day as DeliveryDay); })
+        .catch(() => {});
+    }
+  }, [user, paramDayId]);
 
   useEffect(() => {
     if (!deliveryDay?.id) return;
