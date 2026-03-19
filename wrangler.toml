@@ -34,9 +34,14 @@ COMPANY_PHONE = "1300 WIREZ US"
 # 3. Build:             npm run build
 # 4. Deploy:            wrangler pages deploy dist
 #
-# ── Required secrets (set via dashboard or CLI) ──────────────────────────────
+# ── Build-time env vars (set in Cloudflare Pages dashboard > Settings > Environment variables) ──
+# VITE_* vars are embedded by Vite at BUILD time — must be Pages build env vars, NOT runtime secrets:
+#   VITE_CLERK_PUBLISHABLE_KEY   (from Clerk dashboard > API Keys)
+#   VITE_STRIPE_PUBLISHABLE_KEY  (from Stripe dashboard)
+#   VITE_GOOGLE_MAPS_API_KEY     (from Google Cloud Console)
+#
+# ── Runtime secrets (set via Cloudflare dashboard or CLI) ────────────────────
 # wrangler secret put CLERK_SECRET_KEY
-# wrangler secret put VITE_CLERK_PUBLISHABLE_KEY
 # wrangler secret put GMAIL_CLIENT_ID
 # wrangler secret put GMAIL_CLIENT_SECRET
 # wrangler secret put GMAIL_REFRESH_TOKEN
@@ -51,4 +56,3 @@ COMPANY_PHONE = "1300 WIREZ US"
 # wrangler secret put XERO_CLIENT_ID
 # wrangler secret put XERO_CLIENT_SECRET
 # wrangler secret put CRON_SECRET
-# wrangler secret put VITE_GOOGLE_MAPS_API_KEY
