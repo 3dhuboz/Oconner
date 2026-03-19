@@ -111,7 +111,7 @@ function classifyUrgency(text: string): string {
   return 'NORMAL';
 }
 
-// ─── AI extraction via OpenAI ──────────────────────────────────
+// ─── AI extraction via OpenRouter (falls back to direct OpenAI) ────────────
 export interface AIExtractionResult {
   tenantName: string;
   tenantPhone: string;
@@ -223,7 +223,7 @@ Overall confidence = average of the 5 critical field confidence scores.`
     });
 
     if (!res.ok) {
-      console.error('[Email Webhook] OpenAI API error:', res.status, await res.text());
+      console.error('[Email Webhook] AI API error:', res.status, await res.text());
       return null;
     }
 
