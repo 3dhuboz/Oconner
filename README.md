@@ -135,6 +135,7 @@ npx wrangler d1 create wirez-r-us-db
 
 # 2. Run migrations
 npx wrangler d1 execute wirez-r-us-db --file=migrations/001_initial.sql
+npx wrangler d1 execute wirez-r-us-db --file=migrations/002_add_indexes.sql
 
 # 3. Create R2 bucket
 npx wrangler r2 bucket create wirez-r-us-uploads
