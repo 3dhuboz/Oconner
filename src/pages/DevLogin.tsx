@@ -33,7 +33,7 @@ export function DevLogin() {
       toast.success('Dev access granted!');
       // Navigation is now handled by the useEffect above
     } catch (err: any) {
-      if (err.message === 'Firebase not initialized' || err.message?.includes('Clerk')) {
+      if (err.message?.includes('Clerk') || err.message?.includes('not initialized')) {
         setError('System configuration error: Authentication is not configured. Please contact support.');
       } else {
         setError(err.message || 'Failed to login. Please check your credentials.');

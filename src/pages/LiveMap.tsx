@@ -96,7 +96,7 @@ export function LiveMap({ jobs, electricians }: LiveMapProps) {
             <li>Go to <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Google Cloud Console</a></li>
             <li>Create an API key with Maps JavaScript API, Geocoding API, and Places API enabled</li>
             <li>Add to <code className="bg-slate-100 px-1.5 py-0.5 rounded text-xs">.env</code>: <code className="bg-slate-100 px-1.5 py-0.5 rounded text-xs">VITE_GOOGLE_MAPS_API_KEY=your-key</code></li>
-            <li>Add to Vercel environment variables and redeploy</li>
+            <li>Add to Cloudflare dashboard secrets and redeploy</li>
           </ol>
         </div>
       </div>
