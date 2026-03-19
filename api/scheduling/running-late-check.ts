@@ -1,4 +1,5 @@
 import type { AppRequest, AppResponse } from '../_handler';
+import sendTenantHandler from '../notifications/send-tenant';
 
 /**
  * Running-late detection endpoint.
@@ -84,25 +85,29 @@ export default async function handler(req: AppRequest, res: AppResponse) {
     // Send running-late notification if not already sent
     if (autoNotify && !job.runningLateNotified && (job.tenantPhone || job.tenantEmail)) {
       try {
-        const baseUrl = process.env.APP_URL || req.env?.APP_URL || 'http://localhost:3000';
-
-        const notifResp = await fetch(`${baseUrl}/api/notifications/send-tenant`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            type: 'running_late',
-            tenantName: job.tenantName || 'Tenant',
-            tenantPhone: job.tenantPhone,
-            tenantEmail: job.tenantEmail,
-            propertyAddress: job.propertyAddress,
-            jobId: job.id,
-            scheduledDate: new Date(scheduledStart).toLocaleDateString('en-AU'),
-            scheduledTime: new Date(scheduledStart).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }),
-            delayMinutes: overrunMin,
-          }),
-        });
-
-        result.notificationSent = notifResp.ok;
+        // Call the notification handler directly (avoids self-referential HTTP + JWT issues)
+        let notifOk = false;
+        const notifBody = {
+          type: 'running_late',
+          tenantName: job.tenantName || 'Tenant',
+          tenantPhone: job.tenantPhone,
+          tenantEmail: job.tenantEmail,
+          propertyAddress: job.propertyAddress,
+          jobId: job.id,
+          scheduledDate: new Date(scheduledStart).toLocaleDateString('en-AU'),
+          scheduledTime: new Date(scheduledStart).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' }),
+          delayMinutes: overrunMin,
+        };
+        const mockReq: AppRequest = { method: 'POST', headers: { get: () => null }, body: notifBody, query: {}, url: '', env: req.env };
+        const mockRes: AppResponse = {
+          status(code) { return this; },
+          json(data) { notifOk = true; },
+          send(data) { notifOk = true; },
+          setHeader() {},
+          end() {},
+        };
+        await sendTenantHandler(mockReq, mockRes);
+        result.notificationSent = notifOk;
       } catch (err) {
         console.error(`Failed to send running-late notification for job ${job.id}:`, err);
         result.notificationSent = false;
