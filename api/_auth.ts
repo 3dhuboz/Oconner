@@ -5,9 +5,10 @@
  * Public routes (no auth required):
  *   - POST /api/webhooks/email      (CloudMailIn / SendGrid inbound)
  *   - POST /api/stripe/webhook*     (Stripe — verified by signature)
- *   - GET  /api/email/poll-inbox    (cron-job.org — verified by CRON_SECRET)
- *   - POST /api/email/poll-inbox    (same)
- *   - GET  /api/auth/xero/callback  (Xero OAuth redirect — no Clerk JWT in popup)
+ *   - GET  /api/email/poll-inbox                  (cron-job.org — verified by CRON_SECRET)
+ *   - POST /api/email/poll-inbox                  (same)
+ *   - POST /api/scheduling/running-late-check     (cron-job.org — verified by CRON_SECRET)
+ *   - GET  /api/auth/xero/callback                (Xero OAuth redirect — no Clerk JWT in popup)
  */
 
 import { verifyToken } from '@clerk/backend';
@@ -17,6 +18,7 @@ const PUBLIC_PREFIXES = [
   '/api/webhooks/',
   '/api/stripe/webhook',
   '/api/email/poll-inbox',
+  '/api/scheduling/running-late-check',  // cron-job.org — CRON_SECRET verified inside handler
   '/api/auth/xero/callback',  // Xero OAuth redirect — no Clerk JWT in popup context
 ];
 

@@ -44,6 +44,17 @@ export default async function handler(req: AppRequest, res: AppResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
+  // Secure public endpoint with CRON_SECRET (same pattern as poll-inbox)
+  const cronSecret = process.env.CRON_SECRET;
+  if (cronSecret) {
+    const authHeader = typeof req.headers.get === 'function'
+      ? req.headers.get('authorization')
+      : (req.headers as any)['authorization'];
+    if (authHeader !== `Bearer ${cronSecret}`) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+  }
+
   const { jobs: bodyJobs, autoNotify = true } = (req.body || {}) as {
     jobs?: JobInput[];
     autoNotify?: boolean;
