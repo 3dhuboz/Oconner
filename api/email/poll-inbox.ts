@@ -517,6 +517,24 @@ export default async function handler(req: AppRequest, res: AppResponse) {
     });
   }
 
+  // Check D1 settings for enabled/autoCreateJobs/markAsRead flags
+  let autoCreateJobs = true;
+  let markAsReadEnabled = true;
+  if (req.env?.DB) {
+    try {
+      const db = getDb(req.env);
+      const row = await db.prepare('SELECT value FROM settings WHERE key = ?').bind('gmail').first<{ value: string }>();
+      if (row) {
+        const saved = safeJson(row.value);
+        if (saved.enabled === false) {
+          return res.status(200).json({ success: true, processed: 0, message: 'Gmail polling is disabled in settings' });
+        }
+        autoCreateJobs = saved.autoCreateJobs !== false;
+        markAsReadEnabled = saved.markAsRead !== false;
+      }
+    } catch { /* settings table may not exist yet */ }
+  }
+
   try {
     // ── Step 1: Get Gmail access token ──
     const accessToken = await getGmailAccessToken(req.env);
@@ -564,7 +582,7 @@ export default async function handler(req: AppRequest, res: AppResponse) {
         
         if (isSkippable) {
           // Mark as read so we don't re-check it
-          await markAsRead(accessToken, message.id);
+          if (markAsReadEnabled) await markAsRead(accessToken, message.id);
           console.log(`[EmailPoll] Skipped non-WO email: "${subject}" from ${from}`);
           continue;
         }
@@ -632,7 +650,14 @@ export default async function handler(req: AppRequest, res: AppResponse) {
           gmailMessageId: message.id,
         };
         
-        // Save to D1
+        // Save to D1 (skip if autoCreateJobs is disabled in settings)
+        if (!autoCreateJobs) {
+          if (markAsReadEnabled) await markAsRead(accessToken, message.id);
+          console.log(`[EmailPoll] Parsed email but job creation is disabled: "${subject}"`);
+          results.push({ gmailId: message.id, subject, from, software: detected.software, skipped: 'autoCreateJobs disabled' });
+          continue;
+        }
+
         const docId = newId();
         const jobToSave: any = { ...newJob, id: docId };
         try {
@@ -656,8 +681,8 @@ export default async function handler(req: AppRequest, res: AppResponse) {
           continue;
         }
 
-        // Mark email as read ONLY after successful D1 save
-        await markAsRead(accessToken, message.id);
+        // Mark email as read ONLY after successful D1 save (if enabled in settings)
+        if (markAsReadEnabled) await markAsRead(accessToken, message.id);
         
         results.push({
           gmailId: message.id,
