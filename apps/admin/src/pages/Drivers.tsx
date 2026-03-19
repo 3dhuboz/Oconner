@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { api } from '@butcher/shared';
-import { Plus, X, Truck, User, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Plus, X, Truck, User, ToggleLeft, ToggleRight, Mail, Send } from 'lucide-react';
 import { toast } from '../lib/toast';
 
-const EMPTY_FORM = { name: '', email: '' };
+const EMPTY_FORM = { name: '', email: '', sendInvite: true };
 
 interface DriverUser {
   id: string;
@@ -20,6 +20,7 @@ export default function DriversPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [inviting, setInviting] = useState<string | null>(null);
 
   useEffect(() => {
     api.users.drivers()
@@ -48,15 +49,34 @@ export default function DriversPage() {
       setDrivers((prev) => [...prev, newDriver]);
       setForm(EMPTY_FORM);
       setShowForm(false);
-      toast(clerkId
-        ? `Driver created and linked to existing account`
-        : `Driver created — they must sign up at the storefront to enable login`);
+      if (form.sendInvite) {
+        try {
+          await api.drivers.invite(form.name, form.email);
+          toast(clerkId ? 'Driver created, invite sent' : 'Driver created, invite sent — they must sign up to enable login');
+        } catch {
+          toast('Driver created but invite failed to send', 'error');
+        }
+      } else {
+        toast(clerkId ? 'Driver created and linked' : 'Driver created — they must sign up at the storefront to enable login');
+      }
     } catch (e: unknown) {
       const msg = (e as { message?: string })?.message;
       setError(msg ?? 'Failed to create driver.');
       toast(msg ?? 'Failed to create driver', 'error');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const sendInvite = async (driver: DriverUser) => {
+    setInviting(driver.id);
+    try {
+      await api.drivers.invite(driver.name ?? driver.email, driver.email);
+      toast(`Invite sent to ${driver.email}`);
+    } catch {
+      toast('Failed to send invite', 'error');
+    } finally {
+      setInviting(null);
     }
   };
 
@@ -95,6 +115,7 @@ export default function DriversPage() {
                 <th className="px-4 py-3 text-left">Driver</th>
                 <th className="px-4 py-3 text-left">Email</th>
                 <th className="px-4 py-3 text-center">Active</th>
+                <th className="px-4 py-3 text-center">Invite</th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -114,6 +135,19 @@ export default function DriversPage() {
                       {d.active !== false
                         ? <ToggleRight className="h-6 w-6 text-brand mx-auto" />
                         : <ToggleLeft className="h-6 w-6 text-gray-400 mx-auto" />}
+                    </button>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <button
+                      onClick={() => sendInvite(d)}
+                      disabled={inviting === d.id}
+                      title="Send driver app invite email"
+                      className="inline-flex items-center gap-1.5 text-xs font-medium text-brand border border-brand/30 rounded-lg px-2.5 py-1.5 hover:bg-brand/5 disabled:opacity-50 transition-colors"
+                    >
+                      {inviting === d.id
+                        ? <span className="animate-spin h-3 w-3 border-2 border-brand border-t-transparent rounded-full" />
+                        : <Send className="h-3 w-3" />}
+                      Send Invite
                     </button>
                   </td>
                 </tr>
@@ -155,16 +189,24 @@ export default function DriversPage() {
                   className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
                 />
               </div>
-              <p className="text-xs text-gray-400 bg-gray-50 rounded-lg p-3">
-                If the driver already has an account at the storefront, they'll be linked automatically.
-                Otherwise they can sign up later and their account will be connected on first login.
-              </p>
+              <label className="flex items-center gap-3 cursor-pointer p-3 bg-brand/5 border border-brand/20 rounded-lg">
+                <input
+                  type="checkbox"
+                  checked={form.sendInvite}
+                  onChange={(e) => setForm((f) => ({ ...f, sendInvite: e.target.checked }))}
+                  className="accent-brand w-4 h-4"
+                />
+                <div>
+                  <p className="text-sm font-medium text-brand">Send invite email</p>
+                  <p className="text-xs text-gray-500">Email the driver a link to the app with install instructions</p>
+                </div>
+              </label>
               {error && <p className="text-red-600 text-sm bg-red-50 rounded-lg p-3">{error}</p>}
             </div>
             <div className="flex gap-3 mt-5">
               <button onClick={() => setShowForm(false)} className="flex-1 border py-2 rounded-lg text-sm">Cancel</button>
-              <button onClick={handleAdd} disabled={saving} className="flex-1 bg-brand text-white py-2 rounded-lg text-sm font-medium disabled:opacity-50">
-                {saving ? 'Creating…' : 'Create Driver'}
+              <button onClick={handleAdd} disabled={saving} className="flex-1 bg-brand text-white py-2 rounded-lg text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2">
+                {saving ? 'Creating…' : form.sendInvite ? <><Mail className="h-4 w-4" /> Create & Send Invite</> : 'Create Driver'}
               </button>
             </div>
           </div>

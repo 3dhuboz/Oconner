@@ -112,6 +112,8 @@ export const api = {
       api.patch(`/api/drivers/session/${sessionId}/ping`, { lat, lng }),
     endSession: (sessionId: string) =>
       api.patch(`/api/drivers/session/${sessionId}/complete`, {}),
+    invite: (name: string, email: string) =>
+      api.post('/api/drivers/invite', { name, email }),
   },
 
   config: {

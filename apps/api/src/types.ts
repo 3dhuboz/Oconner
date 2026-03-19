@@ -8,6 +8,7 @@ export interface Env {
   STRIPE_WEBHOOK_SECRET: string;
   GOOGLE_MAPS_API_KEY: string;
   STOREFRONT_URL: string;
+  DRIVER_APP_URL: string;
   FROM_EMAIL: string;
   ENVIRONMENT: string;
   VAPID_PUBLIC_KEY: string;
