@@ -14,6 +14,7 @@ export interface Env {
   VAPID_PUBLIC_KEY: string;
   VAPID_PRIVATE_KEY: string;
   OPENROUTER_API_KEY: string;
+  ZERNIO_API_KEY: string;
 }
 
 export type UserRole = 'admin' | 'staff' | 'driver';

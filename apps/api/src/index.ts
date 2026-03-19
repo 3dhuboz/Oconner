@@ -17,6 +17,7 @@ import stripeRouter from './routes/stripe';
 import stockRouter from './routes/stock';
 import subscriptionsRouter from './routes/subscriptions';
 import pushRouter from './routes/push';
+import { reels as reelsRouter } from './routes/reels';
 
 const app = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
 
@@ -176,6 +177,7 @@ app.post('/api/subscriptions', async (c) => {
 });
 
 app.route('/api/push', pushRouter);
+app.route('/api/reels', reelsRouter);
 
 // ── Public contact form ───────────────────────────────────────────────────────
 app.post('/api/contact', async (c) => {

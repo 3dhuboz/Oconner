@@ -1,43 +1,29 @@
 'use client';
 
-import { useRef, useState } from 'react';
-import { Play, X, ExternalLink } from 'lucide-react';
+import { useRef, useState, useEffect } from 'react';
+import { Play, X, ExternalLink, Loader2 } from 'lucide-react';
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'https://oconner-api.steve-700.workers.dev';
 
 const FB_PAGE_ID = '61574996320860';
 const FB_PAGE = `https://www.facebook.com/profile.php?id=${FB_PAGE_ID}`;
 const FB_REELS = `https://www.facebook.com/profile.php?id=${FB_PAGE_ID}&sk=reels_tab`;
 
-// ─── Reel card config ─────────────────────────────────────────────────────────
-// videoUrl: short MP4 clip (R2/CDN) that autoplays on hover as snippet preview
-// fbVideoUrl: specific Facebook reel URL — used for the "Watch on Facebook" CTA
-const REELS = [
-  {
-    id: 1,
-    label: 'Life on the Farm',
-    sublabel: 'Boyne Valley, QLD',
-    bg: 'https://images.unsplash.com/photo-1516467508483-a7212febe31a?w=400&q=80',
-    videoUrl: null as string | null,
-    fbVideoUrl: null as string | null,
-    featured: false,
-  },
-  {
-    id: 2,
-    label: 'From Paddock to Pack',
-    sublabel: 'Premium Grass-Fed',
-    bg: 'https://images.unsplash.com/photo-1558030006-450675393462?w=400&q=80',
-    videoUrl: null as string | null,
-    fbVideoUrl: null as string | null,
-    featured: true,
-  },
-  {
-    id: 3,
-    label: 'Meet the Cattle',
-    sublabel: 'Regenerative Farming',
-    bg: 'https://images.unsplash.com/photo-1500595046743-cd271d694d30?w=400&q=80',
-    videoUrl: null as string | null,
-    fbVideoUrl: null as string | null,
-    featured: false,
-  },
+interface ReelItem {
+  id: string;
+  label: string;
+  sublabel: string;
+  thumbnail: string | null;
+  videoUrl: string | null;
+  fbUrl: string;
+  featured: boolean;
+}
+
+// Fallback placeholders shown while loading or if Zernio returns nothing
+const FALLBACK_REELS: ReelItem[] = [
+  { id: 'f1', label: 'Life on the Farm', sublabel: 'Boyne Valley, QLD', thumbnail: 'https://images.unsplash.com/photo-1516467508483-a7212febe31a?w=400&q=80', videoUrl: null, fbUrl: FB_REELS, featured: false },
+  { id: 'f2', label: 'From Paddock to Pack', sublabel: 'Premium Grass-Fed', thumbnail: 'https://images.unsplash.com/photo-1558030006-450675393462?w=400&q=80', videoUrl: null, fbUrl: FB_REELS, featured: true },
+  { id: 'f3', label: 'Meet the Cattle', sublabel: 'Regenerative Farming', thumbnail: 'https://images.unsplash.com/photo-1500595046743-cd271d694d30?w=400&q=80', videoUrl: null, fbUrl: FB_REELS, featured: false },
 ];
 
 function FbIcon({ className }: { className?: string }) {
@@ -57,7 +43,7 @@ function buildFbSnippetSrc(w: number, h: number, fbVideoUrl: string | null) {
   return `https://www.facebook.com/plugins/page.php?href=${pageHref}&tabs=videos&width=${w}&height=${h}&small_header=true&adapt_container_width=false&hide_cover=true&show_facepile=false`;
 }
 
-function ReelCard({ reel, index }: { reel: (typeof REELS)[number]; index: number }) {
+function ReelCard({ reel, index, total }: { reel: ReelItem; index: number; total: number }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [expanded, setExpanded] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -103,14 +89,18 @@ function ReelCard({ reel, index }: { reel: (typeof REELS)[number]; index: number
       onMouseLeave={handleLeave}
       onClick={handleClick}
     >
-      {/* ── Thumbnail (always rendered, fades when snippet shown) ── */}
-      <img
-        src={reel.bg}
-        alt={reel.label}
-        className={`absolute inset-0 w-full h-full object-cover transition-all duration-500 ${showVideo || expanded ? 'opacity-0 scale-110' : 'opacity-100 scale-100'}`}
-      />
+      {/* ── Thumbnail ── */}
+      {reel.thumbnail ? (
+        <img
+          src={reel.thumbnail}
+          alt={reel.label}
+          className={`absolute inset-0 w-full h-full object-cover transition-all duration-500 ${showVideo || expanded ? 'opacity-0 scale-110' : 'opacity-100 scale-100'}`}
+        />
+      ) : (
+        <div className={`absolute inset-0 bg-gray-800 transition-opacity duration-500 ${showVideo || expanded ? 'opacity-0' : 'opacity-100'}`} />
+      )}
 
-      {/* ── Short MP4 hover snippet (if videoUrl configured) ── */}
+      {/* ── Short MP4 hover snippet ── */}
       {reel.videoUrl && (
         <video
           ref={videoRef}
@@ -123,10 +113,10 @@ function ReelCard({ reel, index }: { reel: (typeof REELS)[number]; index: number
         />
       )}
 
-      {/* ── Facebook snippet iframe (shown when expanded AND no direct videoUrl) ── */}
+      {/* ── Facebook iframe snippet (expanded, no direct video) ── */}
       {expanded && !reel.videoUrl && (
         <iframe
-          src={buildFbSnippetSrc(cardW, cardH, reel.fbVideoUrl)}
+          src={buildFbSnippetSrc(cardW, cardH, reel.fbUrl)}
           width={cardW}
           height={cardH}
           className="absolute inset-0 w-full h-full border-0 block"
@@ -136,7 +126,7 @@ function ReelCard({ reel, index }: { reel: (typeof REELS)[number]; index: number
         />
       )}
 
-      {/* ── Always-on bottom gradient ── */}
+      {/* ── Gradient overlay ── */}
       <div
         className={`absolute inset-0 pointer-events-none transition-opacity duration-300 ${expanded && !reel.videoUrl ? 'opacity-0' : 'opacity-100'}`}
         style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0) 40%, rgba(0,0,0,0.9) 100%)' }}
@@ -151,7 +141,7 @@ function ReelCard({ reel, index }: { reel: (typeof REELS)[number]; index: number
         </div>
       )}
 
-      {/* ── Play button (thumbnail state only) ── */}
+      {/* ── Play button ── */}
       {!expanded && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <div className={`w-12 h-12 rounded-full bg-white/20 backdrop-blur-sm border border-white/40 flex items-center justify-center shadow-xl transition-transform duration-200 ${hovered ? 'scale-110' : 'scale-100'}`}>
@@ -160,7 +150,7 @@ function ReelCard({ reel, index }: { reel: (typeof REELS)[number]; index: number
         </div>
       )}
 
-      {/* ── Close button + Watch CTA (expanded state) ── */}
+      {/* ── Expanded: close + watch CTA ── */}
       {expanded && (
         <>
           <button
@@ -171,7 +161,7 @@ function ReelCard({ reel, index }: { reel: (typeof REELS)[number]; index: number
             <X className="h-3.5 w-3.5 text-white" />
           </button>
           <a
-            href={reel.fbVideoUrl ?? FB_REELS}
+            href={reel.fbUrl}
             target="_blank"
             rel="noopener noreferrer"
             onClick={(e) => e.stopPropagation()}
@@ -182,7 +172,7 @@ function ReelCard({ reel, index }: { reel: (typeof REELS)[number]; index: number
         </>
       )}
 
-      {/* ── Card info footer (thumbnail state) ── */}
+      {/* ── Card footer (thumbnail state) ── */}
       {!expanded && (
         <div className="absolute bottom-0 left-0 right-0 p-3 pointer-events-none">
           <div className="flex items-center gap-1.5 mb-0.5">
@@ -196,7 +186,7 @@ function ReelCard({ reel, index }: { reel: (typeof REELS)[number]; index: number
 
       {/* ── Side dots ── */}
       <div className="absolute right-2 top-1/2 -translate-y-1/2 flex flex-col gap-1 pointer-events-none">
-        {[0, 1, 2].map((d) => (
+        {Array.from({ length: total }).map((_, d) => (
           <div key={d} className={`w-1 h-1 rounded-full ${d === index ? 'bg-white' : 'bg-white/30'}`} />
         ))}
       </div>
@@ -204,7 +194,40 @@ function ReelCard({ reel, index }: { reel: (typeof REELS)[number]; index: number
   );
 }
 
+function SkeletonCard({ featured }: { featured: boolean }) {
+  return (
+    <div
+      className={`relative flex-shrink-0 rounded-2xl overflow-hidden animate-pulse bg-white/5 ${
+        featured ? 'w-44 md:w-52 scale-105' : 'w-36 md:w-44 opacity-70'
+      }`}
+      style={{ height: featured ? 400 : 340 }}
+    >
+      <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-white/10" />
+      <div className="absolute bottom-3 left-3 right-3 space-y-1.5">
+        <div className="h-3 bg-white/10 rounded w-2/3" />
+        <div className="h-2 bg-white/10 rounded w-1/2" />
+      </div>
+    </div>
+  );
+}
+
 export default function FacebookReels() {
+  const [reels, setReels] = useState<ReelItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/api/reels`)
+      .then((r) => r.json<{ reels: ReelItem[] }>())
+      .then((data) => {
+        const items = data?.reels ?? [];
+        setReels(items.length > 0 ? items : FALLBACK_REELS);
+      })
+      .catch(() => setReels(FALLBACK_REELS))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const displayReels = loading ? [] : reels;
+
   return (
     <section
       className="relative overflow-hidden py-20 px-4"
@@ -225,13 +248,26 @@ export default function FacebookReels() {
           <p className="text-gray-400 text-lg max-w-xl mx-auto">
             Behind-the-scenes footage, paddock-to-pack stories &amp; what's happening at O'Connor Agriculture.
           </p>
-          <p className="text-gray-600 text-sm mt-2">Click a card to preview · watch the full reel on Facebook</p>
+          <p className="text-gray-600 text-sm mt-2">
+            {loading
+              ? <span className="inline-flex items-center gap-1.5"><Loader2 className="h-3 w-3 animate-spin" /> Loading latest reels…</span>
+              : 'Click a card to preview · watch the full reel on Facebook'
+            }
+          </p>
         </div>
 
         <div className="flex items-center justify-center gap-4 md:gap-6 mb-12">
-          {REELS.map((reel, i) => (
-            <ReelCard key={reel.id} reel={reel} index={i} />
-          ))}
+          {loading ? (
+            <>
+              <SkeletonCard featured={false} />
+              <SkeletonCard featured={true} />
+              <SkeletonCard featured={false} />
+            </>
+          ) : (
+            displayReels.map((reel, i) => (
+              <ReelCard key={reel.id} reel={reel} index={i} total={displayReels.length} />
+            ))
+          )}
         </div>
 
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
