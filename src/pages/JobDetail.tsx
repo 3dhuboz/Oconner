@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../utils';
 import { useAuth } from '../context/AuthContext';
+import { apiFetch } from '../services/api';
 import toast from 'react-hot-toast';
 
 interface JobDetailProps {
@@ -115,7 +116,7 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
       updateJob(job.id, { status: newStatus });
       
       try {
-        const res = await fetch('/api/sms/send', {
+        const res = await apiFetch('/api/sms/send', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -193,7 +194,7 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
 
     try {
       // Call server-side endpoint to generate Form 9 PDF
-      const response = await fetch('/api/form9/generate', {
+      const response = await apiFetch('/api/form9/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -628,7 +629,7 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
   const handleSyncXero = async () => {
     setIsSyncingXero(true);
     try {
-      const response = await fetch('/api/xero/invoice', {
+      const response = await apiFetch('/api/xero/invoice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ job })
@@ -692,7 +693,7 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
 
     setGeneratingPaymentLink(true);
     try {
-      const response = await fetch('/api/stripe/create-payment-link', {
+      const response = await apiFetch('/api/stripe/create-payment-link', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -916,7 +917,7 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
                   try {
                     const schedDate = new Date(job.scheduledDate!);
                     const endTime = new Date(schedDate.getTime() + 2 * 60 * 60 * 1000);
-                    const res = await fetch('/api/notifications/send-tenant', {
+                    const res = await apiFetch('/api/notifications/send-tenant', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({
@@ -1995,7 +1996,7 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
                       try {
                         const schedDate = new Date(job.scheduledDate!);
                         const endTime = new Date(schedDate.getTime() + 2 * 60 * 60 * 1000);
-                        const res = await fetch('/api/notifications/send-tenant', {
+                        const res = await apiFetch('/api/notifications/send-tenant', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({
@@ -2046,7 +2047,7 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
                         try {
                           const schedDate = job.scheduledDate ? new Date(job.scheduledDate) : new Date();
                           const endTime = new Date(schedDate.getTime() + 2 * 60 * 60 * 1000);
-                          await fetch('/api/notifications/send-tenant', {
+                          await apiFetch('/api/notifications/send-tenant', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -2090,7 +2091,7 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
                     onClick={async () => {
                       setResendingSms(true);
                       try {
-                        const res = await fetch('/api/sms/send', {
+                        const res = await apiFetch('/api/sms/send', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({
@@ -2434,7 +2435,7 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
                                   return;
                                 }
                                 try {
-                                  const res = await fetch('/api/sms/send', {
+                                  const res = await apiFetch('/api/sms/send', {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({

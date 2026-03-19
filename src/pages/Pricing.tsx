@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Upload, AlertTriangle, TrendingUp, TrendingDown, Package, RefreshCw, DollarSign, BarChart3, CheckCircle2, XCircle, ArrowRight, Check, Percent, Settings, RefreshCcw, Pencil } from 'lucide-react';
 import { cn } from '../utils';
+import { apiFetch } from '../services/api';
 
 interface PartEntry {
   _id: string;
@@ -68,7 +69,7 @@ export function Pricing() {
   const fetchParts = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/xero/pricing');
+      const res = await apiFetch('/api/xero/pricing');
       if (res.ok) {
         const data = await res.json();
         setParts(data.parts || []);
@@ -146,7 +147,7 @@ export function Pricing() {
     setAnalyzing(true);
     setUploadResult(null);
     try {
-      const res = await fetch('/api/xero/import-csv', {
+      const res = await apiFetch('/api/xero/import-csv', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -178,7 +179,7 @@ export function Pricing() {
     setUploading(true);
     setUploadResult(null);
     try {
-      const res = await fetch('/api/xero/pricing', {
+      const res = await apiFetch('/api/xero/pricing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -236,7 +237,7 @@ export function Pricing() {
   const handleManualAdd = async () => {
     if (!manualName.trim() || !manualPrice) return;
     try {
-      await fetch('/api/xero/pricing', {
+      await apiFetch('/api/xero/pricing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -277,7 +278,7 @@ export function Pricing() {
     const val = parseFloat(editSellValue);
     if (isNaN(val) || val <= 0) { setEditingSellPrice(null); return; }
     try {
-      await fetch('/api/xero/pricing', {
+      await apiFetch('/api/xero/pricing', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ partKey: part.partKey, sellPrice: val }),
@@ -292,7 +293,7 @@ export function Pricing() {
   // Clear per-item sell price (revert to global markup)
   const handleClearSellPrice = async (part: PartEntry) => {
     try {
-      await fetch('/api/xero/pricing', {
+      await apiFetch('/api/xero/pricing', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ partKey: part.partKey, sellPrice: null }),

@@ -15,6 +15,16 @@ export async function getClerkToken(): Promise<string | null> {
   return null;
 }
 
+/** Drop-in fetch() replacement that automatically adds the Clerk JWT Authorization header */
+export async function apiFetch(url: string, options?: RequestInit): Promise<Response> {
+  const token = await getClerkToken();
+  const authHdr = token ? { Authorization: `Bearer ${token}` } : {};
+  return fetch(url, {
+    ...options,
+    headers: { ...(options?.headers as Record<string, string> || {}), ...authHdr },
+  });
+}
+
 async function req<T>(method: string, path: string, body?: any): Promise<T> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   const token = await getClerkToken();

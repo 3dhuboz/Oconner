@@ -5,7 +5,7 @@ import { MapPin, Clock, Camera, Plus, Trash2, CheckCircle2, FileText, ArrowLeft,
 import { useAuth } from '../context/AuthContext';
 import { useGpsTracking } from '../hooks/useGpsTracking';
 import { cn } from '../utils';
-import { stockApi, storageApi } from '../services/api';
+import { stockApi, storageApi, apiFetch } from '../services/api';
 import jsPDF from 'jspdf';
 import { Html5Qrcode } from 'html5-qrcode';
 
@@ -201,7 +201,7 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
 
     try {
       // Save to pricing catalog (best-effort)
-      await fetch('/api/xero/pricing', {
+      await apiFetch('/api/xero/pricing', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1294,7 +1294,7 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
                         const laborCost = (job.laborHours || 0) * 120;
                         const total = laborCost + totalMaterials;
 
-                        await fetch('/api/notifications/send-tenant', {
+                        await apiFetch('/api/notifications/send-tenant', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({
