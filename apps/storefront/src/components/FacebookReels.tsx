@@ -217,7 +217,7 @@ export default function FacebookReels() {
 
   useEffect(() => {
     fetch(`${API_BASE}/api/reels`)
-      .then((r) => r.json<{ reels: ReelItem[] }>())
+      .then((r) => r.json() as Promise<{ reels: ReelItem[] }>)
       .then((data) => {
         const items = data?.reels ?? [];
         setReels(items.length > 0 ? items : FALLBACK_REELS);
