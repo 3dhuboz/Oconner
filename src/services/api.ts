@@ -7,7 +7,7 @@
 const BASE = '/api/data';
 
 /** Get the current Clerk JWT — Clerk sets window.Clerk after mounting */
-async function getClerkToken(): Promise<string | null> {
+export async function getClerkToken(): Promise<string | null> {
   try {
     const clerk = (window as any).Clerk;
     if (clerk?.session) return await clerk.session.getToken();
