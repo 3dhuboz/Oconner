@@ -139,9 +139,15 @@ npx wrangler d1 execute wirez-r-us-db --file=migrations/001_initial.sql
 # 3. Create R2 bucket
 npx wrangler r2 bucket create wirez-r-us-uploads
 
-# 4. Set secrets
+# 4a. Set build-time env vars in Cloudflare Pages dashboard
+#     (Settings > Environment variables > Production)
+#     VITE_CLERK_PUBLISHABLE_KEY=pk_live_...
+#     VITE_STRIPE_PUBLISHABLE_KEY=pk_live_...
+#     VITE_GOOGLE_MAPS_API_KEY=AIza...
+
+# 4b. Set runtime secrets (Workers / Functions)
 npx wrangler secret put CLERK_SECRET_KEY
-# ... (see wrangler.toml for full list)
+# ... (see wrangler.toml for full list of 13 runtime secrets)
 
 # 5. Build & deploy
 npm run build
