@@ -5,7 +5,7 @@
  * Public routes (no auth required):
  *   - POST /api/webhooks/email   (CloudMailIn / SendGrid inbound)
  *   - POST /api/stripe/webhook*  (Stripe — verified by signature)
- *   - GET  /api/email/poll-inbox (Cloudflare Cron — verified by CRON_SECRET)
+ *   - GET  /api/email/poll-inbox (cron-job.org — verified by CRON_SECRET)
  *   - POST /api/email/poll-inbox (same)
  */
 
@@ -27,7 +27,7 @@ export function isPublicRoute(pathname: string): boolean {
  * Returns the userId on success, or null if invalid/missing.
  *
  * @param request  The incoming CF Request
- * @param env      The CF env (must have CLERK_SECRET_KEY and VITE_CLERK_PUBLISHABLE_KEY)
+ * @param env      The CF env (must have CLERK_SECRET_KEY)
  */
 export async function verifyClerkJwt(
   request: Request,
