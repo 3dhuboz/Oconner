@@ -10,6 +10,7 @@ import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import CutAdvisor from '@/components/CutAdvisor';
 import FacebookTicker from '@/components/FacebookTicker';
+import FacebookReels from '@/components/FacebookReels';
 import { Settings } from 'lucide-react';
 
 const ADMIN_URL = process.env.NEXT_PUBLIC_ADMIN_URL ?? 'https://butcher-admin.pages.dev';
@@ -132,6 +133,8 @@ export default function HomePage() {
             </div>
           </div>
         </section>
+
+        <FacebookReels />
 
         <CutAdvisor />
 
