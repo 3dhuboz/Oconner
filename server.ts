@@ -201,7 +201,7 @@ async function startServer() {
         lineItems.push({
           description: 'Electrical Labor',
           quantity: job.laborHours,
-          unitAmount: 85.00, // Example hourly rate
+          unitAmount: job.hourlyRate || 85.00,
           accountCode: '200'
         });
       }
