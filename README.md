@@ -155,10 +155,15 @@ npm run build
 npx wrangler pages deploy dist
 ```
 
-### Email Polling Cron
-Cloudflare Pages doesn't support cron triggers. Choose one of:
-- **Option A**: Set up an external service (e.g. [cron-job.org](https://cron-job.org)) to POST to `/api/email/poll-inbox` every 5 minutes with `Authorization: Bearer <CRON_SECRET>`
-- **Option B**: Create a separate Cloudflare Worker with `[triggers] crons = ["*/5 * * * *"]` that calls the endpoint
+### Cron Jobs
+Cloudflare Pages doesn't support cron triggers. Use [cron-job.org](https://cron-job.org) or a separate Worker.
+
+| Endpoint | Method | Interval | Auth Header |
+|---|---|---|---|
+| `/api/email/poll-inbox` | POST | Every 5 min | `Authorization: Bearer <CRON_SECRET>` |
+| `/api/scheduling/running-late-check` | POST | Every 10 min | `Authorization: Bearer <CRON_SECRET>` |
+
+The `running-late-check` endpoint automatically loads EXECUTION-status jobs from D1 — no request body needed.
 
 ## 📄 License
 
