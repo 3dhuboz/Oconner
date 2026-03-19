@@ -12,7 +12,7 @@ export default async function handler(req: AppRequest, res: AppResponse) {
         if (!row) return res.status(404).json({ error: 'Not found' });
         return res.json(decodeRow(row));
       }
-      const { results } = await db.prepare('SELECT * FROM parts_catalog').bind().all<any>();
+      const { results } = await db.prepare('SELECT * FROM parts_catalog LIMIT 2000').bind().all<any>();
       return res.json(results.map(decodeRow));
     }
 
