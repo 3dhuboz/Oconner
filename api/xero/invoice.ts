@@ -24,7 +24,7 @@ export default async function handler(req: AppRequest, res: AppResponse) {
       lineItems.push({
         description: 'Electrical Labor',
         quantity: job.laborHours,
-        unitAmount: 85.0,
+        unitAmount: job.hourlyRate || 85.0,
         accountCode: '200',
       });
     }
