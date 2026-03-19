@@ -7,6 +7,7 @@ export default async function handler(req: AppRequest, res: AppResponse) {
   }
 
   const { to, message } = req.body;
+  if (!to || !message) return res.status(400).json({ error: 'to and message are required' });
   const sid = process.env.TWILIO_ACCOUNT_SID;
   const token = process.env.TWILIO_AUTH_TOKEN;
   const from = process.env.TWILIO_PHONE_NUMBER;
