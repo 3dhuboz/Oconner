@@ -3,10 +3,11 @@
  * Protected API routes call verifyClerkJwt() before processing.
  *
  * Public routes (no auth required):
- *   - POST /api/webhooks/email   (CloudMailIn / SendGrid inbound)
- *   - POST /api/stripe/webhook*  (Stripe — verified by signature)
- *   - GET  /api/email/poll-inbox (cron-job.org — verified by CRON_SECRET)
- *   - POST /api/email/poll-inbox (same)
+ *   - POST /api/webhooks/email      (CloudMailIn / SendGrid inbound)
+ *   - POST /api/stripe/webhook*     (Stripe — verified by signature)
+ *   - GET  /api/email/poll-inbox    (cron-job.org — verified by CRON_SECRET)
+ *   - POST /api/email/poll-inbox    (same)
+ *   - GET  /api/auth/xero/callback  (Xero OAuth redirect — no Clerk JWT in popup)
  */
 
 import { verifyToken } from '@clerk/backend';
@@ -16,6 +17,7 @@ const PUBLIC_PREFIXES = [
   '/api/webhooks/',
   '/api/stripe/webhook',
   '/api/email/poll-inbox',
+  '/api/auth/xero/callback',  // Xero OAuth redirect — no Clerk JWT in popup context
 ];
 
 export function isPublicRoute(pathname: string): boolean {
