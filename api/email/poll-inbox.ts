@@ -408,7 +408,7 @@ export default async function handler(req: AppRequest, res: AppResponse) {
   // GET = diagnostic (with live Gmail test), UNLESS called by cron trigger
   if (req.method === 'GET' && !isCronRequest) {
     const checks: any = {
-      GMAIL_ADDRESS: process.env.GMAIL_ADDRESS ? `✅ ${process.env.GMAIL_ADDRESS}` : '❌ MISSING',
+      GMAIL_ADDRESS: process.env.GMAIL_ADDRESS ? '✅ set' : '❌ MISSING',
       GMAIL_CLIENT_ID: process.env.GMAIL_CLIENT_ID ? '✅ set' : '❌ MISSING',
       GMAIL_CLIENT_SECRET: process.env.GMAIL_CLIENT_SECRET ? '✅ set' : '❌ MISSING',
       GMAIL_REFRESH_TOKEN: process.env.GMAIL_REFRESH_TOKEN ? '✅ set' : '❌ MISSING',
