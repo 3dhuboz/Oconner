@@ -1,5 +1,6 @@
 import type { AppRequest, AppResponse } from '../_handler';
 import sendTenantHandler from '../notifications/send-tenant';
+import { getDb, safeJson } from '../_db';
 
 /**
  * Running-late detection endpoint.
@@ -108,6 +109,21 @@ export default async function handler(req: AppRequest, res: AppResponse) {
         };
         await sendTenantHandler(mockReq, mockRes);
         result.notificationSent = notifOk;
+
+        // Persist runningLateNotified:true to D1 so next cron cycle doesn't re-send
+        if (notifOk && req.env?.DB) {
+          try {
+            const db = getDb(req.env);
+            const row = await db.prepare('SELECT data FROM jobs WHERE id = ?').bind(job.id).first<{ data: string }>();
+            if (row) {
+              const updated = { ...safeJson(row.data), runningLateNotified: true, updatedAt: new Date().toISOString() };
+              await db.prepare('UPDATE jobs SET data = ?, updated_at = ? WHERE id = ?')
+                .bind(JSON.stringify(updated), new Date().toISOString(), job.id).run();
+            }
+          } catch (dbErr: any) {
+            console.error(`Failed to mark runningLateNotified for job ${job.id}:`, dbErr.message);
+          }
+        }
       } catch (err) {
         console.error(`Failed to send running-late notification for job ${job.id}:`, err);
         result.notificationSent = false;
