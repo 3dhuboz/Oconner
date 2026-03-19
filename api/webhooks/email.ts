@@ -384,7 +384,7 @@ export default async function handler(req: AppRequest, res: AppResponse) {
       try {
         const db = getDb(req.env);
         const rows = await db.prepare(
-          `SELECT id, data FROM jobs WHERE status != 'CLOSED' AND json_extract(data, '$.propertyAddress') = ? AND json_extract(data, '$.source') = 'email' LIMIT 5`
+          `SELECT id, data FROM jobs WHERE status != 'CLOSED' AND property_address = ? LIMIT 5`
         ).bind(propertyAddress).all<{ id: string; data: string }>();
 
         const activeJobs = rows.results || [];
