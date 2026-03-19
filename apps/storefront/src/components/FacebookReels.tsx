@@ -34,18 +34,16 @@ function FbIcon({ className }: { className?: string }) {
   );
 }
 
-// Only use video.php for actual reel/video URLs; page URLs fall back to page plugin
-function buildFbSnippetSrc(w: number, h: number, fbUrl: string | null) {
-  const isVideoUrl = !!fbUrl && (
-    fbUrl.includes('/reel/') ||
-    fbUrl.includes('/videos/') ||
-    fbUrl.includes('/watch/')
+function isReelUrl(url: string | null): boolean {
+  return !!url && (
+    url.includes('/reel/') ||
+    url.includes('/videos/') ||
+    url.includes('/watch/')
   );
-  if (isVideoUrl) {
-    return `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(fbUrl!)}&show_text=false&autoplay=1&mute=1&width=${w}`;
-  }
-  const pageHref = encodeURIComponent(`https://www.facebook.com/profile.php?id=${FB_PAGE_ID}`);
-  return `https://www.facebook.com/plugins/page.php?href=${pageHref}&tabs=videos&width=${w}&height=${h}&small_header=true&adapt_container_width=false&hide_cover=true&show_facepile=false`;
+}
+
+function buildFbVideoSrc(fbUrl: string, w: number) {
+  return `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(fbUrl)}&show_text=false&autoplay=1&mute=1&width=${w}`;
 }
 
 function ReelCard({ reel, index, total }: { reel: ReelItem; index: number; total: number }) {
@@ -72,7 +70,16 @@ function ReelCard({ reel, index, total }: { reel: ReelItem; index: number; total
     }
   };
 
-  const handleClick = () => setExpanded((v) => !v);
+  // Cards without a direct video or a real reel URL just open Facebook directly
+  const canExpand = !!reel.videoUrl || isReelUrl(reel.fbUrl);
+
+  const handleClick = () => {
+    if (!canExpand) {
+      window.open(reel.fbUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    setExpanded((v) => !v);
+  };
 
   const close = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -118,10 +125,10 @@ function ReelCard({ reel, index, total }: { reel: ReelItem; index: number; total
         />
       )}
 
-      {/* ── Facebook iframe snippet (expanded, no direct video) ── */}
-      {expanded && !reel.videoUrl && (
+      {/* ── Facebook video embed (expanded, no direct MP4, but real reel URL) ── */}
+      {expanded && !reel.videoUrl && isReelUrl(reel.fbUrl) && (
         <iframe
-          src={buildFbSnippetSrc(cardW, cardH, reel.fbUrl)}
+          src={buildFbVideoSrc(reel.fbUrl, cardW)}
           width={cardW}
           height={cardH}
           className="absolute inset-0 w-full h-full border-0 block"
@@ -133,7 +140,7 @@ function ReelCard({ reel, index, total }: { reel: ReelItem; index: number; total
 
       {/* ── Gradient overlay ── */}
       <div
-        className={`absolute inset-0 pointer-events-none transition-opacity duration-300 ${expanded && !reel.videoUrl ? 'opacity-0' : 'opacity-100'}`}
+        className={`absolute inset-0 pointer-events-none transition-opacity duration-300 ${expanded && !reel.videoUrl && isReelUrl(reel.fbUrl) ? 'opacity-0' : 'opacity-100'}`}
         style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0) 40%, rgba(0,0,0,0.9) 100%)' }}
       />
 
