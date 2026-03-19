@@ -42,6 +42,7 @@ export default function TrackPage() {
   const mapRef = useRef<HTMLDivElement>(null);
   const markerRef = useRef<any>(null);
   const mapInstance = useRef<any>(null);
+  const stopMarkersRef = useRef<Record<string, any>>({});
 
   useEffect(() => {
     const load = () =>
@@ -71,17 +72,17 @@ export default function TrackPage() {
     if (!mapInstance.current) {
       const L = (window as any).L;
       if (!L) return;
-      const map = L.map(mapRef.current).setView([session.lastLat, session.lastLng], 14);
+      const map = L.map(mapRef.current).setView([session.lastLat, session.lastLng], 13);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap contributors',
       }).addTo(map);
       mapInstance.current = map;
 
       const icon = L.divIcon({
-        html: `<div style="background:#1a3c2b;color:white;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:18px;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.3)">🚚</div>`,
+        html: `<div style="background:#1a3c2b;color:white;border-radius:50%;width:40px;height:40px;display:flex;align-items:center;justify-content:center;font-size:20px;border:3px solid white;box-shadow:0 2px 10px rgba(0,0,0,0.4)">🚚</div>`,
         className: '',
-        iconSize: [36, 36],
-        iconAnchor: [18, 18],
+        iconSize: [40, 40],
+        iconAnchor: [20, 20],
       });
       markerRef.current = L.marker([session.lastLat, session.lastLng], { icon }).addTo(map);
     } else {
@@ -89,6 +90,32 @@ export default function TrackPage() {
       mapInstance.current.panTo([session.lastLat, session.lastLng]);
     }
   }, [session?.lastLat, session?.lastLng]);
+
+  // Render stop pins
+  useEffect(() => {
+    const L = (window as any).L;
+    const map = mapInstance.current;
+    if (!L || !map || stops.length === 0) return;
+
+    Object.values(stopMarkersRef.current).forEach((m: any) => m.remove());
+    stopMarkersRef.current = {};
+
+    const COLORS: Record<string, string> = { pending: '#6b7280', en_route: '#3b82f6', arrived: '#f59e0b', delivered: '#16a34a', failed: '#ef4444' };
+    stops.forEach((s) => {
+      if (!s.lat || !s.lng) return;
+      const color = COLORS[s.status] ?? '#6b7280';
+      const icon = L.divIcon({
+        html: `<div style="background:${color};color:white;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:bold;border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,.3)">${s.sequence + 1}</div>`,
+        className: '',
+        iconSize: [26, 26],
+        iconAnchor: [13, 13],
+      });
+      const m = L.marker([s.lat, s.lng], { icon })
+        .bindPopup(`<b>Stop #${s.sequence + 1}</b><br>${s.address.line1}, ${s.address.suburb}<br>${s.status === 'delivered' ? '✅ Delivered' : s.status === 'en_route' ? '🚚 On the way' : '⏳ Pending'}`)
+        .addTo(map);
+      stopMarkersRef.current[s.id] = m;
+    });
+  }, [stops]);
 
   const delivered = stops.filter((s) => s.status === 'delivered').length;
   const pending = stops.filter((s) => s.status === 'pending').length;

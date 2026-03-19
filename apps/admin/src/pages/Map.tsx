@@ -1,6 +1,26 @@
 import { useEffect, useState, useRef } from 'react';
 import { api } from '@butcher/shared';
-import { MapPin, Truck, WifiOff, AlertTriangle, CheckCircle } from 'lucide-react';
+import { MapPin, Truck, WifiOff, AlertTriangle, CheckCircle, RefreshCw } from 'lucide-react';
+import { toast } from '../lib/toast';
+
+interface StopPin {
+  id: string;
+  sequence: number;
+  customerName: string;
+  status: string;
+  lat: number;
+  lng: number;
+  address: { line1: string; suburb: string; postcode: string };
+}
+
+const STOP_COLORS: Record<string, string> = {
+  pending: '#6b7280',
+  en_route: '#3b82f6',
+  arrived: '#f59e0b',
+  delivered: '#16a34a',
+  failed: '#ef4444',
+  skipped: '#9ca3af',
+};
 
 interface DriverSession {
   id: string;
@@ -42,10 +62,13 @@ const GPS_STATUS_CFG: Record<string, { label: string; dot: string; badge: string
 export default function MapPage() {
   const [drivers, setDrivers] = useState<DriverSession[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
+  const [stops, setStops] = useState<StopPin[]>([]);
+  const [geocoding, setGeocoding] = useState(false);
   const [, setTick] = useState(0);
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstance = useRef<any>(null);
   const markersRef = useRef<Record<string, any>>({});
+  const stopMarkersRef = useRef<Record<string, any>>({});
 
   // Re-render every 15s to update "X min ago" timestamps
   useEffect(() => {
@@ -62,6 +85,26 @@ export default function MapPage() {
     const t = setInterval(load, 15_000);
     return () => clearInterval(t);
   }, []);
+
+  // Load stops for the first active driver's delivery day
+  useEffect(() => {
+    const dayId = drivers[0]?.deliveryDayId;
+    if (!dayId) { setStops([]); return; }
+    api.stops.list(dayId)
+      .then((data: any) => {
+        const withCoords = (data as any[]).filter((s: any) => s.lat && s.lng);
+        setStops(withCoords.map((s: any) => ({
+          id: s.id,
+          sequence: s.sequence,
+          customerName: s.customerName,
+          status: s.status,
+          lat: s.lat,
+          lng: s.lng,
+          address: s.address,
+        })));
+      })
+      .catch(() => {});
+  }, [drivers]);
 
   // Inject Leaflet once
   useEffect(() => {
@@ -93,7 +136,7 @@ export default function MapPage() {
     return () => clearInterval(t);
   }, []);
 
-  // Update markers whenever drivers change
+  // Update driver markers whenever drivers change
   useEffect(() => {
     const L = (window as any).L;
     const map = mapInstance.current;
@@ -107,10 +150,10 @@ export default function MapPage() {
       const gpsOk = d.gpsStatus === 'active';
       const color = gpsOk && !stale ? '#16a34a' : stale ? '#f59e0b' : '#ef4444';
       const icon = L.divIcon({
-        html: `<div style="background:${color};color:white;border-radius:50%;width:34px;height:34px;display:flex;align-items:center;justify-content:center;font-size:16px;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,.3)">🚚</div>`,
+        html: `<div style="background:${color};color:white;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:16px;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,.3)">🚚</div>`,
         className: '',
-        iconSize: [34, 34],
-        iconAnchor: [17, 17],
+        iconSize: [36, 36],
+        iconAnchor: [18, 18],
       });
       if (markersRef.current[d.id]) {
         markersRef.current[d.id].setLatLng([d.lastLat, d.lastLng]).setIcon(icon);
@@ -121,13 +164,59 @@ export default function MapPage() {
         markersRef.current[d.id] = m;
       }
     });
-    // Remove markers for drivers no longer active
     Object.keys(markersRef.current).forEach((id) => {
       if (!seen.has(id)) { markersRef.current[id].remove(); delete markersRef.current[id]; }
     });
   }, [drivers]);
 
+  // Render stop pins whenever stops change
+  useEffect(() => {
+    const L = (window as any).L;
+    const map = mapInstance.current;
+    if (!L || !map) return;
+
+    // Remove old stop markers
+    Object.values(stopMarkersRef.current).forEach((m: any) => m.remove());
+    stopMarkersRef.current = {};
+
+    stops.forEach((s) => {
+      const color = STOP_COLORS[s.status] ?? '#6b7280';
+      const icon = L.divIcon({
+        html: `<div style="background:${color};color:white;border-radius:50%;width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:bold;border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,.25)">${s.sequence + 1}</div>`,
+        className: '',
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+      });
+      const m = L.marker([s.lat, s.lng], { icon })
+        .bindPopup(`<b>#${s.sequence + 1} ${s.customerName}</b><br>${s.address.line1}, ${s.address.suburb}<br>Status: ${s.status}`)
+        .addTo(map);
+      stopMarkersRef.current[s.id] = m;
+    });
+  }, [stops]);
+
   const selectedDriver = drivers.find((d) => d.id === selected);
+
+  const handleGeocodeStops = async () => {
+    const dayId = drivers[0]?.deliveryDayId;
+    if (!dayId) return;
+    setGeocoding(true);
+    try {
+      const result = await api.deliveryDays.geocodeStops(dayId);
+      toast(`Geocoded ${result.updated} of ${result.total} stops`);
+      // Reload stops
+      const data = await api.stops.list(dayId) as any[];
+      setStops(data.filter((s: any) => s.lat && s.lng).map((s: any) => ({
+        id: s.id, sequence: s.sequence, customerName: s.customerName,
+        status: s.status, lat: s.lat, lng: s.lng, address: s.address,
+      })));
+    } catch {
+      toast('Geocoding failed', 'error');
+    } finally {
+      setGeocoding(false);
+    }
+  };
+
+  const ungeocodedCount = drivers[0]?.deliveryDayId ? undefined : 0;
 
   return (
     <div>
@@ -135,7 +224,19 @@ export default function MapPage() {
         <h1 className="text-2xl font-bold text-brand flex items-center gap-2">
           <Truck className="h-6 w-6" /> Driver Map
         </h1>
-        <span className="text-sm text-gray-400">{drivers.length} active driver{drivers.length !== 1 ? 's' : ''}</span>
+        <div className="flex items-center gap-3">
+          {drivers.length > 0 && (
+            <button
+              onClick={handleGeocodeStops}
+              disabled={geocoding}
+              className="flex items-center gap-1.5 text-xs bg-white border rounded-lg px-3 py-1.5 text-gray-600 hover:border-brand hover:text-brand transition-colors disabled:opacity-50"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${geocoding ? 'animate-spin' : ''}`} />
+              {geocoding ? 'Geocoding…' : 'Geocode Stops'}
+            </button>
+          )}
+          <span className="text-sm text-gray-400">{drivers.length} active driver{drivers.length !== 1 ? 's' : ''}</span>
+        </div>
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">

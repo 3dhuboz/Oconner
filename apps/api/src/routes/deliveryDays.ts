@@ -66,6 +66,18 @@ app.delete('/:id', async (c) => {
   return c.json({ ok: true });
 });
 
+async function geocodeAddress(address: { line1: string; suburb: string; postcode: string }): Promise<{ lat: number; lng: number } | null> {
+  try {
+    const q = encodeURIComponent(`${address.line1}, ${address.suburb}, ${address.postcode}, Queensland, Australia`);
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${q}&limit=1&countrycodes=au`, {
+      headers: { 'User-Agent': "OConnorAgriculture/1.0 (orders@oconnoragriculture.com.au)" },
+    });
+    const data = await res.json() as Array<{ lat: string; lon: string }>;
+    if (data.length > 0) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+  } catch {}
+  return null;
+}
+
 app.post('/:id/generate-stops', async (c) => {
   const db = drizzle(c.env.DB);
   const dayId = c.req.param('id');
@@ -77,6 +89,8 @@ app.post('/:id/generate-stops', async (c) => {
   let created = 0;
   for (const order of dayOrders) {
     if (existingOrderIds.has(order.id)) continue;
+    const addr = JSON.parse(order.deliveryAddress) as { line1: string; suburb: string; postcode: string };
+    const geo = await geocodeAddress(addr);
     await db.insert(stops).values({
       id: crypto.randomUUID(),
       deliveryDayId: dayId,
@@ -89,12 +103,34 @@ app.post('/:id/generate-stops', async (c) => {
       sequence: created,
       status: 'pending',
       customerNote: order.notes ?? null,
+      lat: geo?.lat ?? null,
+      lng: geo?.lng ?? null,
       createdAt: Date.now(),
     });
     created++;
+    if (created < dayOrders.length) await new Promise((r) => setTimeout(r, 1100));
   }
 
   return c.json({ created, total: dayOrders.length });
+});
+
+app.post('/:id/geocode-stops', async (c) => {
+  const db = drizzle(c.env.DB);
+  const dayId = c.req.param('id');
+  const { isNull } = await import('drizzle-orm');
+  const ungeocoded = await db.select().from(stops)
+    .where(and(eq(stops.deliveryDayId, dayId), isNull(stops.lat)));
+  let updated = 0;
+  for (const stop of ungeocoded) {
+    const addr = JSON.parse(stop.address) as { line1: string; suburb: string; postcode: string };
+    const geo = await geocodeAddress(addr);
+    if (geo) {
+      await db.update(stops).set({ lat: geo.lat, lng: geo.lng }).where(eq(stops.id, stop.id));
+      updated++;
+    }
+    if (updated < ungeocoded.length) await new Promise((r) => setTimeout(r, 1100));
+  }
+  return c.json({ updated, total: ungeocoded.length });
 });
 
 app.post('/:id/send-reminders', async (c) => {
