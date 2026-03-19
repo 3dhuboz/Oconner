@@ -12,6 +12,7 @@ export default async function handler(req: AppRequest, res: AppResponse) {
 
   try {
     const { job } = req.body;
+    if (!job) return res.status(400).json({ error: 'Missing job in request body' });
 
     const lineItems = (job.materials || []).map((m: any) => ({
       description: m.name,
