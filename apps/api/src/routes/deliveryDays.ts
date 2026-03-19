@@ -47,7 +47,11 @@ app.post('/', async (c) => {
   const body = await c.req.json<Omit<typeof deliveryDays.$inferInsert, 'id' | 'createdAt'>>();
   const id = crypto.randomUUID();
   const now = Date.now();
-  await db.insert(deliveryDays).values({ ...body, id, createdAt: now });
+  const dateObj = new Date(body.date);
+  // cutoffTime defaults to midnight the day before delivery (24hr before)
+  const cutoffTime = body.cutoffTime ?? (body.date - 24 * 60 * 60 * 1000);
+  const dayOfWeek = body.dayOfWeek ?? dateObj.getDay();
+  await db.insert(deliveryDays).values({ ...body, id, dayOfWeek, cutoffTime, createdAt: now });
   return c.json({ id }, 201);
 });
 
