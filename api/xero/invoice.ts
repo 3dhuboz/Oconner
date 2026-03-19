@@ -29,6 +29,18 @@ export default async function handler(req: AppRequest, res: AppResponse) {
       });
     }
 
+    // Add miscellaneous charges
+    if (job.miscCharges?.length) {
+      for (const charge of job.miscCharges) {
+        lineItems.push({
+          description: charge.description || 'Miscellaneous Charge',
+          quantity: 1,
+          unitAmount: charge.amount,
+          accountCode: '200',
+        });
+      }
+    }
+
     const invoice = {
       type: 'ACCREC' as const,
       contact: { name: job.tenantName || 'Wirez R Us Customer' },

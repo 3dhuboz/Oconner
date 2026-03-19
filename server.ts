@@ -206,6 +206,18 @@ async function startServer() {
         });
       }
 
+      // Add miscellaneous charges
+      if (job.miscCharges?.length) {
+        for (const charge of job.miscCharges) {
+          lineItems.push({
+            description: charge.description || 'Miscellaneous Charge',
+            quantity: 1,
+            unitAmount: charge.amount,
+            accountCode: '200',
+          });
+        }
+      }
+
       const invoice = {
         type: 'ACCREC' as const,
         contact: {
