@@ -5,6 +5,7 @@ import { Plus, Pencil, X, Upload, Sparkles, Image } from 'lucide-react';
 import { toast } from '../lib/toast';
 
 const CATEGORIES = ['beef', 'lamb', 'pork', 'chicken', 'seafood', 'deli', 'pack', 'other'];
+const isStaleUrl = (url: string) => !url || url.includes('pollinations.ai') || url.includes('images.oconner.com.au');
 const EMPTY: Partial<Product> = { name: '', category: 'beef', pricePerKg: 0, fixedPrice: 0, stockOnHand: 0, minThreshold: 0, active: true, isMeatPack: false };
 
 export default function ProductsPage() {
@@ -80,7 +81,16 @@ export default function ProductsPage() {
     setImgGenerating(true);
     setImgError(false);
     try {
-      const prompt = `${editing.name}, premium quality meat, food photography, dark background, restaurant quality, high resolution`;
+      const categoryMap: Record<string, string> = {
+        beef: 'premium Australian beef', lamb: 'premium Australian lamb', pork: 'premium pork',
+        chicken: 'premium free-range chicken', seafood: 'fresh Australian seafood',
+        deli: 'premium deli meats', pack: 'premium meat selection pack', other: 'premium meat product',
+      };
+      const categoryLabel = categoryMap[(editing.category ?? 'other')] ?? 'premium meat';
+      const descParts = [editing.name];
+      if ((editing as any).description) descParts.push((editing as any).description);
+      if ((editing as any).packContents) descParts.push((editing as any).packContents);
+      const prompt = `Professional food photography of ${descParts.join(', ')}. ${categoryLabel}, raw meat beautifully arranged on a dark slate surface, dramatic studio lighting, bokeh background, butcher shop presentation, 4K ultra high resolution, appetising and realistic`;
       const url = await api.images.generate(prompt);
       setImgLoading(true);
       setEditing((prev) => prev ? { ...prev, imageUrl: url } : prev);
@@ -118,7 +128,7 @@ export default function ProductsPage() {
             {products.map((p) => (
               <tr key={p.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3">
-                  {(p as any).imageUrl ? (
+                  {(p as any).imageUrl && !isStaleUrl((p as any).imageUrl) ? (
                     <img src={(p as any).imageUrl} alt={p.name} className="w-10 h-10 rounded-lg object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
                   ) : (
                     <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center">
@@ -144,10 +154,10 @@ export default function ProductsPage() {
                 <td className="px-4 py-3 text-right">
                   <button onClick={() => {
                     const url = (p as any).imageUrl ?? '';
-                    const isStale = url.includes('pollinations.ai');
+                    const stale = isStaleUrl(url);
                     setEditing({ ...p });
-                    setImgLoading(!isStale && !!url);
-                    setImgError(isStale && !!url);
+                    setImgLoading(!stale && !!url);
+                    setImgError(stale && !!url);
                   }} className="text-brand hover:underline text-xs font-medium">
                     <Pencil className="h-3.5 w-3.5" />
                   </button>
