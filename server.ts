@@ -15,6 +15,8 @@ import pollInboxHandler from "./api/email/poll-inbox.ts";
 import xeroPricingHandler from "./api/xero/pricing.ts";
 import xeroImportCsvHandler from "./api/xero/import-csv.ts";
 import stripeCreatePaymentLinkHandler from "./api/stripe/create-payment-link.ts";
+import stripeCreateCheckoutHandler from "./api/stripe/create-checkout-session.ts";
+import stripePlansHandler from "./api/stripe/plans.ts";
 import stripeWebhookHandler from "./api/stripe/webhook.ts";
 import sendTenantHandler from "./api/notifications/send-tenant.ts";
 import smsSendHandler from "./api/sms/send.ts";
@@ -261,35 +263,12 @@ async function startServer() {
 
   // 8. Get active subscription plans
   app.get("/api/stripe/plans", async (req, res) => {
-    if (!process.env.STRIPE_SECRET_KEY) {
-      return res.json({ plans: [], simulated: true });
-    }
-    try {
-      const prices = await requireStripe().prices.list({
-        active: true,
-        expand: ['data.product'],
-      });
-      res.json({ plans: prices.data });
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
-    }
+    await stripePlansHandler(req as any, res as any);
   });
 
   // 9. Create a checkout session
   app.post("/api/stripe/create-checkout-session", async (req, res) => {
-    const { priceId } = req.body;
-    try {
-      const session = await requireStripe().checkout.sessions.create({
-        payment_method_types: ['card'],
-        line_items: [{ price: priceId, quantity: 1 }],
-        mode: 'subscription',
-        success_url: `${process.env.APP_URL}/billing?success=true`,
-        cancel_url: `${process.env.APP_URL}/billing?canceled=true`,
-      });
-      res.json({ sessionId: session.id });
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
-    }
+    await stripeCreateCheckoutHandler(req as any, res as any);
   });
 
   // 10. Stripe Webhook Handler
