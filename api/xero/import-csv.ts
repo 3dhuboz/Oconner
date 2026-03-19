@@ -326,23 +326,52 @@ export default async function handler(req: AppRequest, res: AppResponse) {
     }
 
     // ═══════════════════════════════════════════════════════════════
-    // REAL IMPORT — forward selected items to pricing API
+    // REAL IMPORT — upsert directly to D1 parts_catalog (avoids JWT)
     // ═══════════════════════════════════════════════════════════════
-    const baseUrl = process.env.APP_URL || 'http://localhost:3000';
+    const db = req.env?.DB ? getDb(req.env) : null;
+    const PRICE_CHANGE_THRESHOLD = 10;
+    const now = new Date().toISOString();
+    let processedCount = 0;
+    let flaggedCount = 0;
 
-    const pricingRes = await fetch(`${baseUrl}/api/xero/pricing`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items: pricingItems }),
-    });
-
-    const pricingResult = await pricingRes.json();
+    if (db) {
+      for (const item of pricingItems) {
+        const partKey = item.partName.toLowerCase().trim().replace(/[^a-z0-9]/g, '_');
+        const row = await db.prepare('SELECT id, data FROM parts_catalog WHERE id = ?').bind(partKey).first<{ id: string; data: string }>();
+        const existing = safeJson(row?.data);
+        const previousPrice: number | undefined = existing.costPrice;
+        let priceChangePercent: number | undefined;
+        let flagged = false;
+        if (previousPrice !== undefined && previousPrice !== item.costPrice) {
+          priceChangePercent = parseFloat((((item.costPrice - previousPrice) / previousPrice) * 100).toFixed(1));
+          flagged = Math.abs(priceChangePercent) >= PRICE_CHANGE_THRESHOLD;
+        }
+        const priceHistory: any[] = existing.priceHistory || [];
+        priceHistory.push({ price: item.costPrice, supplier: item.supplier, date: now, invoiceRef: item.invoiceRef || null, source: 'csv' });
+        if (priceHistory.length > 50) priceHistory.splice(0, priceHistory.length - 50);
+        const doc: Record<string, any> = {
+          partName: item.partName, partKey, supplier: item.supplier,
+          costPrice: item.costPrice, sellPrice: existing.sellPrice ?? null, markupPercent: existing.markupPercent ?? null,
+          previousPrice: previousPrice ?? null, priceChangePercent: priceChangePercent ?? null,
+          flagged, invoiceRef: item.invoiceRef || null, barcode: item.barcode || null, source: 'csv',
+          updatedAt: now, priceHistory,
+        };
+        await db.prepare('INSERT INTO parts_catalog (id, data) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data')
+          .bind(partKey, JSON.stringify(doc)).run();
+        processedCount++;
+        if (flagged) flaggedCount++;
+      }
+    } else {
+      console.warn('[CSV Import] No DB binding — parts not persisted to D1');
+    }
 
     return res.status(200).json({
       success: true,
       supplier,
       invoiceRef: invoiceRef || null,
       rowsParsed: parsed.length,
+      processed: processedCount,
+      flaggedChanges: flaggedCount,
       detectedColumns: {
         headers,
         mapping: {
@@ -354,7 +383,6 @@ export default async function handler(req: AppRequest, res: AppResponse) {
           sku: cols.sku >= 0 ? headers[cols.sku] : 'not found',
         },
       },
-      pricing: pricingResult,
       errors: errors.length > 0 ? errors : undefined,
     });
 
