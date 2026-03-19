@@ -11,6 +11,7 @@ export default async function handler(req: AppRequest, res: AppResponse) {
   }
 
   const { priceId } = req.body;
+  if (!priceId) return res.status(400).json({ error: 'priceId is required' });
 
   try {
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
