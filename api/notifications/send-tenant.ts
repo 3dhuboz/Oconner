@@ -1,11 +1,25 @@
 import type { AppRequest, AppResponse } from '../_handler';
+import { getDb, safeJson } from '../_db';
 import twilio from 'twilio';
 import { Resend } from 'resend';
 
 // ─── Send email via Resend ──────────────────────────────────────────────────
-async function sendEmail(to: string, subject: string, htmlBody: string): Promise<{ sent: boolean; simulated: boolean }> {
-  const resendKey = process.env.RESEND_API_KEY;
-  const fromEmail = process.env.RESEND_FROM_EMAIL || 'jobs@wireznrus.com.au';
+async function sendEmail(to: string, subject: string, htmlBody: string, env?: any): Promise<{ sent: boolean; simulated: boolean }> {
+  let resendKey = process.env.RESEND_API_KEY;
+  let fromEmail = process.env.RESEND_FROM_EMAIL || 'jobs@wireznrus.com.au';
+
+  // Fall back to D1 settings saved via Integrations UI
+  if (!resendKey && env?.DB) {
+    try {
+      const db = getDb(env);
+      const row = await db.prepare('SELECT value FROM settings WHERE key = ?').bind('email').first<{ value: string }>();
+      if (row) {
+        const saved = safeJson(row.value);
+        resendKey = resendKey || saved.apiKey || '';
+        fromEmail = saved.fromEmail || fromEmail;
+      }
+    } catch { /* settings table may not exist yet */ }
+  }
 
   if (resendKey) {
     try {
@@ -32,10 +46,24 @@ async function sendEmail(to: string, subject: string, htmlBody: string): Promise
 }
 
 // ─── Send SMS via Twilio ──
-async function sendSms(to: string, message: string): Promise<{ sent: boolean; simulated: boolean }> {
-  const sid = process.env.TWILIO_ACCOUNT_SID;
-  const token = process.env.TWILIO_AUTH_TOKEN;
-  const from = process.env.TWILIO_PHONE_NUMBER;
+async function sendSms(to: string, message: string, env?: any): Promise<{ sent: boolean; simulated: boolean }> {
+  let sid = process.env.TWILIO_ACCOUNT_SID;
+  let token = process.env.TWILIO_AUTH_TOKEN;
+  let from = process.env.TWILIO_PHONE_NUMBER;
+
+  // Fall back to D1 settings saved via Integrations UI
+  if ((!sid || !token || !from) && env?.DB) {
+    try {
+      const db = getDb(env);
+      const row = await db.prepare('SELECT value FROM settings WHERE key = ?').bind('sms').first<{ value: string }>();
+      if (row) {
+        const saved = safeJson(row.value);
+        sid = sid || saved.accountSid || '';
+        token = token || saved.authToken || '';
+        from = from || saved.fromNumber || '';
+      }
+    } catch { /* settings table may not exist yet */ }
+  }
 
   if (!sid || !token || !from) {
     console.log(`[SMS Simulation] To: ${to} | Message: ${message}`);
@@ -214,12 +242,12 @@ export default async function handler(req: AppRequest, res: AppResponse) {
 
   // Send SMS
   if (channels.includes('sms') && tenantPhone) {
-    results.sms = await sendSms(tenantPhone, content.smsBody);
+    results.sms = await sendSms(tenantPhone, content.smsBody, req.env);
   }
 
   // Send Email
   if (channels.includes('email') && tenantEmail) {
-    results.email = await sendEmail(tenantEmail, content.emailSubject, content.emailHtml);
+    results.email = await sendEmail(tenantEmail, content.emailSubject, content.emailHtml, req.env);
   }
 
   console.log(`[Tenant Notification] Type: ${type} | Job: ${jobId} | SMS: ${results.sms?.sent ? 'sent' : 'skipped'} | Email: ${results.email?.sent ? 'sent' : 'skipped'}`);
