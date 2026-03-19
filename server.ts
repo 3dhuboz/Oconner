@@ -445,13 +445,6 @@ async function startServer() {
   // Xero: import CSV
   app.post("/api/xero/import-csv", withDb(xeroImportCsvHandler));
 
-  // Xero: disconnect (clear session token)
-  app.post("/api/xero/disconnect", (req, res) => {
-    xeroTokenSet = null;
-    xeroTenantId = null;
-    res.json({ success: true });
-  });
-
   // Stripe: create payment link
   app.post("/api/stripe/create-payment-link", async (req, res) => {
     await stripeCreatePaymentLinkHandler(req as any, res as any);
