@@ -1,6 +1,6 @@
 /**
  * Neutral HTTP handler types — compatible with Cloudflare Workers (prod) and Express (local dev).
- * All API route handlers use these instead of VercelRequest / VercelResponse.
+ * All API route handlers use these for dev (Express) and prod (Cloudflare Workers) compatibility.
  */
 
 export interface AppEnv {

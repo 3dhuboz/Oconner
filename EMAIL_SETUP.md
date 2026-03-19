@@ -143,7 +143,7 @@ Change the email format in your app to use a domain you control:
 
 1. Set up a Gmail address (e.g. `wirezrusjobs@gmail.com`)
 2. Configure Gmail OAuth credentials (Client ID, Client Secret, Refresh Token)
-3. The Vercel cron at `/api/email/poll-inbox` polls every 5 minutes
+3. Use cron-job.org to POST `/api/email/poll-inbox` every 5 minutes with `Authorization: Bearer <CRON_SECRET>`
 4. Emails are parsed and jobs created automatically
 
 ### Option C: Buy the Domain

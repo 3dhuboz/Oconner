@@ -50,7 +50,7 @@ You need to create the following products in your Stripe Dashboard:
 
 ## Environment Variables
 
-Add these to your `.env` file and Vercel environment variables:
+Add these to your `.env` file and Cloudflare dashboard secrets:
 
 ```env
 # Stripe Configuration
