@@ -3,8 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Database, DollarSign, CheckCircle2, AlertCircle, Loader2, Mail, MessageSquare, ExternalLink, Copy, PlayCircle, Phone, Send, Eye, EyeOff, Save, TestTube2, Inbox, RefreshCw, Clock, Zap } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { cn } from '../utils';
-import { db } from '../services/firebase';
-import { collection, addDoc, doc, getDoc, setDoc } from 'firebase/firestore';
+import { settingsApi, smsApi, xeroApi, jobsApi } from '../services/api';
 import toast from 'react-hot-toast';
 
 const IntegrationCard = ({ icon: Icon, title, status, statusColor, children, onAction, actionText, actionDisabled, isConnecting }: any) => {
@@ -35,7 +34,7 @@ const IntegrationCard = ({ icon: Icon, title, status, statusColor, children, onA
       </div>
       {actionText && (
         <div className="shrink-0 w-full sm:w-auto">
-          <button 
+          <button
             onClick={onAction}
             disabled={actionDisabled || isConnecting}
             className="w-full sm:w-auto px-4 py-2 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
@@ -95,7 +94,7 @@ export function Integrations() {
   const [forwardingEmail, setForwardingEmail] = useState<string | null>(null);
   const [isGeneratingEmail, setIsGeneratingEmail] = useState(false);
   const [isSimulating, setIsSimulating] = useState(false);
-  
+
   // ─── SMS Provider State ─────────────────────────────────────
   const [smsProvider, setSmsProvider] = useState<'twilio' | 'vonage'>('twilio');
   const [smsConfig, setSmsConfig] = useState({
@@ -142,13 +141,11 @@ export function Integrations() {
   const [emailTesting, setEmailTesting] = useState(false);
   const [emailTestAddress, setEmailTestAddress] = useState('');
 
-  // ─── Load saved settings from Firestore ─────────────────────
+  // ─── Load saved settings from API ─────────────────────────
   useEffect(() => {
-    if (!db) return;
     // Load SMS config
-    getDoc(doc(db, 'settings', 'sms')).then(snap => {
-      if (snap.exists()) {
-        const data = snap.data();
+    settingsApi.get('sms').then(data => {
+      if (data) {
         setSmsProvider(data.provider || 'twilio');
         setSmsConfig({
           accountSid: data.accountSid || '',
@@ -159,9 +156,8 @@ export function Integrations() {
       }
     }).catch(() => {});
     // Load Email config
-    getDoc(doc(db, 'settings', 'email')).then(snap => {
-      if (snap.exists()) {
-        const data = snap.data();
+    settingsApi.get('email').then(data => {
+      if (data) {
         setEmailProvider(data.provider || 'smtp');
         setEmailConfig({
           host: data.host || '',
@@ -176,9 +172,8 @@ export function Integrations() {
       }
     }).catch(() => {});
     // Load Gmail catch-all config
-    getDoc(doc(db, 'settings', 'gmail')).then(snap => {
-      if (snap.exists()) {
-        const data = snap.data();
+    settingsApi.get('gmail').then(data => {
+      if (data) {
         setGmailConfig({
           emailAddress: data.emailAddress || '',
           clientId: data.clientId || '',
@@ -195,10 +190,9 @@ export function Integrations() {
 
   // ─── Save SMS Settings ──────────────────────────────────────
   const handleSaveSms = async () => {
-    if (!db) { toast.error('Database not connected'); return; }
     setSmsSaving(true);
     try {
-      await setDoc(doc(db, 'settings', 'sms'), {
+      await settingsApi.set('sms', {
         provider: smsProvider,
         ...smsConfig,
         updatedAt: new Date().toISOString(),
@@ -215,12 +209,7 @@ export function Integrations() {
     if (!smsTestNumber.trim()) { toast.error('Enter a test phone number'); return; }
     setSmsTesting(true);
     try {
-      const res = await fetch('/api/sms/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: smsTestNumber, provider: smsProvider, ...smsConfig }),
-      });
-      const data = await res.json();
+      const data = await smsApi.test({ to: smsTestNumber, provider: smsProvider, ...smsConfig });
       if (data.success && data.simulated) toast.success('SMS API reachable (simulated — credentials not reaching server)');
       else if (data.success) toast.success('Test SMS sent via Twilio!');
       else toast.error(data.error || 'SMS test failed');
@@ -233,10 +222,9 @@ export function Integrations() {
 
   // ─── Save Email Settings ────────────────────────────────────
   const handleSaveEmail = async () => {
-    if (!db) { toast.error('Database not connected'); return; }
     setEmailSaving(true);
     try {
-      await setDoc(doc(db, 'settings', 'email'), {
+      await settingsApi.set('email', {
         provider: emailProvider,
         ...emailConfig,
         updatedAt: new Date().toISOString(),
@@ -270,10 +258,9 @@ export function Integrations() {
 
   // ─── Save Gmail Catch-All Settings ─────────────────────────
   const handleSaveGmail = async () => {
-    if (!db) { toast.error('Database not connected'); return; }
     setGmailSaving(true);
     try {
-      await setDoc(doc(db, 'settings', 'gmail'), {
+      await settingsApi.set('gmail', {
         ...gmailConfig,
         updatedAt: new Date().toISOString(),
       });
@@ -324,10 +311,8 @@ export function Integrations() {
 
   // ─── Load Xero Settings ─────────────────────────────────────
   useEffect(() => {
-    if (!db) return;
-    getDoc(doc(db, 'settings', 'xero')).then(snap => {
-      if (snap.exists()) {
-        const data = snap.data();
+    settingsApi.get('xero').then(data => {
+      if (data) {
         setXeroConfig({
           clientId: data.clientId || '',
           clientSecret: data.clientSecret || '',
@@ -343,10 +328,9 @@ export function Integrations() {
   }, []);
 
   const handleSaveXero = async () => {
-    if (!db) { toast.error('Database not connected'); return; }
     setXeroSaving(true);
     try {
-      await setDoc(doc(db, 'settings', 'xero'), {
+      await settingsApi.set('xero', {
         ...xeroConfig,
         updatedAt: new Date().toISOString(),
       });
@@ -392,20 +376,15 @@ export function Integrations() {
         return;
       }
       window.open(data.url, 'xero_oauth', 'width=600,height=700');
-    } catch (error) { 
-      console.error(error); 
-      setIsConnecting(false); 
+    } catch (error) {
+      console.error(error);
+      setIsConnecting(false);
     }
   };
 
   const handleSimulateEmail = async () => {
-    if (!db) {
-      toast.error('Firebase is not connected');
-      return;
-    }
-    
     setIsSimulating(true);
-    
+
     try {
       const now = new Date();
       const newJob = {
@@ -424,14 +403,14 @@ export function Integrations() {
         createdAt: now.toISOString()
       };
 
-      const docRef = await addDoc(collection(db, 'jobs'), newJob);
+      await jobsApi.create(newJob);
       toast.success('Inbound email processed! Job created.');
-      
+
       // Navigate to the job board after a short delay so they can see it
       setTimeout(() => {
         navigate('/');
       }, 1500);
-      
+
     } catch (error) {
       console.error("Error creating job from email simulation:", error);
       toast.error('Failed to process inbound email');
@@ -856,8 +835,8 @@ export function Integrations() {
                   <li>Enable the <strong>Gmail API</strong> in your Google Cloud project</li>
                   <li>Use the <a href="https://developers.google.com/oauthplayground" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-medium">OAuth Playground</a> to generate a refresh token with scope <code className="bg-amber-100 px-1 rounded text-[10px]">https://www.googleapis.com/auth/gmail.modify</code></li>
                   <li>Paste credentials above and click <strong>Save Gmail Settings</strong></li>
-                  <li>Set these as environment variables on Vercel: <code className="bg-amber-100 px-1 rounded text-[10px]">GMAIL_ADDRESS</code>, <code className="bg-amber-100 px-1 rounded text-[10px]">GMAIL_CLIENT_ID</code>, <code className="bg-amber-100 px-1 rounded text-[10px]">GMAIL_CLIENT_SECRET</code>, <code className="bg-amber-100 px-1 rounded text-[10px]">GMAIL_REFRESH_TOKEN</code></li>
-                  <li>Add a <a href="https://vercel.com/docs/cron-jobs" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-medium">Vercel Cron</a> to call <code className="bg-amber-100 px-1 rounded text-[10px]">POST /api/email/poll-inbox</code> every 2–5 minutes</li>
+                  <li>Set these as Worker secrets via <code className="bg-amber-100 px-1 rounded text-[10px]">wrangler secret put</code>: <code className="bg-amber-100 px-1 rounded text-[10px]">GMAIL_ADDRESS</code>, <code className="bg-amber-100 px-1 rounded text-[10px]">GMAIL_CLIENT_ID</code>, <code className="bg-amber-100 px-1 rounded text-[10px]">GMAIL_CLIENT_SECRET</code>, <code className="bg-amber-100 px-1 rounded text-[10px]">GMAIL_REFRESH_TOKEN</code></li>
+                  <li>Gmail polling runs automatically via Cloudflare Worker cron (every 5 minutes)</li>
                 </ol>
               </div>
             )}
@@ -866,11 +845,11 @@ export function Integrations() {
 
         <IntegrationCard
           icon={Database}
-          title="Firebase Database"
-          status={{ text: backendStatus.firebase ? 'Connected' : 'Not Configured', color: backendStatus.firebase ? 'green' : 'amber' }}
+          title="Cloudflare D1 Database"
+          status={{ text: backendStatus.database ? 'Connected' : 'Not Configured', color: backendStatus.database ? 'green' : 'amber' }}
           statusColor={{ bg: 'bg-[#F5A623]/10', text: 'text-[#F5A623]' }}
         >
-          <p>Connect your Firebase project to sync job data, photos, and electrician field updates in real-time.</p>
+          <p>Cloudflare D1 database for job data, photos, and electrician field updates.</p>
           <p className="text-xs">Configuration is managed in the <Link to="/admin" className="text-blue-600 underline">Dev Console</Link>.</p>
         </IntegrationCard>
 

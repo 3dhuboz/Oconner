@@ -1,0 +1,42 @@
+name = "wirez-r-us-api"
+main = "worker/index.ts"
+compatibility_date = "2024-12-01"
+
+[vars]
+ENVIRONMENT = "production"
+
+# D1 Database
+[[d1_databases]]
+binding = "DB"
+database_name = "wirez-r-us"
+database_id = "placeholder-create-with-wrangler-d1-create"
+
+# R2 Bucket for photos/files
+[[r2_buckets]]
+binding = "STORAGE"
+bucket_name = "wirez-r-us-files"
+
+# Cron triggers (replaces Vercel cron)
+[triggers]
+crons = ["*/5 * * * *"]  # email polling every 5 minutes
+
+# Environment-specific secrets (set via `wrangler secret put`)
+# CLERK_SECRET_KEY
+# CLERK_PUBLISHABLE_KEY
+# STRIPE_SECRET_KEY
+# STRIPE_WEBHOOK_SECRET
+# STRIPE_SETUP_FEE_PRICE_ID
+# STRIPE_BASE_SUBSCRIPTION_PRICE_ID
+# STRIPE_ADDITIONAL_TECH_PRICE_ID
+# TWILIO_ACCOUNT_SID
+# TWILIO_AUTH_TOKEN
+# TWILIO_PHONE_NUMBER
+# XERO_CLIENT_ID
+# XERO_CLIENT_SECRET
+# OPENROUTER_API_KEY
+# RESEND_API_KEY
+# GMAIL_ADDRESS
+# GMAIL_CLIENT_ID
+# GMAIL_CLIENT_SECRET
+# GMAIL_REFRESH_TOKEN
+# GOOGLE_MAPS_API_KEY

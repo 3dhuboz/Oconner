@@ -5,9 +5,7 @@ import { MapPin, Clock, Camera, Plus, Trash2, CheckCircle2, FileText, ArrowLeft,
 import { useAuth } from '../context/AuthContext';
 import { useGpsTracking } from '../hooks/useGpsTracking';
 import { cn } from '../utils';
-import { storage, db } from '../services/firebase';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { doc, setDoc, getDoc, collection, addDoc, increment, updateDoc } from 'firebase/firestore';
+import { uploadsApi, stockMovementsApi, techStockApi } from '../services/api';
 import jsPDF from 'jspdf';
 import { Html5Qrcode } from 'html5-qrcode';
 
@@ -220,10 +218,10 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
 
     // Log stock movement (deduct from tech's stock)
     const techId = user?.uid || '';
-    if (db && techId && job) {
+    if (techId && job) {
       try {
         // Record stock_out movement
-        await addDoc(collection(db, 'stockMovements'), {
+        await stockMovementsApi.create({
           partId: catalogMatch?.id || barcodePartName.trim(),
           partName: barcodePartName.trim(),
           barcode: barcodeValue || null,
@@ -236,14 +234,31 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
         });
         // Update tech stock entry (decrement quantity)
         const stockKey = `${techId}_${catalogMatch?.id || barcodePartName.trim()}`;
-        const stockRef = doc(db, 'techStock', stockKey);
-        const stockSnap = await getDoc(stockRef);
-        if (stockSnap.exists()) {
-          const current = stockSnap.data().quantity || 0;
-          await updateDoc(stockRef, { quantity: Math.max(0, current - 1), lastUpdated: new Date().toISOString() });
-        } else {
-          // Create entry with 0 (just used last one or wasn't tracked yet)
-          await setDoc(stockRef, {
+        try {
+          // Try to fetch existing stock and update
+          const allStock = await techStockApi.list(techId);
+          const existing = (allStock as any[]).find((s: any) => s.id === stockKey);
+          if (existing) {
+            const current = existing.quantity || 0;
+            await techStockApi.update(stockKey, { quantity: Math.max(0, current - 1), lastUpdated: new Date().toISOString() });
+          } else {
+            // Create entry with 0 (just used last one or wasn't tracked yet)
+            await techStockApi.upsert({
+              id: stockKey,
+              partId: catalogMatch?.id || barcodePartName.trim(),
+              partName: barcodePartName.trim(),
+              barcode: barcodeValue || null,
+              technicianId: techId,
+              technicianName: user?.email || '',
+              quantity: 0,
+              sellPrice: sellPrice,
+              costPrice: costPrice,
+              lastUpdated: new Date().toISOString(),
+            });
+          }
+        } catch {
+          // If fetching/updating fails, try upsert as fallback
+          await techStockApi.upsert({
             id: stockKey,
             partId: catalogMatch?.id || barcodePartName.trim(),
             partName: barcodePartName.trim(),
@@ -369,20 +384,15 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
     const file = e.target.files?.[0];
     if (!file || !job) return;
 
-    if (!storage) {
-      // Fallback: if storage not configured, use blob URL (won't persist to admin)
-      setPhotos(prev => [...prev, URL.createObjectURL(file)]);
-      return;
-    }
-
     setUploading(true);
     try {
       const timestamp = Date.now();
       const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-      const storageRef = ref(storage, `job-photos/${job.id}/${timestamp}_${safeName}`);
-      await uploadBytes(storageRef, file);
-      const downloadUrl = await getDownloadURL(storageRef);
-      setPhotos(prev => [...prev, downloadUrl]);
+      const filename = `job-photos/${job.id}/${timestamp}_${safeName}`;
+      const { url, key } = await uploadsApi.getPresignedUrl(filename, file.type);
+      await fetch(url, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } });
+      const photoUrl = uploadsApi.getUrl(key);
+      setPhotos(prev => [...prev, photoUrl]);
     } catch (err: any) {
       console.error('Photo upload failed:', err);
       // Fallback to blob URL if upload fails (offline etc)
@@ -598,7 +608,7 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
             <span className="text-sm font-bold text-slate-400">{job.id}</span>
           </div>
           <h2 className="text-xl font-bold text-slate-900 mb-2">{job.title}</h2>
-          
+
           <div className="space-y-3 mt-4 text-sm">
             <div className="flex items-start gap-3 text-slate-600">
               <MapPin className="w-5 h-5 shrink-0 text-slate-400" />
@@ -636,7 +646,7 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
 
         {/* Start Job (Dispatched state) */}
         {job.status === 'DISPATCHED' && (
-          <button 
+          <button
             onClick={() => updateJob(job.id, { status: 'EXECUTION' })}
             className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-bold text-lg shadow-lg shadow-emerald-600/20 transition-all active:scale-[0.98]"
           >
@@ -779,8 +789,8 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
                   {materials.map((material) => (
                     <div key={material.id} className="flex gap-2 items-start bg-slate-50 p-3 rounded-xl border border-slate-100">
                       <div className="flex-1 space-y-2">
-                        <input 
-                          type="text" placeholder="Part name/description" 
+                        <input
+                          type="text" placeholder="Part name/description"
                           className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
                           value={material.name}
                           onChange={e => handleUpdateMaterial(material.id, 'name', e.target.value)}
@@ -789,7 +799,7 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
                         <div className="flex gap-2">
                           <div className="flex-1 flex items-center gap-2">
                             <span className="text-xs text-slate-500 font-medium">Qty:</span>
-                            <input 
+                            <input
                               type="number" min="1"
                               className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
                               value={material.quantity}
@@ -799,7 +809,7 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
                           </div>
                           <div className="flex-1 flex items-center gap-2">
                             <span className="text-xs text-slate-500 font-medium">$:</span>
-                            <input 
+                            <input
                               type="number" min="0" step="0.01"
                               className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm"
                               value={material.cost}
@@ -1227,7 +1237,7 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
                 Site Notes <span className="text-rose-500">*</span>
               </label>
               <p className="text-xs text-slate-500 mb-3">Hazards, recommendations, or 'All clear'.</p>
-              <textarea 
+              <textarea
                 className="w-full px-4 py-3 border border-slate-200 rounded-xl bg-slate-50 text-sm min-h-[100px]"
                 placeholder="Enter your site notes here..."
                 value={siteNotes}
@@ -1239,7 +1249,7 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
             {/* ════════ SUBMIT ════════ */}
             {job.status === 'EXECUTION' && (
               <>
-                <button 
+                <button
                   onClick={handleSubmitAttempt}
                   disabled={clockStatus !== 'clocked_off'}
                   className={cn(
@@ -1284,7 +1294,7 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
                 )}
               </>
             )}
-            
+
             {job.status === 'REVIEW' && (
               <div className="space-y-3">
                 <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-800 text-center font-medium flex items-center justify-center gap-2">
@@ -1406,10 +1416,10 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
                       <p className="text-sm text-slate-600 text-center font-medium">
                         Show this QR code to the customer to pay with their phone
                       </p>
-                      
+
                       {/* QR Code */}
                       <div className="flex justify-center">
-                        <img 
+                        <img
                           src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(job.paymentLinkUrl)}`}
                           alt="Payment QR Code"
                           className="w-48 h-48 border-4 border-slate-900 rounded-xl"
@@ -1452,9 +1462,9 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
                     <div className="text-5xl mb-3">✅</div>
                     <div className="text-lg font-bold text-emerald-900">Payment Received!</div>
                     <div className="text-sm text-slate-600 mt-2">
-                      Paid on {new Date(job.paidAt).toLocaleString('en-AU', { 
-                        dateStyle: 'medium', 
-                        timeStyle: 'short' 
+                      Paid on {new Date(job.paidAt).toLocaleString('en-AU', {
+                        dateStyle: 'medium',
+                        timeStyle: 'short'
                       })}
                     </div>
                   </div>

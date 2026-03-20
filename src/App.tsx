@@ -26,10 +26,8 @@ import { NewJob } from './pages/NewJob';
 import { PropertyHistory } from './pages/PropertyHistory';
 import { Pricing } from './pages/Pricing';
 
-
 import { Job, Electrician, CatalogPart } from './types';
-import { db } from './services/firebase';
-import { collection, onSnapshot, doc, updateDoc, deleteDoc, setDoc, addDoc } from 'firebase/firestore';
+import { jobsApi, electriciansApi, partsCatalogApi } from './services/api';
 import { Toaster } from 'react-hot-toast';
 import toast from 'react-hot-toast';
 
@@ -39,6 +37,8 @@ import { offlineJobs, offlineElectricians, syncQueue } from './services/offlineD
 import { startSyncCron, stopSyncCron } from './services/syncService';
 import { useSyncStatus } from './hooks/useOfflineSync';
 import { NetworkStatusBar } from './components/NetworkStatusBar';
+
+const POLL_INTERVAL = 5000; // 5 seconds
 
 function AppContent() {
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -64,157 +64,156 @@ function AppContent() {
     });
   }, [user]);
 
-  // Real-time Firestore sync — also persists to IndexedDB + new job notifications
+  // Poll Worker API for jobs (replaces Firestore onSnapshot)
   const knownJobIds = React.useRef<Set<string>>(new Set());
   const isFirstLoad = React.useRef(true);
 
   useEffect(() => {
-    if (!user || !db) return;
+    if (!user) return;
+
     const isAdmin = user.role === 'admin' || user.role === 'dev';
-    const unsubscribe = onSnapshot(
-      collection(db, 'jobs'),
-      (snapshot) => {
-        const jobsData = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Job));
+
+    async function fetchJobs() {
+      try {
+        const jobsData = await jobsApi.list();
         setJobs(jobsData);
         offlineJobs.putAll(jobsData);
 
         // Detect genuinely new jobs (skip initial load)
         if (isFirstLoad.current) {
-          jobsData.forEach(j => knownJobIds.current.add(j.id));
+          jobsData.forEach((j: Job) => knownJobIds.current.add(j.id));
           isFirstLoad.current = false;
           return;
         }
 
         if (isAdmin) {
-          snapshot.docChanges().forEach(change => {
-            if (change.type === 'added') {
-              const job = { id: change.doc.id, ...change.doc.data() } as Job;
-              if (knownJobIds.current.has(job.id)) return;
-              knownJobIds.current.add(job.id);
+          for (const job of jobsData) {
+            if (knownJobIds.current.has(job.id)) continue;
+            knownJobIds.current.add(job.id);
 
-              const isUrgent = ['urgent', 'emergency', 'URGENT', 'EMERGENCY'].some(
-                u => (job.urgency || '').toLowerCase().includes(u.toLowerCase()) ||
-                     (job.title || '').toLowerCase().includes('emergency') ||
-                     (job.title || '').toLowerCase().includes('urgent')
+            const isUrgent = ['urgent', 'emergency'].some(
+              u => (job.urgency || '').toLowerCase().includes(u) ||
+                   (job.title || '').toLowerCase().includes(u)
+            );
+
+            if (isUrgent) {
+              toast.custom(
+                (t) => (
+                  <div
+                    className={`${t.visible ? 'animate-enter' : 'animate-leave'} max-w-sm w-full bg-red-600 text-white shadow-2xl rounded-2xl pointer-events-auto flex ring-2 ring-red-400 cursor-pointer`}
+                    onClick={() => { window.location.href = `/jobs/${job.id}`; toast.dismiss(t.id); }}
+                  >
+                    <div className="flex-1 p-4">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-lg">🚨</span>
+                        <span className="font-black uppercase tracking-wide text-sm">Urgent Job Received</span>
+                      </div>
+                      <p className="font-semibold text-sm truncate">{job.title}</p>
+                      <p className="text-red-200 text-xs truncate">{job.propertyAddress}</p>
+                    </div>
+                    <div className="flex items-center pr-4">
+                      <span className="text-red-200 text-xs font-bold">View →</span>
+                    </div>
+                  </div>
+                ),
+                { duration: 12000, position: 'top-right' }
               );
-
-              if (isUrgent) {
-                toast.custom(
-                  (t) => (
-                    <div
-                      className={`${t.visible ? 'animate-enter' : 'animate-leave'} max-w-sm w-full bg-red-600 text-white shadow-2xl rounded-2xl pointer-events-auto flex ring-2 ring-red-400 cursor-pointer`}
-                      onClick={() => { window.location.href = `/jobs/${job.id}`; toast.dismiss(t.id); }}
-                    >
-                      <div className="flex-1 p-4">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-lg">🚨</span>
-                          <span className="font-black uppercase tracking-wide text-sm">Urgent Job Received</span>
-                        </div>
-                        <p className="font-semibold text-sm truncate">{job.title}</p>
-                        <p className="text-red-200 text-xs truncate">{job.propertyAddress}</p>
-                      </div>
-                      <div className="flex items-center pr-4">
-                        <span className="text-red-200 text-xs font-bold">View →</span>
-                      </div>
-                    </div>
-                  ),
-                  { duration: 12000, position: 'top-right' }
-                );
-                // Browser notification if permitted
-                if (Notification.permission === 'granted') {
-                  new Notification('🚨 Urgent Job Received', {
-                    body: `${job.title} — ${job.propertyAddress}`,
-                    icon: '/favicon.ico',
-                  });
-                }
-              } else {
-                toast.custom(
-                  (t) => (
-                    <div
-                      className={`${t.visible ? 'animate-enter' : 'animate-leave'} max-w-sm w-full bg-slate-900 text-white shadow-xl rounded-2xl pointer-events-auto flex cursor-pointer`}
-                      onClick={() => { window.location.href = `/jobs/${job.id}`; toast.dismiss(t.id); }}
-                    >
-                      <div className="flex-1 p-4">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-base">📋</span>
-                          <span className="font-bold text-sm">New Job</span>
-                        </div>
-                        <p className="text-slate-200 text-xs truncate">{job.title}</p>
-                        <p className="text-slate-400 text-xs truncate">{job.propertyAddress}</p>
-                      </div>
-                      <div className="flex items-center pr-4">
-                        <span className="text-slate-400 text-xs font-bold">View →</span>
-                      </div>
-                    </div>
-                  ),
-                  { duration: 6000, position: 'top-right' }
-                );
+              if (Notification.permission === 'granted') {
+                new Notification('🚨 Urgent Job Received', {
+                  body: `${job.title} — ${job.propertyAddress}`,
+                  icon: '/favicon.ico',
+                });
               }
+            } else {
+              toast.custom(
+                (t) => (
+                  <div
+                    className={`${t.visible ? 'animate-enter' : 'animate-leave'} max-w-sm w-full bg-slate-900 text-white shadow-xl rounded-2xl pointer-events-auto flex cursor-pointer`}
+                    onClick={() => { window.location.href = `/jobs/${job.id}`; toast.dismiss(t.id); }}
+                  >
+                    <div className="flex-1 p-4">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-base">📋</span>
+                        <span className="font-bold text-sm">New Job</span>
+                      </div>
+                      <p className="text-slate-200 text-xs truncate">{job.title}</p>
+                      <p className="text-slate-400 text-xs truncate">{job.propertyAddress}</p>
+                    </div>
+                    <div className="flex items-center pr-4">
+                      <span className="text-slate-400 text-xs font-bold">View →</span>
+                    </div>
+                  </div>
+                ),
+                { duration: 6000, position: 'top-right' }
+              );
             }
-          });
+          }
         }
-      },
-      (error) => {
-        console.warn('[Offline] Firestore jobs listener error, using cached data:', error.message);
+      } catch (error: any) {
+        console.warn('[Poll] Jobs fetch error, using cached data:', error.message);
       }
-    );
-    return unsubscribe;
+    }
+
+    fetchJobs();
+    const interval = setInterval(fetchJobs, POLL_INTERVAL);
+    return () => clearInterval(interval);
   }, [user]);
 
-  // Firestore sync — parts catalog
+  // Poll for parts catalog
   useEffect(() => {
-    if (!user || !db) return;
-    const unsubscribe = onSnapshot(
-      collection(db, 'partsCatalog'),
-      (snapshot) => {
-        const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as CatalogPart));
+    if (!user) return;
+
+    async function fetchParts() {
+      try {
+        const data = await partsCatalogApi.list();
         setPartsCatalog(data);
-      },
-      (error) => {
-        console.warn('[Offline] Firestore partsCatalog listener error:', error.message);
+      } catch (error: any) {
+        console.warn('[Poll] Parts catalog fetch error:', error.message);
       }
-    );
-    return unsubscribe;
+    }
+
+    fetchParts();
+    const interval = setInterval(fetchParts, POLL_INTERVAL * 2);
+    return () => clearInterval(interval);
   }, [user]);
 
-  // Persist parts catalog changes to Firestore
+  // Persist parts catalog changes to Worker API
   const setPartsCatalogWithSync = ((updater: React.SetStateAction<CatalogPart[]>) => {
     setPartsCatalog(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
-      // Sync to Firestore
-      if (db) {
-        // Find added/updated
-        for (const part of next) {
-          const old = prev.find(p => p.id === part.id);
-          if (!old || JSON.stringify(old) !== JSON.stringify(part)) {
-            setDoc(doc(db, 'partsCatalog', part.id), part).catch(() => {});
-          }
+      // Sync to Worker API
+      for (const part of next) {
+        const old = prev.find(p => p.id === part.id);
+        if (!old || JSON.stringify(old) !== JSON.stringify(part)) {
+          partsCatalogApi.upsert(part).catch(() => {});
         }
-        // Find deleted
-        for (const old of prev) {
-          if (!next.find(p => p.id === old.id)) {
-            deleteDoc(doc(db, 'partsCatalog', old.id)).catch(() => {});
-          }
+      }
+      for (const old of prev) {
+        if (!next.find(p => p.id === old.id)) {
+          partsCatalogApi.delete(old.id).catch(() => {});
         }
       }
       return next;
     });
   }) as React.Dispatch<React.SetStateAction<CatalogPart[]>>;
 
+  // Poll for electricians
   useEffect(() => {
-    if (!user || !db) return;
-    const unsubscribe = onSnapshot(
-      collection(db, 'electricians'),
-      (snapshot) => {
-        const electriciansData = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Electrician));
-        setElectricians(electriciansData);
-        offlineElectricians.putAll(electriciansData); // cache locally
-      },
-      (error) => {
-        console.warn('[Offline] Firestore electricians listener error, using cached data:', error.message);
+    if (!user) return;
+
+    async function fetchElectricians() {
+      try {
+        const data = await electriciansApi.list();
+        setElectricians(data);
+        offlineElectricians.putAll(data);
+      } catch (error: any) {
+        console.warn('[Poll] Electricians fetch error, using cached data:', error.message);
       }
-    );
-    return unsubscribe;
+    }
+
+    fetchElectricians();
+    const interval = setInterval(fetchElectricians, POLL_INTERVAL * 2);
+    return () => clearInterval(interval);
   }, [user]);
 
   // Offline-aware job update
@@ -227,14 +226,13 @@ function AppContent() {
       await offlineJobs.put({ ...existing, ...updates });
     }
 
-    // Try Firestore, queue if offline
-    if (navigator.onLine && db) {
+    // Try Worker API, queue if offline
+    if (navigator.onLine) {
       try {
-        const jobRef = doc(db, 'jobs', id);
-        await updateDoc(jobRef, updates);
+        await jobsApi.update(id, updates);
         return;
       } catch (error: any) {
-        console.warn('[Offline] Firestore update failed, queuing:', error.message);
+        console.warn('[Offline] API update failed, queuing:', error.message);
       }
     }
 
@@ -250,16 +248,14 @@ function AppContent() {
 
   // Admin-only job deletion
   const deleteJob = async (id: string) => {
-    // Remove from local state
     setJobs(prev => prev.filter(j => j.id !== id));
     await offlineJobs.delete(id);
 
-    // Delete from Firestore
-    if (navigator.onLine && db) {
+    if (navigator.onLine) {
       try {
-        await deleteDoc(doc(db, 'jobs', id));
+        await jobsApi.delete(id);
       } catch (error: any) {
-        console.error('[Delete] Firestore delete failed:', error.message);
+        console.error('[Delete] API delete failed:', error.message);
         toast.error('Failed to delete from server');
       }
     }
@@ -271,7 +267,7 @@ function AppContent() {
       <Route path="/dev/login" element={<DevLogin />} />
       <Route path="/purchase" element={<Purchase />} />
       <Route path="/promo" element={<PromoFlyer />} />
-      
+
       {/* Dev Only Route */}
       <Route path="/admin" element={
         <DevRoute>
@@ -311,7 +307,7 @@ function AppContent() {
         </AdminRoute>
       } />
 
-      {/* Technician-specific routes (user role gets TechLayout) */}
+      {/* Technician-specific routes */}
       <Route path="/today" element={
         <TechRoute>
           <TechToday jobs={jobs} electricians={electricians} />
@@ -323,7 +319,7 @@ function AppContent() {
         </TechRoute>
       } />
 
-      {/* General Protected Routes — user role auto-gets TechLayout */}
+      {/* General Protected Routes */}
       <Route path="/" element={
         <ProtectedRoute>
           {user?.role === 'user'
@@ -356,7 +352,7 @@ function AppContent() {
           <FieldPortal jobs={jobs} updateJob={updateJob} partsCatalog={partsCatalog} />
         </TechRoute>
       } />
-      
+
       <Route path="/widget" element={
         <ProtectedRoute>
           <DashboardWidget jobs={jobs} electricians={electricians} />
@@ -372,7 +368,7 @@ function AppContent() {
           <Pricing />
         </AdminRoute>
       } />
-      
+
       <Route path="*" element={<div className="p-8 text-slate-500">Page not found or under construction.</div>} />
     </Routes>
   );

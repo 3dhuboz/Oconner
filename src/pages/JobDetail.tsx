@@ -1378,7 +1378,7 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
                         <option value="INSPECTION">Inspection</option>
                       </select>
                     </div>
-                    <p className="text-[10px] text-slate-400">Changes save automatically to Firestore.</p>
+                    <p className="text-[10px] text-slate-400">Changes save automatically.</p>
                   </div>
                 ) : (
                   <div className="bg-slate-50 rounded-xl p-4 space-y-3 border border-slate-100">

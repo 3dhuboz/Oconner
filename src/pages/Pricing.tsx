@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Upload, AlertTriangle, TrendingUp, TrendingDown, Package, RefreshCw, DollarSign, BarChart3, CheckCircle2, XCircle, ArrowRight, Check, Percent, Settings, RefreshCcw, Pencil } from 'lucide-react';
 import { cn } from '../utils';
+import { partsCatalogApi } from '../services/api';
 
 interface PartEntry {
   _id: string;
@@ -86,12 +87,9 @@ export function Pricing() {
     if (parts.length === 0) return;
     const syncToCatalog = async () => {
       try {
-        const { doc, setDoc } = await import('firebase/firestore');
-        const { db } = await import('../services/firebase');
-        if (!db) return;
         for (const part of parts) {
           const sell = part.sellPrice ?? part.costPrice * (1 + globalMarkup / 100);
-          await setDoc(doc(db, 'partsCatalog', part.partKey), {
+          await partsCatalogApi.upsert({
             id: part.partKey,
             name: part.partName,
             defaultCost: sell,
@@ -101,7 +99,7 @@ export function Pricing() {
             sellPrice: sell,
             barcode: part.barcode || null,
             syncedFromPricing: true,
-          }, { merge: true });
+          });
         }
         console.log(`[AutoSync] ${parts.length} parts synced to catalog with sell prices`);
       } catch (err) {
@@ -305,14 +303,10 @@ export function Pricing() {
     }
   };
 
-  // Sync all pricing items to Parts Catalog (Firestore partsCatalog collection)
+  // Sync all pricing items to Parts Catalog via Worker API
   const handleSyncToCatalog = async () => {
     setSyncing(true);
     try {
-      const { doc, setDoc } = await import('firebase/firestore');
-      const { db } = await import('../services/firebase');
-      if (!db) throw new Error('Firestore not available');
-
       let synced = 0;
       for (const part of parts) {
         const catalogPart = {
@@ -326,7 +320,7 @@ export function Pricing() {
           barcode: part.barcode || null,
           syncedFromPricing: true,
         };
-        await setDoc(doc(db, 'partsCatalog', part.partKey), catalogPart, { merge: true });
+        await partsCatalogApi.upsert(catalogPart);
         synced++;
       }
       alert(`Synced ${synced} parts to the Parts Catalog. Field techs can now access them.`);

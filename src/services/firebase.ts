@@ -1,34 +1,8 @@
-import { initializeApp } from 'firebase/app';
-import { getFirestore, Firestore } from 'firebase/firestore';
-import { getAuth, Auth } from 'firebase/auth';
-import { getStorage, FirebaseStorage } from 'firebase/storage';
+// Firebase has been replaced by Clerk (auth) + Cloudflare D1 (database) + R2 (storage)
+// This file is kept as a stub to prevent import errors during migration.
+// All functionality has moved to src/services/api.ts
 
-const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FB_API_KEY || import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
-};
-
-let app = null;
-let db = null;
-let auth = null;
-let storage: FirebaseStorage | null = null;
-
-try {
-  if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
-    console.warn('Firebase configuration is missing. Please set VITE_FB_API_KEY (or VITE_FIREBASE_API_KEY) and VITE_FIREBASE_PROJECT_ID environment variables.');
-  } else {
-    app = initializeApp(firebaseConfig);
-    db = getFirestore(app);
-    auth = getAuth(app);
-    storage = getStorage(app);
-    console.log('Firebase Initialized. Project ID:', firebaseConfig.projectId);
-  }
-} catch (error) {
-  console.error('Failed to initialize Firebase:', error);
-}
-
-export { db, app, auth, storage };
+export const db = null;
+export const app = null;
+export const auth = null;
+export const storage = null;

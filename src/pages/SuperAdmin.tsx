@@ -2,8 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Activity, Shield, Server, Database, Lock, Users, Save, Wifi, AlertTriangle, Flame, KeyRound, Plus, Pencil, Trash2, CreditCard, Building2, UserPlus, ChevronDown, ChevronUp, Eye, EyeOff, ExternalLink } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { cn } from '../utils';
-import { db } from '../services/firebase';
-import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc, getDocs, query, where, addDoc } from 'firebase/firestore';
+import { tenantsApi, licensesApi, userProfilesApi } from '../services/api';
 import type { Tenant, License, UserProfile, UserRole } from '../types';
 import toast from 'react-hot-toast';
 
@@ -29,20 +28,26 @@ export function SuperAdmin() {
 
   const addLog = (msg: string) => setLogs(prev => [`[${new Date().toISOString()}] ${msg}`, ...prev].slice(0, 50));
 
-  // Real-time listeners
+  // Polling for data
+  const fetchAll = async () => {
+    try {
+      const [t, u, l] = await Promise.all([
+        tenantsApi.list(),
+        userProfilesApi.list(),
+        licensesApi.list(),
+      ]);
+      setTenants((t as Tenant[]) || []);
+      setUsers((u as UserProfile[]) || []);
+      setLicenses((l as License[]) || []);
+    } catch (err) {
+      console.error('Failed to fetch admin data:', err);
+    }
+  };
+
   useEffect(() => {
-    if (!db) return;
-    const unsubs: (() => void)[] = [];
-    unsubs.push(onSnapshot(collection(db, 'tenants'), (snap) => {
-      setTenants(snap.docs.map(d => ({ id: d.id, ...d.data() } as Tenant)));
-    }));
-    unsubs.push(onSnapshot(collection(db, 'userProfiles'), (snap) => {
-      setUsers(snap.docs.map(d => ({ ...d.data(), uid: d.id } as UserProfile)));
-    }));
-    unsubs.push(onSnapshot(collection(db, 'licenses'), (snap) => {
-      setLicenses(snap.docs.map(d => ({ id: d.id, ...d.data() } as License)));
-    }));
-    return () => unsubs.forEach(u => u());
+    fetchAll();
+    const interval = setInterval(fetchAll, 15_000);
+    return () => clearInterval(interval);
   }, []);
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
@@ -98,6 +103,7 @@ export function SuperAdmin() {
           editing={editingTenant}
           setEditing={setEditingTenant}
           addLog={addLog}
+          refetch={fetchAll}
         />
       )}
       {activeTab === 'users' && (
@@ -109,6 +115,7 @@ export function SuperAdmin() {
           editing={editingUser}
           setEditing={setEditingUser}
           addLog={addLog}
+          refetch={fetchAll}
         />
       )}
       {activeTab === 'licenses' && (
@@ -119,6 +126,7 @@ export function SuperAdmin() {
           showAdd={showAddLicense}
           setShowAdd={setShowAddLicense}
           addLog={addLog}
+          refetch={fetchAll}
         />
       )}
     </div>
@@ -153,7 +161,7 @@ function OverviewTab({ backendStatus, tenants, users, licenses, logs }: any) {
           </h3>
           <div className="space-y-4">
             <StatusRow icon={<Server className="w-3 h-3" />} label="API Latency" value={`${backendStatus.latency}ms`} ok={backendStatus.latency < 100} />
-            <StatusRow icon={<Database className="w-3 h-3" />} label="Firebase" value={backendStatus.firebase ? 'Connected' : 'Disconnected'} ok={backendStatus.firebase} />
+            <StatusRow icon={<Database className="w-3 h-3" />} label="D1 Database" value={backendStatus.database ? 'Connected' : 'Disconnected'} ok={backendStatus.database} />
             <StatusRow icon={<Wifi className="w-3 h-3" />} label="Connection" value="Stable" ok={true} />
             <StatusRow icon={<CreditCard className="w-3 h-3" />} label="Stripe" value={import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY ? 'Configured' : 'Not Set'} ok={!!import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY} />
           </div>
@@ -204,7 +212,7 @@ function StatusRow({ icon, label, value, ok }: { icon: React.ReactNode; label: s
 }
 
 // ---------- TENANTS (CUSTOMERS) TAB ----------
-function TenantsTab({ tenants, licenses, users, showAdd, setShowAdd, editing, setEditing, addLog }: any) {
+function TenantsTab({ tenants, licenses, users, showAdd, setShowAdd, editing, setEditing, addLog, refetch }: any) {
   const [form, setForm] = useState({ companyName: '', contactName: '', contactEmail: '', contactPhone: '', plan: 'starter', techLicenses: 1 });
 
   useEffect(() => {
@@ -221,54 +229,58 @@ function TenantsTab({ tenants, licenses, users, showAdd, setShowAdd, editing, se
   };
 
   const handleSave = async () => {
-    if (!db || !form.companyName || !form.contactEmail) { toast.error('Company name and email required'); return; }
+    if (!form.companyName || !form.contactEmail) { toast.error('Company name and email required'); return; }
     try {
       const maxTech = form.plan === 'starter' ? 3 : form.plan === 'professional' ? 10 : 999;
       if (editing) {
-        await updateDoc(doc(db, 'tenants', editing.id), { ...form, maxTechLicenses: maxTech });
+        await tenantsApi.update(editing.id, { ...form, maxTechLicenses: maxTech });
         addLog(`TENANT: Updated "${form.companyName}"`);
         toast.success('Customer updated');
       } else {
-        const tenantData: Omit<Tenant, 'id'> = {
+        const tenantData: any = {
           ...form,
           createdAt: new Date().toISOString(),
           status: 'active',
           adminLicenses: 1,
           techLicenses: Number(form.techLicenses),
           maxTechLicenses: maxTech,
-        } as any;
-        const ref = await addDoc(collection(db, 'tenants'), tenantData);
+        };
+        const created = await tenantsApi.create(tenantData);
+        const newTenantId = created.id;
 
         // Auto-create included licenses (1 admin + 1 tech)
-        await addDoc(collection(db, 'licenses'), { tenantId: ref.id, type: 'admin', status: 'active', createdAt: new Date().toISOString(), isIncluded: true });
-        await addDoc(collection(db, 'licenses'), { tenantId: ref.id, type: 'technician', status: 'active', createdAt: new Date().toISOString(), isIncluded: true });
+        await licensesApi.create({ tenantId: newTenantId, type: 'admin', status: 'active', createdAt: new Date().toISOString(), isIncluded: true });
+        await licensesApi.create({ tenantId: newTenantId, type: 'technician', status: 'active', createdAt: new Date().toISOString(), isIncluded: true });
 
         addLog(`TENANT: Created "${form.companyName}" with starter licenses`);
         toast.success('Customer created with 1 admin + 1 tech license');
       }
       resetForm();
+      await refetch();
     } catch (e: any) { toast.error(e.message); }
   };
 
   const handleDelete = async (t: Tenant) => {
-    if (!db || !confirm(`Delete "${t.companyName}" and all associated licenses?`)) return;
+    if (!confirm(`Delete "${t.companyName}" and all associated licenses?`)) return;
     try {
       // Delete associated licenses
-      const licQ = query(collection(db, 'licenses'), where('tenantId', '==', t.id));
-      const licSnap = await getDocs(licQ);
-      for (const d of licSnap.docs) await deleteDoc(d.ref);
-      await deleteDoc(doc(db, 'tenants', t.id));
-      addLog(`TENANT: Deleted "${t.companyName}" and ${licSnap.size} licenses`);
+      const tLicenses = licenses.filter((l: License) => l.tenantId === t.id);
+      for (const l of tLicenses) {
+        await licensesApi.delete(l.id);
+      }
+      await tenantsApi.delete(t.id);
+      addLog(`TENANT: Deleted "${t.companyName}" and ${tLicenses.length} licenses`);
       toast.success('Customer deleted');
+      await refetch();
     } catch (e: any) { toast.error(e.message); }
   };
 
   const handleToggleStatus = async (t: Tenant) => {
-    if (!db) return;
     const newStatus = t.status === 'active' ? 'suspended' : 'active';
-    await updateDoc(doc(db, 'tenants', t.id), { status: newStatus });
+    await tenantsApi.update(t.id, { status: newStatus });
     addLog(`TENANT: ${t.companyName} ${newStatus}`);
     toast.success(`Customer ${newStatus}`);
+    await refetch();
   };
 
   return (
@@ -349,7 +361,7 @@ function TenantsTab({ tenants, licenses, users, showAdd, setShowAdd, editing, se
 }
 
 // ---------- USERS TAB ----------
-function UsersTab({ users, tenants, showAdd, setShowAdd, editing, setEditing, addLog }: any) {
+function UsersTab({ users, tenants, showAdd, setShowAdd, editing, setEditing, addLog, refetch }: any) {
   const [form, setForm] = useState({ email: '', displayName: '', role: 'admin' as UserRole, tenantId: '', isActive: true });
 
   useEffect(() => {
@@ -362,16 +374,16 @@ function UsersTab({ users, tenants, showAdd, setShowAdd, editing, setEditing, ad
   const resetForm = () => { setForm({ email: '', displayName: '', role: 'admin', tenantId: '', isActive: true }); setShowAdd(false); setEditing(null); };
 
   const handleSave = async () => {
-    if (!db || !form.email) { toast.error('Email required'); return; }
+    if (!form.email) { toast.error('Email required'); return; }
     try {
       if (editing) {
-        await updateDoc(doc(db, 'userProfiles', editing.uid), { displayName: form.displayName, role: form.role, tenantId: form.tenantId || null, isActive: form.isActive });
+        await userProfilesApi.update(editing.uid, { displayName: form.displayName, role: form.role, tenantId: form.tenantId || null, isActive: form.isActive });
         addLog(`USER: Updated "${form.email}" role=${form.role}`);
         toast.success('User updated');
       } else {
         // Create a placeholder profile (actual auth user is created on first login)
         const profileId = form.email.replace(/[^a-zA-Z0-9]/g, '_');
-        await setDoc(doc(db, 'userProfiles', profileId), {
+        await userProfilesApi.upsert({
           uid: profileId,
           email: form.email,
           displayName: form.displayName,
@@ -384,14 +396,16 @@ function UsersTab({ users, tenants, showAdd, setShowAdd, editing, setEditing, ad
         toast.success('User profile created');
       }
       resetForm();
+      await refetch();
     } catch (e: any) { toast.error(e.message); }
   };
 
   const handleDelete = async (u: UserProfile) => {
-    if (!db || !confirm(`Delete user "${u.email}"?`)) return;
-    await deleteDoc(doc(db, 'userProfiles', u.uid));
+    if (!confirm(`Delete user "${u.email}"?`)) return;
+    await userProfilesApi.delete(u.uid);
     addLog(`USER: Deleted "${u.email}"`);
     toast.success('User deleted');
+    await refetch();
   };
 
   return (
@@ -481,15 +495,15 @@ function UsersTab({ users, tenants, showAdd, setShowAdd, editing, setEditing, ad
 }
 
 // ---------- LICENSES TAB ----------
-function LicensesTab({ licenses, tenants, users, showAdd, setShowAdd, addLog }: any) {
+function LicensesTab({ licenses, tenants, users, showAdd, setShowAdd, addLog, refetch }: any) {
   const [form, setForm] = useState({ tenantId: '', type: 'technician' as 'admin' | 'technician', assignedEmail: '' });
 
   const resetForm = () => { setForm({ tenantId: '', type: 'technician', assignedEmail: '' }); setShowAdd(false); };
 
   const handleCreate = async () => {
-    if (!db || !form.tenantId) { toast.error('Select a customer'); return; }
+    if (!form.tenantId) { toast.error('Select a customer'); return; }
     try {
-      await addDoc(collection(db, 'licenses'), {
+      await licensesApi.create({
         tenantId: form.tenantId,
         type: form.type,
         status: 'active',
@@ -502,34 +516,37 @@ function LicensesTab({ licenses, tenants, users, showAdd, setShowAdd, addLog }: 
       const tenant = tenants.find((t: Tenant) => t.id === form.tenantId);
       if (tenant) {
         const field = form.type === 'admin' ? 'adminLicenses' : 'techLicenses';
-        await updateDoc(doc(db, 'tenants', form.tenantId), { [field]: (tenant[field] || 0) + 1 });
+        await tenantsApi.update(form.tenantId, { [field]: (tenant[field] || 0) + 1 });
       }
 
       addLog(`LICENSE: Created ${form.type} license for ${tenant?.companyName || form.tenantId}`);
       toast.success('License created');
       resetForm();
+      await refetch();
     } catch (e: any) { toast.error(e.message); }
   };
 
   const handleRevoke = async (l: License) => {
-    if (!db || !confirm('Revoke this license?')) return;
-    await updateDoc(doc(db, 'licenses', l.id), { status: 'suspended' });
+    if (!confirm('Revoke this license?')) return;
+    await licensesApi.update(l.id, { status: 'suspended' });
     addLog(`LICENSE: Revoked ${l.type} license ${l.id}`);
     toast.success('License revoked');
+    await refetch();
   };
 
   const handleActivate = async (l: License) => {
-    if (!db) return;
-    await updateDoc(doc(db, 'licenses', l.id), { status: 'active' });
+    await licensesApi.update(l.id, { status: 'active' });
     addLog(`LICENSE: Activated ${l.type} license ${l.id}`);
     toast.success('License activated');
+    await refetch();
   };
 
   const handleDelete = async (l: License) => {
-    if (!db || !confirm('Permanently delete this license?')) return;
-    await deleteDoc(doc(db, 'licenses', l.id));
+    if (!confirm('Permanently delete this license?')) return;
+    await licensesApi.delete(l.id);
     addLog(`LICENSE: Deleted ${l.type} license ${l.id}`);
     toast.success('License deleted');
+    await refetch();
   };
 
   return (

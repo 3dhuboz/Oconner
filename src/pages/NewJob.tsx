@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Job, JobType, Electrician } from '../types';
-import { db } from '../services/firebase';
-import { doc, setDoc } from 'firebase/firestore';
+import { jobsApi } from '../services/api';
 import { ArrowLeft, ClipboardList } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -43,10 +42,6 @@ export function NewJob({ electricians }: NewJobProps) {
       toast.error('Tenant name and property address are required.');
       return;
     }
-    if (!db) {
-      toast.error('Database not connected — check Firebase config.');
-      return;
-    }
 
     setSaving(true);
     try {
@@ -74,7 +69,7 @@ export function NewJob({ electricians }: NewJobProps) {
         source: 'manual',
       };
 
-      await setDoc(doc(db, 'jobs', id), newJob);
+      await jobsApi.create(newJob);
       toast.success(`Work order ${id} created`);
       navigate(`/jobs/${id}`);
     } catch (err: any) {

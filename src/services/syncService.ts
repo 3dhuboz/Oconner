@@ -1,22 +1,19 @@
 /**
  * Background sync service.
- * Runs a cron interval that checks for network connectivity and
- * flushes the offline sync queue to Firestore when online.
- * Also provides a React hook for network status.
+ * Flushes the offline sync queue to the Worker API when online.
  */
 
-import { db } from './firebase';
-import { doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { syncQueue, offlineMeta } from './offlineDb';
 import type { SyncQueueItem } from './offlineDb';
 
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
+
 const MAX_RETRIES = 10;
-const SYNC_INTERVAL_MS = 5000; // check every 5 seconds
+const SYNC_INTERVAL_MS = 5000;
 
 let cronHandle: ReturnType<typeof setInterval> | null = null;
 let isSyncing = false;
 
-// Listeners for sync status changes
 type SyncStatusListener = (status: SyncStatus) => void;
 const listeners: Set<SyncStatusListener> = new Set();
 
@@ -48,39 +45,29 @@ async function updatePendingCount() {
   try {
     const items = await syncQueue.getAll();
     currentStatus.pendingCount = items.length;
-  } catch {
-    // IndexedDB might fail in rare edge cases
-  }
+  } catch { /* IndexedDB edge case */ }
 }
 
-// ─── Process a single queue item ────────────────────────────────
 async function processItem(item: SyncQueueItem): Promise<boolean> {
-  if (!db) return false;
-
   try {
-    const docRef = doc(db, item.collection, item.docId);
+    const path = `${API_BASE}/${item.collection}${item.operation === 'delete' ? `/${item.docId}` : item.operation === 'update' ? `/${item.docId}` : ''}`;
+    const method = item.operation === 'delete' ? 'DELETE' : item.operation === 'update' ? 'PATCH' : 'POST';
 
-    switch (item.operation) {
-      case 'set':
-        await setDoc(docRef, item.data || {});
-        break;
-      case 'update':
-        await updateDoc(docRef, item.data || {});
-        break;
-      case 'delete':
-        await deleteDoc(docRef);
-        break;
-    }
-    return true;
+    const res = await fetch(path, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: item.operation !== 'delete' ? JSON.stringify({ id: item.docId, ...item.data }) : undefined,
+    });
+
+    return res.ok;
   } catch (error: any) {
     console.warn(`[Sync] Failed to process ${item.id}:`, error.message);
     return false;
   }
 }
 
-// ─── Flush queue ────────────────────────────────────────────────
 async function flushQueue() {
-  if (isSyncing || !navigator.onLine || !db) return;
+  if (isSyncing || !navigator.onLine) return;
 
   isSyncing = true;
   currentStatus.isSyncing = true;
@@ -88,11 +75,10 @@ async function flushQueue() {
 
   try {
     const items = await syncQueue.getAll();
-    // Sort by timestamp ascending (oldest first)
     items.sort((a, b) => a.timestamp - b.timestamp);
 
     for (const item of items) {
-      if (!navigator.onLine) break; // stop if we lost connection mid-sync
+      if (!navigator.onLine) break;
 
       const success = await processItem(item);
       if (success) {
@@ -120,19 +106,15 @@ async function flushQueue() {
   }
 }
 
-// ─── Cron lifecycle ─────────────────────────────────────────────
 export function startSyncCron() {
-  if (cronHandle) return; // already running
+  if (cronHandle) return;
 
-  // Network event listeners
   window.addEventListener('online', handleOnline);
   window.addEventListener('offline', handleOffline);
 
-  // Initial status
   currentStatus.isOnline = navigator.onLine;
   updatePendingCount().then(notifyListeners);
 
-  // Start interval
   cronHandle = setInterval(async () => {
     currentStatus.isOnline = navigator.onLine;
     await updatePendingCount();
@@ -169,7 +151,6 @@ function handleOffline() {
   notifyListeners();
 }
 
-// ─── Manual trigger ─────────────────────────────────────────────
 export async function forceSyncNow() {
   if (!navigator.onLine) {
     console.warn('[Sync] Cannot force sync — offline');
