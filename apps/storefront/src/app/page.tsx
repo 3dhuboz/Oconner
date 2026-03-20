@@ -5,7 +5,7 @@ export const runtime = 'edge';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@clerk/nextjs';
-import { api } from '@butcher/shared';
+import { api, API_URL } from '@butcher/shared';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import CutAdvisor from '@/components/CutAdvisor';
@@ -51,16 +51,16 @@ export default function HomePage() {
 
   useEffect(() => {
     api.config.get('storefront')
-      .then((data: any) => { if (data) setCfg({ ...DEFAULTS, ...data }); })
+      .then((data) => { if (data) setCfg({ ...DEFAULTS, ...(data as Partial<Config>) }); })
       .catch(() => {});
   }, []);
 
   useEffect(() => {
     if (!isSignedIn) { setStaffRole(null); return; }
     getToken()
-      .then(t => t ? fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8787'}/api/users/me`, { headers: { Authorization: `Bearer ${t}` } }) : null)
+      .then(t => t ? fetch(`${API_URL}/api/users/me`, { headers: { Authorization: `Bearer ${t}` } }) : null)
       .then(r => (r?.ok ? r.json() : null))
-      .then((u: any) => setStaffRole(u?.role === 'admin' ? 'admin' : u?.role === 'driver' ? 'driver' : null))
+      .then((u: { role?: string } | null) => setStaffRole(u?.role === 'admin' ? 'admin' : u?.role === 'driver' ? 'driver' : null))
       .catch(() => setStaffRole(null));
   }, [isSignedIn]);
 

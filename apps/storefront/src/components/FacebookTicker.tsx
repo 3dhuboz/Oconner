@@ -2,13 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { API_URL } from '@butcher/shared';
 
 interface TickerItem {
   text: string;
   url?: string;
 }
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'https://oconner-api.steve-700.workers.dev';
 const FB_PAGE = 'https://www.facebook.com/profile.php?id=61574996320860';
 
 export default function FacebookTicker() {

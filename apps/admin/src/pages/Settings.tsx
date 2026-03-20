@@ -448,7 +448,7 @@ export default function SettingsPage() {
         {email.provider !== 'smtp' ? (
           <Field
             label={`${email.provider === 'sendgrid' ? 'SendGrid' : 'Resend'} API Key`}
-            hint="Stored encrypted in Firestore. Used by Cloudflare Worker to send order confirmations."
+            hint="Stored encrypted. Used by Cloudflare Worker to send order confirmations."
           >
             <input
               className={inputCls}

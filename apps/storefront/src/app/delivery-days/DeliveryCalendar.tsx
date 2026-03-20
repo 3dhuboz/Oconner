@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { DeliveryDay } from '@butcher/shared';
-import { ChevronLeft, ChevronRight, ShoppingCart, Clock, CalendarDays } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ShoppingCart, Clock, CalendarDays, Truck } from 'lucide-react';
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -55,37 +55,65 @@ export default function DeliveryCalendar({ days }: { days: DeliveryDay[] }) {
     setSelected(null);
   };
 
+  const goToToday = () => {
+    setYear(now.getFullYear());
+    setMonth(now.getMonth());
+    setSelected(null);
+  };
+
   const upcomingDays = days
     .filter((d) => d.date >= Date.now())
     .sort((a, b) => a.date - b.date)
     .slice(0, 6);
 
   return (
-    <div className="grid md:grid-cols-[1fr_320px] gap-8">
+    <div className="grid lg:grid-cols-[1fr_320px] gap-6">
       {/* Calendar */}
-      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
-        {/* Month nav */}
-        <div className="flex items-center justify-between px-6 py-4 border-b bg-brand text-white">
-          <button onClick={prevMonth} className="p-1.5 rounded-lg hover:bg-white/20 transition-colors">
-            <ChevronLeft className="h-5 w-5" />
-          </button>
-          <h2 className="font-bold text-lg">{MONTH_NAMES[month]} {year}</h2>
-          <button onClick={nextMonth} className="p-1.5 rounded-lg hover:bg-white/20 transition-colors">
-            <ChevronRight className="h-5 w-5" />
-          </button>
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        {/* ── Toolbar ── */}
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-gray-200">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={goToToday}
+              className="text-sm font-medium text-brand border border-gray-300 px-3 py-1.5 rounded-lg hover:bg-brand/5 transition-colors"
+            >
+              Today
+            </button>
+            <div className="flex items-center">
+              <button onClick={prevMonth} className="p-1.5 rounded-full hover:bg-gray-100 transition-colors">
+                <ChevronLeft className="h-5 w-5 text-gray-600" />
+              </button>
+              <button onClick={nextMonth} className="p-1.5 rounded-full hover:bg-gray-100 transition-colors">
+                <ChevronRight className="h-5 w-5 text-gray-600" />
+              </button>
+            </div>
+          </div>
+          <h2 className="text-lg sm:text-xl font-semibold text-gray-800">
+            {MONTH_NAMES[month]} {year}
+          </h2>
+          <div className="w-20" /> {/* Spacer for balance */}
         </div>
 
-        {/* Day headers */}
-        <div className="grid grid-cols-7 bg-brand/5">
+        {/* ── Day-of-week headers ── */}
+        <div className="grid grid-cols-7 border-b border-gray-200">
           {DAY_NAMES.map((d) => (
-            <div key={d} className="text-center text-xs font-semibold text-brand/60 py-3">{d}</div>
+            <div key={d} className="text-center text-[11px] font-semibold text-gray-500 uppercase tracking-wider py-2.5">
+              {d}
+            </div>
           ))}
         </div>
 
-        {/* Calendar grid */}
-        <div className="grid grid-cols-7 divide-x divide-y border-t">
+        {/* ── Calendar cells ── */}
+        <div className="grid grid-cols-7">
           {cells.map((day, i) => {
-            if (!day) return <div key={`empty-${i}`} className="h-16 bg-gray-50/50" />;
+            if (!day) {
+              return (
+                <div
+                  key={`empty-${i}`}
+                  className="min-h-[88px] sm:min-h-[100px] border-b border-r border-gray-100 bg-gray-50/40"
+                />
+              );
+            }
 
             const key = `${year}-${month}-${day}`;
             const deliveryDay = dayMap.get(key);
@@ -94,6 +122,7 @@ export default function DeliveryCalendar({ days }: { days: DeliveryDay[] }) {
             const isFull = deliveryDay ? (deliveryDay.maxOrders - deliveryDay.orderCount) <= 0 : false;
             const isSelected = selected?.id === deliveryDay?.id;
             const isAvailable = !!deliveryDay && !isFull && !isPast;
+            const spotsLeft = deliveryDay ? deliveryDay.maxOrders - deliveryDay.orderCount : 0;
 
             return (
               <button
@@ -101,71 +130,91 @@ export default function DeliveryCalendar({ days }: { days: DeliveryDay[] }) {
                 disabled={!isAvailable}
                 onClick={() => setSelected(deliveryDay!)}
                 className={`
-                  h-16 flex flex-col items-center justify-center gap-1 transition-all relative
-                  ${isSelected ? 'bg-brand text-white' : ''}
-                  ${isAvailable && !isSelected ? 'hover:bg-brand/10 cursor-pointer' : ''}
-                  ${isPast && !deliveryDay ? 'text-gray-200' : ''}
-                  ${!deliveryDay || (isFull && !isPast) ? 'cursor-default' : ''}
+                  min-h-[88px] sm:min-h-[100px] p-1.5 sm:p-2 flex flex-col items-start
+                  border-b border-r border-gray-100 text-left transition-colors
+                  ${isSelected ? 'bg-brand/5' : ''}
+                  ${isAvailable && !isSelected ? 'hover:bg-brand/[0.03] cursor-pointer' : ''}
+                  ${isPast && !deliveryDay ? 'bg-white' : 'bg-white'}
+                  ${!isAvailable ? 'cursor-default' : ''}
                 `}
               >
-                <span className={`
-                  text-sm font-semibold w-8 h-8 flex items-center justify-center rounded-full
-                  ${isToday && !isSelected ? 'border-2 border-brand text-brand' : ''}
-                  ${isSelected ? 'bg-white text-brand' : ''}
-                  ${!isSelected && !isToday && deliveryDay && !isFull && !isPast ? 'text-brand' : ''}
-                  ${isFull && !isPast ? 'text-gray-400' : ''}
-                  ${isPast && !deliveryDay ? 'text-gray-300' : ''}
-                `}>{day}</span>
+                {/* Date number */}
+                <span
+                  className={`
+                    text-xs sm:text-sm font-medium w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center rounded-full mb-1
+                    ${isToday ? 'bg-brand text-white font-bold' : ''}
+                    ${!isToday && isSelected ? 'bg-brand/15 text-brand font-bold' : ''}
+                    ${!isToday && !isSelected && !isPast ? 'text-gray-700' : ''}
+                    ${isPast && !isToday ? 'text-gray-300' : ''}
+                  `}
+                >
+                  {day}
+                </span>
+
+                {/* Delivery event chip */}
                 {deliveryDay && !isPast && (
-                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full leading-none ${
-                    isSelected ? 'bg-white/20 text-white' :
-                    isFull ? 'bg-gray-100 text-gray-400' :
-                    'bg-brand/15 text-brand'
-                  }`}>
-                    {isFull ? 'Full' : 'Open'}
-                  </span>
+                  <div
+                    className={`
+                      w-full rounded-md px-1.5 py-1 text-[10px] sm:text-[11px] font-semibold leading-tight mt-auto
+                      ${isSelected
+                        ? 'bg-brand text-white'
+                        : isFull
+                          ? 'bg-gray-100 text-gray-400 line-through'
+                          : 'bg-brand/10 text-brand hover:bg-brand/20'
+                      }
+                    `}
+                  >
+                    <div className="flex items-center gap-1">
+                      <Truck className="h-3 w-3 flex-shrink-0" />
+                      <span className="truncate">
+                        {isFull ? 'Fully booked' : `Delivery`}
+                      </span>
+                    </div>
+                    {!isFull && (
+                      <div className="text-[9px] sm:text-[10px] opacity-75 mt-0.5 font-normal">
+                        {spotsLeft} spot{spotsLeft !== 1 ? 's' : ''} left
+                      </div>
+                    )}
+                  </div>
                 )}
               </button>
             );
           })}
         </div>
-
-        {/* Legend */}
-        <div className="px-6 py-3 border-t bg-gray-50 flex items-center gap-6 text-xs text-gray-500">
-          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-brand/15 inline-block" />Available</span>
-          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-brand inline-block" />Selected</span>
-          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-gray-200 inline-block" />Full / unavailable</span>
-        </div>
       </div>
 
-      {/* Right panel */}
+      {/* ── Right panel ── */}
       <div className="space-y-4">
         {/* Selected day detail */}
         {selected ? (
-          <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
             <div className="bg-brand px-5 py-4 text-white">
-              <p className="text-xs font-semibold uppercase tracking-wide opacity-70 mb-0.5">Selected Delivery</p>
-              <p className="font-black text-lg leading-tight">
+              <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-white/60 mb-1">Selected Delivery</p>
+              <p className="font-bold text-lg leading-tight">
                 {new Date(selected.date).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })}
               </p>
             </div>
             <div className="p-5 space-y-3">
-              {(selected as any).deliveryWindowStart && (
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                  <Clock className="h-4 w-4 text-brand" />
-                  Deliveries from {formatTime((selected as any).deliveryWindowStart)}
+              {(selected as DeliveryDay & { deliveryWindowStart?: string }).deliveryWindowStart && (
+                <div className="flex items-center gap-2.5 text-sm text-gray-600">
+                  <div className="w-8 h-8 rounded-lg bg-brand/10 flex items-center justify-center flex-shrink-0">
+                    <Clock className="h-4 w-4 text-brand" />
+                  </div>
+                  Deliveries from {formatTime((selected as DeliveryDay & { deliveryWindowStart?: string }).deliveryWindowStart!)}
                 </div>
               )}
-              <div className="flex items-center gap-2 text-sm text-gray-600">
-                <ShoppingCart className="h-4 w-4 text-brand" />
+              <div className="flex items-center gap-2.5 text-sm text-gray-600">
+                <div className="w-8 h-8 rounded-lg bg-brand/10 flex items-center justify-center flex-shrink-0">
+                  <Truck className="h-4 w-4 text-brand" />
+                </div>
                 {selected.maxOrders - selected.orderCount} spots remaining
               </div>
               {selected.notes && (
-                <p className="text-xs text-gray-400 bg-gray-50 rounded-lg p-3">{selected.notes}</p>
+                <p className="text-xs text-gray-500 bg-gray-50 rounded-lg p-3 border border-gray-100">{selected.notes}</p>
               )}
               <button
                 onClick={() => router.push(`/shop?deliveryDay=${selected.id}`)}
-                className="w-full bg-brand text-white py-3 rounded-xl font-bold text-sm hover:bg-brand/90 transition-colors flex items-center justify-center gap-2 mt-2"
+                className="w-full bg-brand text-white py-3 rounded-xl font-bold text-sm hover:bg-brand-mid transition-colors flex items-center justify-center gap-2 mt-2 shadow-sm"
               >
                 <ShoppingCart className="h-4 w-4" />
                 Order for this day
@@ -173,19 +222,19 @@ export default function DeliveryCalendar({ days }: { days: DeliveryDay[] }) {
             </div>
           </div>
         ) : (
-          <div className="bg-brand/5 border-2 border-dashed border-brand/20 rounded-2xl p-6 text-center text-brand/60">
-            <CalendarDays className="h-10 w-10 mx-auto mb-2 opacity-40" />
-            <p className="text-sm font-medium">Click a highlighted date<br />to select your delivery day</p>
+          <div className="bg-white border-2 border-dashed border-gray-200 rounded-xl p-8 text-center">
+            <CalendarDays className="h-10 w-10 mx-auto mb-3 text-gray-300" />
+            <p className="text-sm font-medium text-gray-400">Click a delivery date<br />to see details & order</p>
           </div>
         )}
 
         {/* Upcoming list */}
         {upcomingDays.length > 0 && (
-          <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
-            <div className="px-4 py-3 border-b">
-              <h3 className="font-semibold text-sm text-brand">Upcoming Delivery Days</h3>
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-100">
+              <h3 className="font-semibold text-sm text-gray-800">Upcoming Delivery Days</h3>
             </div>
-            <div className="divide-y">
+            <div className="divide-y divide-gray-100">
               {upcomingDays.map((d) => {
                 const spotsLeft = d.maxOrders - d.orderCount;
                 const isFull = spotsLeft <= 0;
@@ -199,17 +248,20 @@ export default function DeliveryCalendar({ days }: { days: DeliveryDay[] }) {
                       setMonth(date.getMonth());
                       setSelected(isFull ? null : d);
                     }}
-                    className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-50 disabled:opacity-50 disabled:cursor-default transition-colors"
+                    className="w-full flex items-center justify-between px-4 py-3.5 text-left hover:bg-gray-50 disabled:opacity-50 disabled:cursor-default transition-colors group"
                   >
-                    <div>
-                      <p className="text-sm font-semibold text-brand">
-                        {new Date(d.date).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })}
-                      </p>
-                      <p className={`text-xs mt-0.5 ${isFull ? 'text-gray-400' : 'text-green-600'}`}>
-                        {isFull ? 'Fully booked' : `${spotsLeft} spots left`}
-                      </p>
+                    <div className="flex items-center gap-3">
+                      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isFull ? 'bg-gray-300' : 'bg-brand'}`} />
+                      <div>
+                        <p className="text-sm font-medium text-gray-800">
+                          {new Date(d.date).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })}
+                        </p>
+                        <p className={`text-xs mt-0.5 ${isFull ? 'text-gray-400' : 'text-brand'}`}>
+                          {isFull ? 'Fully booked' : `${spotsLeft} spots left`}
+                        </p>
+                      </div>
                     </div>
-                    {!isFull && <ChevronRight className="h-4 w-4 text-brand/40" />}
+                    {!isFull && <ChevronRight className="h-4 w-4 text-gray-300 group-hover:text-brand transition-colors" />}
                   </button>
                 );
               })}
@@ -218,7 +270,7 @@ export default function DeliveryCalendar({ days }: { days: DeliveryDay[] }) {
         )}
 
         {upcomingDays.length === 0 && !selected && (
-          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-center">
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-center">
             <p className="text-sm font-semibold text-amber-800">No delivery days scheduled yet</p>
             <p className="text-xs text-amber-600 mt-1">Check back soon — new dates are added regularly.</p>
           </div>

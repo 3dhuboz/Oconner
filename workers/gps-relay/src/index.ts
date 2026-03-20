@@ -1,18 +1,16 @@
-import { verifyFirebaseJWT, getServiceAccountToken } from './auth';
+/**
+ * GPS Relay Worker
+ *
+ * DEPRECATED: The driver app now pings the main API directly via
+ * api.drivers.ping() → /api/drivers/session/:id/ping (D1-backed).
+ *
+ * This worker is kept as a thin proxy so any lingering clients that still
+ * POST to /ping are forwarded to the main API.  It uses Clerk auth (same
+ * as the driver app) instead of the old Firebase JWT flow.
+ */
 
 export interface Env {
-  FIREBASE_PROJECT_ID: string;
-  FIREBASE_CLIENT_EMAIL: string;
-  FIREBASE_PRIVATE_KEY: string;
-  KV: KVNamespace;
-}
-
-interface GPSPingBody {
-  deliveryDayId: string;
-  lat: number;
-  lng: number;
-  accuracy: number;
-  ts: number;
+  API_URL: string; // e.g. https://oconner-api.steve-700.workers.dev
 }
 
 export default {
@@ -37,62 +35,29 @@ export default {
       return new Response('Unauthorized', { status: 401 });
     }
 
-    const token = authHeader.replace('Bearer ', '');
-    let decoded: { uid: string; role?: string } | null = null;
-
     try {
-      decoded = await verifyFirebaseJWT(token, env.FIREBASE_PROJECT_ID);
-    } catch {
-      return new Response('Unauthorized', { status: 401 });
-    }
-
-    if (!decoded || decoded.role !== 'driver') {
-      return new Response('Forbidden', { status: 403 });
-    }
-
-    let body: GPSPingBody;
-    try {
-      body = await request.json<GPSPingBody>();
-    } catch {
-      return new Response('Bad Request', { status: 400 });
-    }
-
-    const { deliveryDayId, lat, lng, accuracy, ts } = body;
-    if (!deliveryDayId || lat == null || lng == null) {
-      return new Response('Bad Request: missing fields', { status: 400 });
-    }
-
-    try {
-      const accessToken = await getServiceAccountToken(env);
-      const firestoreUrl = `https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/driverSessions/${decoded.uid}?updateMask.fieldPaths=lastLat&updateMask.fieldPaths=lastLng&updateMask.fieldPaths=lastUpdated`;
-
-      const firestoreRes = await fetch(firestoreUrl, {
-        method: 'PATCH',
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          fields: {
-            lastLat: { doubleValue: lat },
-            lastLng: { doubleValue: lng },
-            lastUpdated: { timestampValue: new Date(ts).toISOString() },
-          },
-        }),
-      });
-
-      if (!firestoreRes.ok) {
-        const err = await firestoreRes.text();
-        console.error('Firestore PATCH failed:', err);
-        return new Response('Internal Server Error', { status: 500 });
+      const body = await request.json<{ sessionId: string; lat: number; lng: number }>();
+      if (!body.sessionId || body.lat == null || body.lng == null) {
+        return new Response('Bad Request: missing sessionId, lat, or lng', { status: 400 });
       }
 
-      return new Response('OK', {
-        status: 200,
+      // Forward to main API
+      const apiUrl = env.API_URL || 'https://oconner-api.steve-700.workers.dev';
+      const res = await fetch(`${apiUrl}/api/drivers/session/${body.sessionId}/ping`, {
+        method: 'PATCH',
+        headers: {
+          Authorization: authHeader,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ lat: body.lat, lng: body.lng }),
+      });
+
+      return new Response(res.ok ? 'OK' : 'Upstream error', {
+        status: res.status,
         headers: { 'Access-Control-Allow-Origin': '*' },
       });
     } catch (err) {
-      console.error('GPS relay error:', err);
+      console.error('GPS relay proxy error:', err);
       return new Response('Internal Server Error', { status: 500 });
     }
   },

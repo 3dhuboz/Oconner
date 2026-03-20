@@ -7,8 +7,7 @@ import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { Mail, MapPin, Facebook, Send, CheckCircle } from 'lucide-react';
 import { toast } from '@/lib/toast';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'https://oconner-api.steve-700.workers.dev';
+import { API_URL } from '@butcher/shared';
 
 export default function ContactPage() {
   const [form, setForm] = useState({ name: '', email: '', subject: '', message: '' });

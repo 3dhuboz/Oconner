@@ -1,5 +1,5 @@
 declare const process: { env: Record<string, string | undefined> } | undefined;
-const API_URL = typeof process !== 'undefined'
+export const API_URL = typeof process !== 'undefined'
   ? (process.env.NEXT_PUBLIC_API_URL ?? process.env.VITE_API_URL ?? 'https://oconner-api.steve-700.workers.dev')
   : 'https://oconner-api.steve-700.workers.dev';
 

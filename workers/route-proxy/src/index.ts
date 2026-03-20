@@ -1,10 +1,6 @@
-import { verifyFirebaseJWT } from './auth';
-import { getServiceAccountToken } from './auth';
+import { verifyClerkJWT } from './auth';
 
 export interface Env {
-  FIREBASE_PROJECT_ID: string;
-  FIREBASE_CLIENT_EMAIL: string;
-  FIREBASE_PRIVATE_KEY: string;
   GOOGLE_MAPS_API_KEY: string;
   GEOCODE_KV: KVNamespace;
 }
@@ -25,14 +21,8 @@ export default {
     const url = new URL(request.url);
 
     const authHeader = request.headers.get('Authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return new Response('Unauthorized', { status: 401 });
-    }
-    const token = authHeader.replace('Bearer ', '');
-    try {
-      const decoded = await verifyFirebaseJWT(token, env.FIREBASE_PROJECT_ID);
-      if (decoded.role !== 'admin') return new Response('Forbidden', { status: 403 });
-    } catch {
+    const clerk = await verifyClerkJWT(authHeader);
+    if (!clerk) {
       return new Response('Unauthorized', { status: 401 });
     }
 
@@ -58,8 +48,6 @@ async function handleOptimiseRoute(request: Request, env: Env): Promise<Response
     departureTimeMs?: number;
   }>();
   const departureEpoch = departureTimeMs ?? Date.now();
-
-  const accessToken = await getServiceAccountToken(env);
 
   const stopsWithCoords = await Promise.all(
     stops.map(async (stop) => {

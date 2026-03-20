@@ -1,24 +1,23 @@
 name = "butcher-workers"
 compatibility_date = "2024-09-01"
 
-# GPS Relay Worker
+# GPS Relay Worker (deprecated — proxies to main API)
 [[workers]]
 name = "butcher-gps-relay"
 main = "workers/gps-relay/src/index.ts"
 compatibility_date = "2024-09-01"
 
 [workers.vars]
-FIREBASE_PROJECT_ID = ""
+API_URL = "https://oconner-api.steve-700.workers.dev"
 
-[[workers.kv_namespaces]]
-binding = "KV"
-id = ""
-
-# Payment Handler Worker
+# Payment Handler Worker (deprecated — proxies to main API)
 [[workers]]
 name = "butcher-payment-handler"
 main = "workers/payment-handler/src/index.ts"
 compatibility_date = "2024-09-01"
+
+[workers.vars]
+API_URL = "https://oconner-api.steve-700.workers.dev"
 
 # Route Proxy Worker
 [[workers]]

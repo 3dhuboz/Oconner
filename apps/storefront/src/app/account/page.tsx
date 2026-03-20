@@ -5,7 +5,7 @@ export const runtime = 'edge';
 import { useEffect, useState } from 'react';
 import { useUser, useAuth, SignIn, useClerk } from '@clerk/nextjs';
 import { toast } from '@/lib/toast';
-import { api, formatCurrency, ORDER_STATUS_LABELS } from '@butcher/shared';
+import { api, formatCurrency, ORDER_STATUS_LABELS, API_URL } from '@butcher/shared';
 import type { Order } from '@butcher/shared';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
@@ -70,7 +70,7 @@ export default function AccountPage() {
   const [pushStatus, setPushStatus] = useState<'unknown' | 'granted' | 'denied' | 'unsupported'>('unknown');
   const [pushSaving, setPushSaving] = useState(false);
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'https://oconner-api.steve-700.workers.dev';
+  // API_URL imported from @butcher/shared
 
   useEffect(() => {
     if (typeof window !== 'undefined' && 'Notification' in window) {

@@ -3,8 +3,4 @@ main = "src/index.ts"
 compatibility_date = "2024-09-01"
 
 [vars]
-FIREBASE_PROJECT_ID = ""
-
-[[kv_namespaces]]
-binding = "KV"
-id = ""
+API_URL = "https://oconner-api.steve-700.workers.dev"

@@ -2,8 +2,9 @@
 
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { Play, X, ExternalLink, Loader2 } from 'lucide-react';
+import { API_URL } from '@butcher/shared';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'https://oconner-api.steve-700.workers.dev';
+const API_BASE = API_URL;
 
 const FB_PAGE_ID = '61574996320860';
 const FB_PAGE = `https://www.facebook.com/profile.php?id=${FB_PAGE_ID}`;
