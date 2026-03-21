@@ -1,15 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '@butcher/shared';
 import type { Stop, StopStatus } from '@butcher/shared';
-import { ArrowLeft, MapPin, Phone, Navigation, CheckCircle, Camera, AlertTriangle } from 'lucide-react';
-import { useRef } from 'react';
+import { ArrowLeft, MapPin, Phone, Navigation, CheckCircle, Camera, AlertTriangle, ChevronRight } from 'lucide-react';
 import { formatWeight } from '@butcher/shared';
 
 export default function StopDetailPage() {
   const { stopId } = useParams<{ stopId: string }>();
   const navigate = useNavigate();
   const [stop, setStop] = useState<Stop | null>(null);
+  const [allStops, setAllStops] = useState<Stop[]>([]);
   const [updating, setUpdating] = useState(false);
   const [note, setNote] = useState('');
   const [proofUrl, setProofUrl] = useState<string | null>(null);
@@ -19,9 +19,42 @@ export default function StopDetailPage() {
   useEffect(() => {
     if (!stopId) return;
     api.get<Stop>(`/api/stops/${stopId}`)
-      .then((data) => setStop(data))
+      .then((data) => {
+        setStop(data);
+        // Load all stops in this delivery day to enable auto-advance
+        if (data.deliveryDayId) {
+          api.stops.list(data.deliveryDayId)
+            .then((stops) => setAllStops(stops as Stop[]))
+            .catch(() => {});
+        }
+      })
       .catch(() => {});
   }, [stopId]);
+
+  // Find next undelivered stop in sequence
+  const getNextStop = (): Stop | null => {
+    if (!stop || allStops.length === 0) return null;
+    const remaining = allStops
+      .filter((s) => s.id !== stop.id && s.status !== 'delivered' && s.status !== 'failed')
+      .sort((a, b) => a.sequence - b.sequence);
+    return remaining[0] ?? null;
+  };
+
+  const nextStop = getNextStop();
+  const deliveredCount = allStops.filter((s) => s.status === 'delivered' || s.id === stopId && (stop?.status === 'delivered' || proofUrl)).length;
+  const totalStops = allStops.length;
+
+  const goToNextOrHome = () => {
+    const next = getNextStop();
+    if (next) {
+      // Reset state for next stop
+      setNote('');
+      setProofUrl(null);
+      navigate(`/stop/${next.id}`, { replace: true });
+    } else {
+      navigate('/');
+    }
+  };
 
   const handlePhotoCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -30,9 +63,10 @@ export default function StopDetailPage() {
     try {
       const url = await api.images.upload(file, 'proof');
       setProofUrl(url);
-      // Save proof immediately, then mark as delivered
       await api.stops.updateStatus(stopId, { status: 'delivered', proofUrl: url, driverNote: note || undefined });
+      // Update local state to show delivered
       setStop((s) => s ? { ...s, status: 'delivered' as StopStatus, proofUrl: url } : s);
+      setAllStops((prev) => prev.map((s) => s.id === stopId ? { ...s, status: 'delivered' as StopStatus } : s));
     } catch {
       // best-effort
     } finally {
@@ -44,8 +78,12 @@ export default function StopDetailPage() {
     if (!stopId) return;
     setUpdating(true);
     await api.stops.updateStatus(stopId, { status, proofUrl: proofUrl ?? undefined, ...extra });
+    setStop((s) => s ? { ...s, status: status } : s);
+    setAllStops((prev) => prev.map((s) => s.id === stopId ? { ...s, status } : s));
     setUpdating(false);
-    if (status === 'delivered' || status === 'failed') navigate('/');
+    if (status === 'delivered' || status === 'failed') {
+      goToNextOrHome();
+    }
   };
 
   const deliverWithPhoto = () => {
@@ -239,15 +277,52 @@ export default function StopDetailPage() {
           </>
         )}
         {stop.status === 'delivered' && (
-          <div className="flex items-center justify-center gap-2 py-3 text-green-600 font-semibold">
-            <CheckCircle className="h-5 w-5" />
-            Delivered
+          <div className="space-y-2">
+            <div className="flex items-center justify-center gap-2 py-2 text-green-600 font-semibold">
+              <CheckCircle className="h-5 w-5" />
+              Delivered {totalStops > 0 && <span className="text-gray-400 font-normal text-sm">({deliveredCount}/{totalStops})</span>}
+            </div>
+            {nextStop ? (
+              <button
+                onClick={goToNextOrHome}
+                className="w-full bg-brand text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2"
+              >
+                Next: {nextStop.customerName}
+                <ChevronRight className="h-5 w-5" />
+              </button>
+            ) : (
+              <button
+                onClick={() => navigate('/')}
+                className="w-full bg-gray-100 text-gray-700 py-3 rounded-xl font-bold flex items-center justify-center gap-2"
+              >
+                <CheckCircle className="h-5 w-5 text-green-500" />
+                All Deliveries Complete
+              </button>
+            )}
           </div>
         )}
         {stop.status === 'failed' && (
-          <div className="flex items-center justify-center gap-2 py-3 text-red-600 font-semibold">
-            <AlertTriangle className="h-5 w-5" />
-            Delivery Failed
+          <div className="space-y-2">
+            <div className="flex items-center justify-center gap-2 py-2 text-red-600 font-semibold">
+              <AlertTriangle className="h-5 w-5" />
+              Delivery Failed
+            </div>
+            {nextStop ? (
+              <button
+                onClick={goToNextOrHome}
+                className="w-full bg-brand text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2"
+              >
+                Next: {nextStop.customerName}
+                <ChevronRight className="h-5 w-5" />
+              </button>
+            ) : (
+              <button
+                onClick={() => navigate('/')}
+                className="w-full bg-gray-100 text-gray-700 py-3 rounded-xl font-bold"
+              >
+                Back to Run
+              </button>
+            )}
           </div>
         )}
       </div>
