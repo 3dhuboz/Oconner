@@ -4,6 +4,7 @@ import { eq, desc, inArray, gte } from 'drizzle-orm';
 import { orders, customers, deliveryDays, stops, stockMovements, notifications, auditLog } from '@butcher/db';
 import type { Env, AuthUser } from '../types';
 import { sendEmail, buildOrderEmail, getSubject } from '../lib/email';
+import { deductStock } from '../lib/stock';
 
 const app = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
 
@@ -88,6 +89,9 @@ app.post('/', async (c) => {
     createdAt: now,
     updatedAt: now,
   });
+
+  // Deduct stock for each item in the order
+  await deductStock(db, body.items as any[], orderId, now);
 
   const [day] = await db.select().from(deliveryDays).where(eq(deliveryDays.id, body.deliveryDayId)).limit(1);
   if (day) await db.update(deliveryDays).set({ orderCount: day.orderCount + 1 }).where(eq(deliveryDays.id, day.id));

@@ -1,8 +1,9 @@
 import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/d1';
 import { eq } from 'drizzle-orm';
-import { orders, customers, stockMovements, products, notifications } from '@butcher/db';
+import { orders, customers, notifications } from '@butcher/db';
 import { sendEmail, buildOrderEmail, getSubject } from '../lib/email';
+import { deductStock, restoreStock } from '../lib/stock';
 import type { Env, AuthUser } from '../types';
 
 interface OrderItem {
@@ -15,58 +16,6 @@ interface OrderItem {
 }
 
 const app = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function deductStock(db: any, items: OrderItem[], orderId: string, now: number) {
-  for (const item of items) {
-    const [product] = await db.select().from(products).where(eq(products.id, item.productId)).limit(1);
-    if (!product) continue;
-
-    // Packs: deduct by quantity (units). Loose cuts: deduct by weight (grams → kg).
-    const delta = item.isMeatPack ? -(item.quantity ?? 1) : -((item.weight ?? 0) / 1000);
-    const newStock = Math.max(0, product.stockOnHand + delta);
-
-    await db.update(products).set({ stockOnHand: newStock, updatedAt: now }).where(eq(products.id, item.productId));
-    await db.insert(stockMovements).values({
-      id: crypto.randomUUID(),
-      productId: item.productId,
-      productName: item.productName,
-      type: 'sale',
-      qty: delta,
-      unit: item.isMeatPack ? 'units' : 'kg',
-      reason: `Online order ${orderId}`,
-      orderId,
-      createdBy: 'system',
-      createdAt: now,
-    });
-  }
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function restoreStock(db: any, items: OrderItem[], orderId: string, now: number) {
-  for (const item of items) {
-    const [product] = await db.select().from(products).where(eq(products.id, item.productId)).limit(1);
-    if (!product) continue;
-
-    // Reverse the deduction: positive delta to add stock back
-    const delta = item.isMeatPack ? (item.quantity ?? 1) : (item.weight ?? 0) / 1000;
-    const newStock = product.stockOnHand + delta;
-
-    await db.update(products).set({ stockOnHand: newStock, updatedAt: now }).where(eq(products.id, item.productId));
-    await db.insert(stockMovements).values({
-      id: crypto.randomUUID(),
-      productId: item.productId,
-      productName: item.productName,
-      type: 'refund',
-      qty: delta,
-      unit: item.isMeatPack ? 'units' : 'kg',
-      reason: `Refund for order ${orderId}`,
-      orderId,
-      createdBy: 'system',
-      createdAt: now,
-    });
-  }
-}
 
 async function verifyStripeSignature(
   payload: string,
