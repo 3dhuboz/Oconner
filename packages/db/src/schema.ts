@@ -8,6 +8,13 @@ export const users = sqliteTable('users', {
   name: text('name').notNull().default(''),
   role: text('role').notNull().default('staff'), // 'admin' | 'staff' | 'driver'
   active: integer('active', { mode: 'boolean' }).notNull().default(true),
+  phone: text('phone'),
+  address: text('address'),
+  vehicleInfo: text('vehicle_info'),
+  registrationNumber: text('registration_number'),
+  licenseNumber: text('license_number'),
+  nextOfKin: text('next_of_kin'),         // JSON: { name, phone }
+  zones: text('zones').notNull().default('[]'), // JSON: string[] of postcode prefixes
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull(),
 });
