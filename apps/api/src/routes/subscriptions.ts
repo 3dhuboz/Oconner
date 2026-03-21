@@ -348,17 +348,33 @@ app.post('/:id/generate-order', async (c) => {
   const boxId = sub.nextIsAlternate && sub.alternateBoxId ? sub.alternateBoxId : sub.boxId;
   const boxName = sub.nextIsAlternate && sub.alternateBoxName ? sub.alternateBoxName : sub.boxName;
 
-  // Look up actual product price from DB (fixedPrice is in cents)
-  const [boxProduct] = await db.select().from(products).where(eq(products.id, boxId)).limit(1);
+  // Look up product price — try exact ID, then prod-{name}-box pattern, then name match
+  const { like } = await import('drizzle-orm');
+  let [boxProduct] = await db.select().from(products).where(eq(products.id, boxId)).limit(1);
+  if (!boxProduct) {
+    [boxProduct] = await db.select().from(products).where(eq(products.id, `prod-${boxId}-box`)).limit(1);
+  }
+  if (!boxProduct) {
+    [boxProduct] = await db.select().from(products).where(like(products.name, `%${boxName.replace(' Box', '')}%Box%`)).limit(1);
+  }
   const price = boxProduct?.fixedPrice ?? 0;
+  const resolvedBoxId = boxProduct?.id ?? boxId;
   if (!price) return c.json({ error: 'Box product not found or has no price' }, 400);
 
-  // Get customer address
+  // Get customer address — try stored addresses, fallback to most recent order
   let address = { line1: '', suburb: '', state: 'QLD', postcode: '' };
   try {
     const addresses = JSON.parse(customer.addresses ?? '[]') as Array<{ line1: string; suburb: string; state: string; postcode: string }>;
     if (addresses.length > 0) address = addresses[0];
   } catch {}
+  if (!address.line1) {
+    const [lastOrder] = await db.select().from(orders)
+      .where(eq(orders.customerId, customerId))
+      .orderBy(desc(orders.createdAt)).limit(1);
+    if (lastOrder) {
+      try { address = JSON.parse(lastOrder.deliveryAddress) as typeof address; } catch {}
+    }
+  }
 
   if (!address.line1) {
     return c.json({ error: 'Customer has no delivery address — add one in Customers first' }, 400);
@@ -371,7 +387,7 @@ app.post('/:id/generate-order', async (c) => {
     name: customer.name ?? sub.email,
     phone: customer.phone ?? '',
     address,
-    boxId,
+    boxId: resolvedBoxId,
     boxName,
     price,
     subscriptionId: sub.id,
@@ -427,12 +443,20 @@ app.post('/auto-generate', async (c) => {
     const [customer] = await db.select().from(customers).where(eq(customers.id, customerId)).limit(1);
     if (!customer) { errors.push(`${sub.email}: customer not found`); continue; }
 
-    // Get address
+    // Get address — try stored, fallback to most recent order
     let address = { line1: '', suburb: '', state: 'QLD', postcode: '' };
     try {
       const addresses = JSON.parse(customer.addresses ?? '[]') as Array<{ line1: string; suburb: string; state: string; postcode: string }>;
       if (addresses.length > 0) address = addresses[0];
     } catch {}
+    if (!address.line1) {
+      const [lastOrder] = await db.select().from(orders)
+        .where(eq(orders.customerId, customerId))
+        .orderBy(desc(orders.createdAt)).limit(1);
+      if (lastOrder) {
+        try { address = JSON.parse(lastOrder.deliveryAddress) as typeof address; } catch {}
+      }
+    }
 
     if (!address.line1) { errors.push(`${sub.email}: no delivery address`); continue; }
 
@@ -440,9 +464,17 @@ app.post('/auto-generate', async (c) => {
     const boxId = sub.nextIsAlternate && sub.alternateBoxId ? sub.alternateBoxId : sub.boxId;
     const boxName = sub.nextIsAlternate && sub.alternateBoxName ? sub.alternateBoxName : sub.boxName;
 
-    // Look up actual product price from DB (fixedPrice is in cents)
-    const [boxProduct] = await db.select().from(products).where(eq(products.id, boxId)).limit(1);
+    // Look up product price — try exact ID, then prod-{name}-box, then name match
+    const { like } = await import('drizzle-orm');
+    let [boxProduct] = await db.select().from(products).where(eq(products.id, boxId)).limit(1);
+    if (!boxProduct) {
+      [boxProduct] = await db.select().from(products).where(eq(products.id, `prod-${boxId}-box`)).limit(1);
+    }
+    if (!boxProduct) {
+      [boxProduct] = await db.select().from(products).where(like(products.name, `%${boxName.replace(' Box', '')}%Box%`)).limit(1);
+    }
     const price = boxProduct?.fixedPrice ?? 0;
+    const resolvedBoxId = boxProduct?.id ?? boxId;
     if (!price) { errors.push(`${sub.email}: box product not found or no price`); continue; }
 
     const orderId = await createSubscriptionOrder(db, {
@@ -451,7 +483,7 @@ app.post('/auto-generate', async (c) => {
       name: customer.name ?? sub.email,
       phone: customer.phone ?? '',
       address,
-      boxId,
+      boxId: resolvedBoxId,
       boxName,
       price,
       subscriptionId: sub.id,
