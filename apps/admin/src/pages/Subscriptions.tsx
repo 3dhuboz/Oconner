@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { api } from '@butcher/shared';
 import type { Product } from '@butcher/shared';
-import { RefreshCcw, Check, X, Phone, Mail, Plus, Upload, Image, Save, ArrowLeftRight, PackageCheck, ShoppingCart, Calendar, Package, User, Clock } from 'lucide-react';
+import { RefreshCcw, Check, X, Phone, Mail, Plus, Upload, Image, Save, ArrowLeftRight, PackageCheck, ShoppingCart, Calendar, Package, User, Clock, Pencil } from 'lucide-react';
 import { toast } from '../lib/toast';
 
 interface Subscription {
@@ -127,6 +127,9 @@ export default function SubscriptionsPage() {
 
   const [generatingOrder, setGeneratingOrder] = useState<string | null>(null);
   const [viewingSub, setViewingSub] = useState<Subscription | null>(null);
+  const [editingSub, setEditingSub] = useState(false);
+  const [editForm, setEditForm] = useState<Partial<Subscription>>({});
+  const [editSaving, setEditSaving] = useState(false);
 
   const generateOrder = async (sub: Subscription) => {
     setGeneratingOrder(sub.id);
@@ -308,105 +311,170 @@ export default function SubscriptionsPage() {
         </div>
       )}
 
-      {/* ── Subscription Detail Modal ── */}
+      {/* ── Subscription Detail / Edit Modal ── */}
       {viewingSub && (() => {
         const s = viewingSub;
         const boxImg = boxProducts.find((p) => p.id === s.boxId)?.imageUrl;
-        const altBoxImg = s.alternateBoxId ? boxProducts.find((p) => p.id === s.alternateBoxId)?.imageUrl : null;
         const createdDate = s.createdAt ? new Date(s.createdAt) : null;
         const lastOrderDate = s.lastOrderGeneratedAt ? new Date(s.lastOrderGeneratedAt) : null;
-
-        // Calculate next delivery estimate
         const FREQ_DAYS: Record<string, number> = { weekly: 7, fortnightly: 14, monthly: 30 };
         const freqDays = FREQ_DAYS[s.frequency] ?? 14;
         const baseDate = s.lastOrderGeneratedAt ?? s.createdAt ?? Date.now();
         const nextDue = new Date(baseDate + freqDays * 24 * 60 * 60 * 1000);
-
         const fmt = (d: Date) => d.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
 
+        const startEdit = () => {
+          setEditForm({ boxId: s.boxId, boxName: s.boxName, frequency: s.frequency, customerName: s.customerName ?? '', email: s.email, customerPhone: s.customerPhone ?? '' });
+          setEditingSub(true);
+        };
+
+        const saveEdit = async () => {
+          setEditSaving(true);
+          try {
+            const selectedBox = boxProducts.find((p) => p.id === editForm.boxId);
+            const payload: Record<string, unknown> = { ...editForm };
+            if (selectedBox) payload.boxName = selectedBox.name;
+            await api.patch(`/api/subscriptions/${s.id}`, payload);
+            toast('Subscription updated');
+            setEditingSub(false);
+            setViewingSub(null);
+            const updated = await api.get('/api/subscriptions') as Subscription[];
+            setSubs(updated);
+          } catch { toast('Failed to update', 'error'); }
+          finally { setEditSaving(false); }
+        };
+
         return (
-          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setViewingSub(null)}>
-            <div className="bg-white rounded-2xl w-full max-w-lg p-6" onClick={(e) => e.stopPropagation()}>
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => { setViewingSub(null); setEditingSub(false); }}>
+            <div className="bg-white rounded-2xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-5">
-                <h2 className="font-semibold text-lg">Subscription Details</h2>
-                <button onClick={() => setViewingSub(null)}><X className="h-5 w-5 text-gray-400" /></button>
+                <h2 className="font-semibold text-lg">{editingSub ? 'Edit Subscription' : 'Subscription Details'}</h2>
+                <button onClick={() => { setViewingSub(null); setEditingSub(false); }}><X className="h-5 w-5 text-gray-400" /></button>
               </div>
 
-              {/* Customer info */}
-              <div className="flex items-center gap-3 mb-5">
-                {boxImg ? (
-                  <img src={boxImg} alt={s.boxName} className="w-16 h-16 rounded-xl object-cover" />
-                ) : (
-                  <div className="w-16 h-16 rounded-xl bg-gray-100 flex items-center justify-center">
-                    <Package className="h-6 w-6 text-gray-300" />
+              {editingSub ? (
+                /* ── Edit Mode ── */
+                <div className="space-y-4 text-sm">
+                  <div>
+                    <label className="text-xs text-gray-500 font-medium mb-1 block">Customer Name</label>
+                    <input value={editForm.customerName ?? ''} onChange={(e) => setEditForm({ ...editForm, customerName: e.target.value })}
+                      className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
                   </div>
-                )}
-                <div>
-                  <p className="font-semibold text-lg">{s.customerName || s.email}</p>
-                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_STYLE[s.status] ?? STATUS_STYLE.pending}`}>
-                    {s.status}
-                  </span>
-                </div>
-              </div>
-
-              <div className="space-y-3 text-sm">
-                {/* Contact */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-gray-50 rounded-lg p-3">
-                    <p className="text-xs text-gray-500 mb-1 flex items-center gap-1"><Mail className="h-3 w-3" /> Email</p>
-                    <p className="font-medium">{s.email}</p>
-                  </div>
-                  {s.customerPhone && (
-                    <div className="bg-gray-50 rounded-lg p-3">
-                      <p className="text-xs text-gray-500 mb-1 flex items-center gap-1"><Phone className="h-3 w-3" /> Phone</p>
-                      <p className="font-medium">{s.customerPhone}</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs text-gray-500 font-medium mb-1 block">Email</label>
+                      <input value={editForm.email ?? ''} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                        className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
                     </div>
-                  )}
-                </div>
-
-                {/* Box details */}
-                <div className="bg-gray-50 rounded-lg p-3">
-                  <p className="text-xs text-gray-500 mb-1 flex items-center gap-1"><Package className="h-3 w-3" /> Subscription Box</p>
-                  <p className="font-medium">{s.boxName}</p>
-                  {s.alternateBoxId && (
-                    <p className="text-xs text-gray-500 mt-1">
-                      Alternates with: <span className="font-medium text-gray-700">{s.alternateBoxName}</span>
-                      {' '}— Next delivery: <span className="font-medium text-brand">{s.nextIsAlternate ? s.alternateBoxName : s.boxName}</span>
-                    </p>
-                  )}
-                </div>
-
-                {/* Frequency */}
-                <div className="bg-gray-50 rounded-lg p-3">
-                  <p className="text-xs text-gray-500 mb-1 flex items-center gap-1"><RefreshCcw className="h-3 w-3" /> Frequency</p>
-                  <p className="font-medium capitalize">{s.frequency}</p>
-                </div>
-
-                {/* Dates */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-gray-50 rounded-lg p-3">
-                    <p className="text-xs text-gray-500 mb-1 flex items-center gap-1"><Calendar className="h-3 w-3" /> Started</p>
-                    <p className="font-medium">{createdDate ? fmt(createdDate) : '—'}</p>
+                    <div>
+                      <label className="text-xs text-gray-500 font-medium mb-1 block">Phone</label>
+                      <input value={editForm.customerPhone ?? ''} onChange={(e) => setEditForm({ ...editForm, customerPhone: e.target.value })}
+                        className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                    </div>
                   </div>
-                  <div className="bg-gray-50 rounded-lg p-3">
-                    <p className="text-xs text-gray-500 mb-1 flex items-center gap-1"><Clock className="h-3 w-3" /> Last Order</p>
-                    <p className="font-medium">{lastOrderDate ? fmt(lastOrderDate) : 'None yet'}</p>
+                  <div>
+                    <label className="text-xs text-gray-500 font-medium mb-1 block">Subscription Box</label>
+                    <select value={editForm.boxId ?? ''} onChange={(e) => {
+                      const box = boxProducts.find((p) => p.id === e.target.value);
+                      setEditForm({ ...editForm, boxId: e.target.value, boxName: box?.name ?? '' });
+                    }} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
+                      {boxProducts.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 font-medium mb-1 block">Frequency</label>
+                    <select value={editForm.frequency ?? 'fortnightly'} onChange={(e) => setEditForm({ ...editForm, frequency: e.target.value })}
+                      className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
+                      {FREQUENCIES.map((f) => <option key={f} value={f}>{f.charAt(0).toUpperCase() + f.slice(1)}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex gap-3 pt-2">
+                    <button onClick={() => setEditingSub(false)} className="flex-1 border py-2 rounded-lg text-sm font-medium hover:bg-gray-50">Cancel</button>
+                    <button onClick={saveEdit} disabled={editSaving}
+                      className="flex-1 bg-brand text-white py-2 rounded-lg text-sm font-medium hover:bg-brand-mid disabled:opacity-50 flex items-center justify-center gap-2">
+                      <Save className="h-4 w-4" /> {editSaving ? 'Saving…' : 'Save Changes'}
+                    </button>
                   </div>
                 </div>
-
-                {s.status === 'active' && (
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                    <p className="text-xs text-green-600 mb-1 flex items-center gap-1"><Calendar className="h-3 w-3" /> Next Order Due</p>
-                    <p className="font-medium text-green-700">{fmt(nextDue)}</p>
-                    <p className="text-xs text-green-500 mt-1">Orders are automatically created each delivery cycle</p>
+              ) : (
+                /* ── View Mode ── */
+                <>
+                  <div className="flex items-center gap-3 mb-5">
+                    {boxImg ? (
+                      <img src={boxImg} alt={s.boxName} className="w-16 h-16 rounded-xl object-cover" />
+                    ) : (
+                      <div className="w-16 h-16 rounded-xl bg-gray-100 flex items-center justify-center">
+                        <Package className="h-6 w-6 text-gray-300" />
+                      </div>
+                    )}
+                    <div>
+                      <p className="font-semibold text-lg">{s.customerName || s.email}</p>
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_STYLE[s.status] ?? STATUS_STYLE.pending}`}>
+                        {s.status}
+                      </span>
+                    </div>
                   </div>
-                )}
-              </div>
 
-              <div className="mt-6">
-                <button onClick={() => setViewingSub(null)}
-                  className="w-full border py-2 rounded-lg text-sm font-medium hover:bg-gray-50">Close</button>
-              </div>
+                  <div className="space-y-3 text-sm">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="bg-gray-50 rounded-lg p-3">
+                        <p className="text-xs text-gray-500 mb-1 flex items-center gap-1"><Mail className="h-3 w-3" /> Email</p>
+                        <p className="font-medium">{s.email}</p>
+                      </div>
+                      {s.customerPhone && (
+                        <div className="bg-gray-50 rounded-lg p-3">
+                          <p className="text-xs text-gray-500 mb-1 flex items-center gap-1"><Phone className="h-3 w-3" /> Phone</p>
+                          <p className="font-medium">{s.customerPhone}</p>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <p className="text-xs text-gray-500 mb-1 flex items-center gap-1"><Package className="h-3 w-3" /> Subscription Box</p>
+                      <p className="font-medium">{s.boxName}</p>
+                      {s.alternateBoxId && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          Alternates with: <span className="font-medium text-gray-700">{s.alternateBoxName}</span>
+                          {' '}— Next: <span className="font-medium text-brand">{s.nextIsAlternate ? s.alternateBoxName : s.boxName}</span>
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <p className="text-xs text-gray-500 mb-1 flex items-center gap-1"><RefreshCcw className="h-3 w-3" /> Frequency</p>
+                      <p className="font-medium capitalize">{s.frequency}</p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="bg-gray-50 rounded-lg p-3">
+                        <p className="text-xs text-gray-500 mb-1 flex items-center gap-1"><Calendar className="h-3 w-3" /> Started</p>
+                        <p className="font-medium">{createdDate ? fmt(createdDate) : '—'}</p>
+                      </div>
+                      <div className="bg-gray-50 rounded-lg p-3">
+                        <p className="text-xs text-gray-500 mb-1 flex items-center gap-1"><Clock className="h-3 w-3" /> Last Order</p>
+                        <p className="font-medium">{lastOrderDate ? fmt(lastOrderDate) : 'None yet'}</p>
+                      </div>
+                    </div>
+
+                    {s.status === 'active' && (
+                      <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                        <p className="text-xs text-green-600 mb-1 flex items-center gap-1"><Calendar className="h-3 w-3" /> Next Order Due</p>
+                        <p className="font-medium text-green-700">{fmt(nextDue)}</p>
+                        <p className="text-xs text-green-500 mt-1">Orders are automatically created each delivery cycle</p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex gap-3 mt-6">
+                    <button onClick={() => { setViewingSub(null); setEditingSub(false); }}
+                      className="flex-1 border py-2 rounded-lg text-sm font-medium hover:bg-gray-50">Close</button>
+                    <button onClick={startEdit}
+                      className="flex-1 bg-brand text-white py-2 rounded-lg text-sm font-medium hover:bg-brand-mid flex items-center justify-center gap-2">
+                      <Pencil className="h-4 w-4" /> Edit
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         );
