@@ -321,8 +321,24 @@ app.post('/', async (c) => {
 
 app.patch('/:id', async (c) => {
   const db = drizzle(c.env.DB);
-  const body = await c.req.json<{ status?: string; alternateBoxId?: string | null; alternateBoxName?: string | null; nextIsAlternate?: boolean }>();
-  await db.update(subscriptions).set({ ...body, updatedAt: Date.now() }).where(eq(subscriptions.id, c.req.param('id')));
+  const body = await c.req.json<{
+    status?: string;
+    boxId?: string;
+    boxName?: string;
+    alternateBoxId?: string | null;
+    alternateBoxName?: string | null;
+    nextIsAlternate?: boolean;
+    frequency?: string;
+    customerName?: string;
+    customerPhone?: string;
+    email?: string;
+  }>();
+  const allowed: Record<string, unknown> = {};
+  for (const key of ['status', 'boxId', 'boxName', 'alternateBoxId', 'alternateBoxName', 'nextIsAlternate', 'frequency', 'customerName', 'customerPhone', 'email'] as const) {
+    if ((body as any)[key] !== undefined) allowed[key] = (body as any)[key];
+  }
+  allowed.updatedAt = Date.now();
+  await db.update(subscriptions).set(allowed).where(eq(subscriptions.id, c.req.param('id')));
   return c.json({ ok: true });
 });
 
