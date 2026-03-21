@@ -263,6 +263,14 @@ app.delete('/:id', async (c) => {
     }
   }
 
+  // Delete associated stops (FK constraint)
+  await db.delete(stops).where(eq(stops.orderId, orderId));
+
+  // Restore stock for the deleted order
+  const items = JSON.parse(order.items) as Array<{ productId: string; productName: string; isMeatPack: boolean; weight?: number; quantity?: number; lineTotal: number }>;
+  const { restoreStock } = await import('../lib/stock');
+  await restoreStock(db, items, orderId, Date.now());
+
   await db.insert(auditLog).values({
     id: crypto.randomUUID(),
     action: 'delete_order',
