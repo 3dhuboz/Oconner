@@ -242,9 +242,15 @@ export default function DeliveryManifestPage() {
   const sendDayBeforeNotice = async () => {
     if (!dayId) return;
     setNotifying(true);
-    await api.deliveryDays.sendReminders(dayId);
-    setNotifySent(true);
-    setNotifying(false);
+    try {
+      const result = await api.deliveryDays.sendReminders(dayId) as { sent: number; total: number };
+      setNotifySent(true);
+      toast(`Notifications sent to ${result.sent} of ${result.total} customer${result.total !== 1 ? 's' : ''}`);
+    } catch {
+      toast('Failed to send notifications', 'error');
+    } finally {
+      setNotifying(false);
+    }
   };
 
   const delivered = stops.filter((s) => s.status === 'delivered').length;
