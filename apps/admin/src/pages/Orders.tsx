@@ -328,7 +328,35 @@ export default function OrdersPage() {
         </select>
       </div>
 
-      <div className="bg-white rounded-xl border overflow-hidden">
+      {/* ── Mobile card layout ── */}
+      <div className="md:hidden space-y-3">
+        {loading ? (
+          <p className="text-center py-10 text-gray-400">Loading…</p>
+        ) : filtered.length === 0 ? (
+          <p className="text-center py-10 text-gray-400">No orders found</p>
+        ) : filtered.map((order) => (
+          <Link key={order.id} to={`/orders/${order.id}`} className="block bg-white rounded-xl border p-4 hover:bg-gray-50 transition-colors">
+            <div className="flex items-center justify-between mb-2">
+              <span className="font-mono font-medium text-brand text-sm">#{(order.id ?? '').slice(-8).toUpperCase()}</span>
+              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                order.status === 'delivered' ? 'bg-green-100 text-green-700'
+                  : order.status === 'cancelled' || order.status === 'refunded' ? 'bg-red-100 text-red-700'
+                  : order.status === 'out_for_delivery' ? 'bg-orange-100 text-orange-700'
+                  : 'bg-blue-100 text-blue-700'
+              }`}>{ORDER_STATUS_LABELS[order.status] ?? order.status}</span>
+            </div>
+            <p className="font-medium text-sm">{order.customerName}</p>
+            <p className="text-xs text-gray-400">{order.customerEmail}</p>
+            <div className="flex items-center justify-between mt-2">
+              <span className="text-xs text-gray-500">{order.items.length} item{order.items.length !== 1 ? 's' : ''}</span>
+              <span className="font-semibold text-sm">{formatCurrency(order.total)}</span>
+            </div>
+          </Link>
+        ))}
+      </div>
+
+      {/* ── Desktop table layout ── */}
+      <div className="hidden md:block bg-white rounded-xl border overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
             <tr>

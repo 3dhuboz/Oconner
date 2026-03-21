@@ -1,14 +1,14 @@
 'use client';
 export const runtime = 'edge';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { api } from '@butcher/shared';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { formatCurrency } from '@butcher/shared';
 import type { Order } from '@butcher/shared';
 import { ORDER_STATUS_LABELS, ORDER_STATUS_COLORS } from '@butcher/shared';
-import { Package, Truck, CheckCircle, Clock, XCircle } from 'lucide-react';
+import { Package, Truck, CheckCircle, Clock, XCircle, MapPin, Navigation } from 'lucide-react';
 
 const STATUS_ICONS: Record<string, React.ReactNode> = {
   pending_payment: <Clock className="h-6 w-6" />,
@@ -21,6 +21,102 @@ const STATUS_ICONS: Record<string, React.ReactNode> = {
 };
 
 const STATUS_STEPS = ['confirmed', 'preparing', 'packed', 'out_for_delivery', 'delivered'];
+
+interface DriverLocation {
+  driverName: string;
+  lastLat: number;
+  lastLng: number;
+  lastUpdated: number;
+}
+
+function LiveDriverMap({ deliveryAddress }: { deliveryAddress: { line1: string; suburb: string; state: string; postcode: string; lat?: number; lng?: number } }) {
+  const mapRef = useRef<HTMLDivElement>(null);
+  const mapInstanceRef = useRef<any>(null);
+  const driverMarkerRef = useRef<any>(null);
+  const [driver, setDriver] = useState<DriverLocation | null>(null);
+  const [leafletLoaded, setLeafletLoaded] = useState(false);
+
+  // Load Leaflet
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if ((window as any).L) { setLeafletLoaded(true); return; }
+    const css = document.createElement('link');
+    css.rel = 'stylesheet';
+    css.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+    document.head.appendChild(css);
+    const js = document.createElement('script');
+    js.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    js.onload = () => setLeafletLoaded(true);
+    document.head.appendChild(js);
+  }, []);
+
+  // Poll driver location
+  const fetchDriver = useCallback(async () => {
+    try {
+      const sessions = await api.drivers.active() as DriverLocation[];
+      if (sessions.length > 0) setDriver(sessions[0]);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    fetchDriver();
+    const interval = setInterval(fetchDriver, 10000);
+    return () => clearInterval(interval);
+  }, [fetchDriver]);
+
+  // Init & update map
+  useEffect(() => {
+    if (!leafletLoaded || !mapRef.current || !driver) return;
+    const L = (window as any).L;
+    if (!mapInstanceRef.current) {
+      mapInstanceRef.current = L.map(mapRef.current).setView([driver.lastLat, driver.lastLng], 14);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap',
+      }).addTo(mapInstanceRef.current);
+      // Delivery address marker
+      const addrLat = deliveryAddress.lat ?? driver.lastLat;
+      const addrLng = deliveryAddress.lng ?? driver.lastLng;
+      if (deliveryAddress.lat && deliveryAddress.lng) {
+        L.marker([addrLat, addrLng], {
+          icon: L.divIcon({ className: '', html: '<div style="font-size:24px">📍</div>', iconSize: [28, 28], iconAnchor: [14, 28] }),
+        }).addTo(mapInstanceRef.current).bindPopup(`<b>Delivery</b><br/>${deliveryAddress.line1}`);
+      }
+    }
+    // Update driver marker
+    if (driverMarkerRef.current) {
+      driverMarkerRef.current.setLatLng([driver.lastLat, driver.lastLng]);
+    } else {
+      driverMarkerRef.current = L.marker([driver.lastLat, driver.lastLng], {
+        icon: L.divIcon({ className: '', html: '<div style="font-size:28px">🚚</div>', iconSize: [32, 32], iconAnchor: [16, 16] }),
+      }).addTo(mapInstanceRef.current).bindPopup(`<b>${driver.driverName}</b>`);
+    }
+    mapInstanceRef.current.panTo([driver.lastLat, driver.lastLng]);
+  }, [leafletLoaded, driver, deliveryAddress]);
+
+  const ago = driver ? Math.round((Date.now() - driver.lastUpdated) / 1000) : 0;
+
+  return (
+    <div className="rounded-xl border overflow-hidden mb-6">
+      <div className="bg-brand text-white px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Navigation className="h-4 w-4" />
+          <span className="font-semibold text-sm">Live Driver Tracking</span>
+        </div>
+        {driver && (
+          <span className="text-xs text-white/70">
+            {driver.driverName} · {ago < 60 ? 'just now' : `${Math.round(ago / 60)}m ago`}
+          </span>
+        )}
+      </div>
+      <div ref={mapRef} style={{ height: 280 }} className="bg-gray-100" />
+      {!driver && (
+        <div className="px-4 py-3 text-sm text-gray-500 text-center">
+          Waiting for driver location...
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function TrackOrderPage({ params }: { params: { orderId: string } }) {
   const [order, setOrder] = useState<Order | null>(null);
@@ -80,6 +176,10 @@ export default function TrackOrderPage({ params }: { params: { orderId: string }
             )}
           </div>
         </div>
+
+        {order.status === 'out_for_delivery' && (
+          <LiveDriverMap deliveryAddress={order.deliveryAddress} />
+        )}
 
         {order.status !== 'cancelled' && order.status !== 'pending_payment' && (
           <div className="mb-8">
