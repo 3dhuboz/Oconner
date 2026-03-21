@@ -29,8 +29,10 @@ export interface OrderItem {
   productName: string;
   category: string;
   isMeatPack: boolean;
-  /** grams */
+  /** grams (storefront) */
   weight?: number;
+  /** kg (admin) */
+  weightKg?: number;
   /** for packs */
   quantity?: number;
   /** cents per kg */
