@@ -5,6 +5,7 @@ import { requireAuth, requireRole, verifyClerkToken } from './middleware/auth';
 import { drizzle } from 'drizzle-orm/d1';
 import { eq, desc, asc, and, gte } from 'drizzle-orm';
 import { orders as ordersTable, customers as customersTable, products as productsTable, deliveryDays as deliveryDaysTable, subscriptions as subscriptionsTable } from '@butcher/db';
+import { deductStock } from './lib/stock';
 import ordersRouter from './routes/orders';
 import productsRouter from './routes/products';
 import deliveryDaysRouter from './routes/deliveryDays';
@@ -161,6 +162,8 @@ app.post('/api/orders', async (c) => {
     }
   }
   await db.insert(ordersTable).values({ ...body, id: orderId, customerId, items: JSON.stringify(body.items), deliveryAddress: JSON.stringify(body.deliveryAddress), createdAt: now, updatedAt: now });
+  // Deduct stock for each item
+  await deductStock(db, body.items as any[], orderId, now);
   const [day] = await db.select().from(deliveryDaysTable).where(eq(deliveryDaysTable.id, body.deliveryDayId)).limit(1);
   if (day) await db.update(deliveryDaysTable).set({ orderCount: day.orderCount + 1 }).where(eq(deliveryDaysTable.id, day.id));
   const [cust] = await db.select().from(customersTable).where(eq(customersTable.id, customerId)).limit(1);

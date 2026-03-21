@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/d1';
 import { desc, eq, and, gte, asc } from 'drizzle-orm';
 import { subscriptions, customers, orders, deliveryDays } from '@butcher/db';
+import { deductStock } from '../lib/stock';
 import type { Env, AuthUser } from '../types';
 
 const SQUARE_API = 'https://connect.squareup.com/v2';
@@ -39,6 +40,7 @@ async function createSubscriptionOrder(db: any, opts: {
   name: string;
   phone: string;
   address: { line1: string; line2?: string; suburb: string; state: string; postcode: string };
+  boxId: string;
   boxName: string;
   price: number; // cents
   subscriptionId: string;
@@ -56,7 +58,7 @@ async function createSubscriptionOrder(db: any, opts: {
   const subtotal = opts.price - gst;
 
   const item = {
-    productId: `sub-${opts.subscriptionId}`,
+    productId: opts.boxId,
     productName: opts.boxName,
     isMeatPack: true,
     quantity: 1,
@@ -85,6 +87,9 @@ async function createSubscriptionOrder(db: any, opts: {
     createdAt: opts.now,
     updatedAt: opts.now,
   });
+
+  // Deduct stock for the subscription box
+  await deductStock(db, [item], orderId, opts.now);
 
   // Update delivery day order count and customer stats
   await db.update(deliveryDays).set({ orderCount: nextDay.orderCount + 1 }).where(eq(deliveryDays.id, nextDay.id));
@@ -201,6 +206,7 @@ app.post('/checkout', async (c) => {
     name: body.name,
     phone: body.phone,
     address: { line1: body.address, suburb: body.suburb, state: 'QLD', postcode: body.postcode },
+    boxId: body.boxId,
     boxName: body.boxName,
     price,
     subscriptionId: subId,
@@ -291,6 +297,7 @@ app.post('/', async (c) => {
       name: body.name ?? body.email,
       phone: body.phone ?? '',
       address: { line1: body.address, suburb: body.suburb ?? '', state: 'QLD', postcode: body.postcode ?? '' },
+      boxId: body.boxId,
       boxName: body.boxName,
       price,
       subscriptionId: id,

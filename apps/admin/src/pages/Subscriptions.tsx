@@ -27,8 +27,10 @@ const STATUS_STYLE: Record<string, string> = {
 };
 
 const FREQUENCIES = ['weekly', 'fortnightly', 'monthly'];
-const EMPTY_FORM: { email: string; boxId: string; boxName: string; frequency: string; status: Subscription['status'] } =
-  { email: '', boxId: '', boxName: '', frequency: 'monthly', status: 'active' };
+const EMPTY_FORM: {
+  email: string; name: string; phone: string; address: string; suburb: string; postcode: string;
+  boxId: string; boxName: string; frequency: string; status: Subscription['status'];
+} = { email: '', name: '', phone: '', address: '', suburb: '', postcode: '', boxId: '', boxName: '', frequency: 'monthly', status: 'active' };
 
 function BoxPlanCard({ product, onSaved }: { product: Product & { imageUrl?: string }; onSaved: (id: string, url: string) => void }) {
   const [url, setUrl] = useState(product.imageUrl ?? '');
@@ -137,7 +139,9 @@ export default function SubscriptionsPage() {
     setSaving(true);
     try {
       const result = await api.subscriptions.create({
-        email: form.email, boxId: form.boxId, boxName: form.boxName,
+        email: form.email, name: form.name, phone: form.phone,
+        address: form.address, suburb: form.suburb, postcode: form.postcode,
+        boxId: form.boxId, boxName: form.boxName,
         frequency: form.frequency, status: form.status,
       }) as { id: string };
       setSubs((prev) => [{ id: result.id, ...form, createdAt: Date.now() }, ...prev]);
@@ -285,6 +289,45 @@ export default function SubscriptionsPage() {
                   onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
                   placeholder="customer@email.com"
                   className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Customer Name</label>
+                  <input value={form.name}
+                    onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                    placeholder="Full name"
+                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Phone</label>
+                  <input value={form.phone}
+                    onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+                    placeholder="04xx xxx xxx"
+                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Delivery Address</label>
+                <input value={form.address}
+                  onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
+                  placeholder="Street address"
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Suburb</label>
+                  <input value={form.suburb}
+                    onChange={(e) => setForm((f) => ({ ...f, suburb: e.target.value }))}
+                    placeholder="Suburb"
+                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Postcode</label>
+                  <input value={form.postcode}
+                    onChange={(e) => setForm((f) => ({ ...f, postcode: e.target.value }))}
+                    placeholder="4700"
+                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                </div>
               </div>
               <div>
                 <label className="text-xs text-gray-500 mb-1 block">Subscription Box *</label>
