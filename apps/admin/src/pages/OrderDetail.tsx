@@ -67,7 +67,19 @@ export default function OrderDetailPage() {
             <div><p className="text-gray-500">Customer</p><p className="font-medium">{order.customerName}</p></div>
             <div><p className="text-gray-500">Email</p><p className="font-medium">{order.customerEmail}</p></div>
             <div><p className="text-gray-500">Phone</p><p className="font-medium">{order.customerPhone ?? '—'}</p></div>
-            <div><p className="text-gray-500">Delivery Day</p><p className="font-medium">{order.deliveryDayId}</p></div>
+            <div>
+              <p className="text-gray-500">Payment</p>
+              <p className="font-medium">
+                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
+                  (order as any).paymentStatus === 'paid' ? 'bg-green-100 text-green-700'
+                    : (order as any).paymentStatus === 'refunded' ? 'bg-blue-100 text-blue-700'
+                    : (order as any).paymentStatus === 'failed' ? 'bg-red-100 text-red-700'
+                    : 'bg-yellow-100 text-yellow-700'
+                }`}>
+                  {((order as any).paymentStatus ?? 'pending').charAt(0).toUpperCase() + ((order as any).paymentStatus ?? 'pending').slice(1)}
+                </span>
+              </p>
+            </div>
           </div>
         </div>
 
