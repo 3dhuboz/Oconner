@@ -9,8 +9,8 @@ import {
 import { useState } from 'react';
 import Toaster from './Toaster';
 
-const STOREFRONT_URL = (import.meta as any).env?.VITE_STOREFRONT_URL ?? 'https://butcher-storefront.pages.dev';
-const DRIVER_URL = (import.meta as any).env?.VITE_DRIVER_URL ?? 'https://butcher-driver.pages.dev';
+const STOREFRONT_URL = (import.meta as any).env?.VITE_STOREFRONT_URL ?? 'https://oconnoragriculture.com.au';
+const DRIVER_URL = (import.meta as any).env?.VITE_DRIVER_URL ?? 'https://driver.oconnoragriculture.com.au';
 
 const NAV_SECTIONS = [
   {
