@@ -334,7 +334,7 @@ app.patch('/:id', async (c) => {
     email?: string;
   }>();
   const allowed: Record<string, unknown> = {};
-  for (const key of ['status', 'boxId', 'boxName', 'alternateBoxId', 'alternateBoxName', 'nextIsAlternate', 'frequency', 'customerName', 'customerPhone', 'email'] as const) {
+  for (const key of ['status', 'boxId', 'boxName', 'alternateBoxId', 'alternateBoxName', 'nextIsAlternate', 'frequency', 'customerName', 'customerPhone', 'email', 'createdAt', 'lastOrderGeneratedAt'] as const) {
     if ((body as any)[key] !== undefined) allowed[key] = (body as any)[key];
   }
   allowed.updatedAt = Date.now();

@@ -324,7 +324,13 @@ export default function SubscriptionsPage() {
         const fmt = (d: Date) => d.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
 
         const startEdit = () => {
-          setEditForm({ boxId: s.boxId, boxName: s.boxName, frequency: s.frequency, customerName: s.customerName ?? '', email: s.email, customerPhone: s.customerPhone ?? '' });
+          const toDateStr = (ms?: number | null) => ms ? new Date(ms).toISOString().split('T')[0] : '';
+          setEditForm({
+            boxId: s.boxId, boxName: s.boxName, frequency: s.frequency,
+            customerName: s.customerName ?? '', email: s.email, customerPhone: s.customerPhone ?? '',
+            createdAt: s.createdAt, lastOrderGeneratedAt: s.lastOrderGeneratedAt,
+            _startDate: toDateStr(s.createdAt), _nextDate: toDateStr(s.lastOrderGeneratedAt),
+          } as any);
           setEditingSub(true);
         };
 
@@ -332,7 +338,8 @@ export default function SubscriptionsPage() {
           setEditSaving(true);
           try {
             const selectedBox = boxProducts.find((p) => p.id === editForm.boxId);
-            const payload: Record<string, unknown> = { ...editForm };
+            const { _startDate, _nextDate, ...rest } = editForm as any;
+            const payload: Record<string, unknown> = { ...rest };
             if (selectedBox) payload.boxName = selectedBox.name;
             await api.patch(`/api/subscriptions/${s.id}`, payload);
             toast('Subscription updated');
@@ -387,6 +394,23 @@ export default function SubscriptionsPage() {
                       className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
                       {FREQUENCIES.map((f) => <option key={f} value={f}>{f.charAt(0).toUpperCase() + f.slice(1)}</option>)}
                     </select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs text-gray-500 font-medium mb-1 block">Start Date</label>
+                      <input type="date" value={(editForm as any)._startDate ?? ''} onChange={(e) => {
+                        const d = e.target.value ? new Date(e.target.value + 'T00:00:00').getTime() : undefined;
+                        setEditForm({ ...editForm, createdAt: d, _startDate: e.target.value } as any);
+                      }} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500 font-medium mb-1 block">Next Order Date</label>
+                      <input type="date" value={(editForm as any)._nextDate ?? ''} onChange={(e) => {
+                        const d = e.target.value ? new Date(e.target.value + 'T00:00:00').getTime() : undefined;
+                        setEditForm({ ...editForm, lastOrderGeneratedAt: d, _nextDate: e.target.value } as any);
+                      }} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                      <p className="text-xs text-gray-400 mt-1">Set when the next auto-order generates</p>
+                    </div>
                   </div>
                   <div className="flex gap-3 pt-2">
                     <button onClick={() => setEditingSub(false)} className="flex-1 border py-2 rounded-lg text-sm font-medium hover:bg-gray-50">Cancel</button>
