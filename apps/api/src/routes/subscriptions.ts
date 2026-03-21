@@ -230,6 +230,7 @@ app.get('/', async (c) => {
     frequency: subscriptions.frequency,
     status: subscriptions.status,
     createdAt: subscriptions.createdAt,
+    lastOrderGeneratedAt: subscriptions.lastOrderGeneratedAt,
     customerName: customers.name,
     customerPhone: customers.phone,
   })
@@ -367,14 +368,93 @@ app.post('/:id/generate-order', async (c) => {
 
   if (!orderId) return c.json({ error: 'No upcoming delivery day available' }, 400);
 
-  // Flip to alternate box for next time if configured
-  if (sub.alternateBoxId) {
-    await db.update(subscriptions)
-      .set({ nextIsAlternate: !sub.nextIsAlternate, updatedAt: now })
-      .where(eq(subscriptions.id, sub.id));
-  }
+  // Update tracking and flip alternate box for next time
+  const updateData: Record<string, unknown> = { lastOrderGeneratedAt: now, updatedAt: now };
+  if (sub.alternateBoxId) updateData.nextIsAlternate = !sub.nextIsAlternate;
+  await db.update(subscriptions).set(updateData).where(eq(subscriptions.id, sub.id));
 
   return c.json({ orderId });
+});
+
+// ── Auto-generate orders for all active subscriptions that are due ──
+// Called automatically when generating stops for a delivery day, or manually
+app.post('/auto-generate', async (c) => {
+  const db = drizzle(c.env.DB);
+  const now = Date.now();
+
+  // Frequency intervals in milliseconds
+  const FREQ_MS: Record<string, number> = {
+    weekly: 7 * 24 * 60 * 60 * 1000,
+    fortnightly: 14 * 24 * 60 * 60 * 1000,
+    monthly: 30 * 24 * 60 * 60 * 1000,
+  };
+
+  // Get all active subscriptions
+  const activeSubs = await db.select().from(subscriptions)
+    .where(eq(subscriptions.status, 'active'));
+
+  let created = 0;
+  const errors: string[] = [];
+
+  for (const sub of activeSubs) {
+    // Check if this subscription is due for a new order
+    const interval = FREQ_MS[sub.frequency] ?? FREQ_MS.fortnightly;
+    const lastGenerated = sub.lastOrderGeneratedAt ?? sub.createdAt;
+
+    // Skip if not enough time has elapsed since last order
+    if (now - lastGenerated < interval * 0.8) continue; // 80% threshold to avoid edge-case misses
+
+    // Find customer
+    let customerId = sub.customerId;
+    if (!customerId) {
+      const [cust] = await db.select().from(customers).where(eq(customers.email, sub.email)).limit(1);
+      if (!cust) { errors.push(`${sub.email}: no customer record`); continue; }
+      customerId = cust.id;
+    }
+
+    const [customer] = await db.select().from(customers).where(eq(customers.id, customerId)).limit(1);
+    if (!customer) { errors.push(`${sub.email}: customer not found`); continue; }
+
+    // Get address
+    let address = { line1: '', suburb: '', state: 'QLD', postcode: '' };
+    try {
+      const addresses = JSON.parse(customer.addresses ?? '[]') as Array<{ line1: string; suburb: string; state: string; postcode: string }>;
+      if (addresses.length > 0) address = addresses[0];
+    } catch {}
+
+    if (!address.line1) { errors.push(`${sub.email}: no delivery address`); continue; }
+
+    const price = BOX_PRICES[sub.boxId] ?? BOX_PRICES[sub.alternateBoxId ?? ''];
+    if (!price) { errors.push(`${sub.email}: unknown box type ${sub.boxId}`); continue; }
+
+    // Use the correct box (primary or alternate)
+    const boxId = sub.nextIsAlternate && sub.alternateBoxId ? sub.alternateBoxId : sub.boxId;
+    const boxName = sub.nextIsAlternate && sub.alternateBoxName ? sub.alternateBoxName : sub.boxName;
+
+    const orderId = await createSubscriptionOrder(db, {
+      customerId,
+      email: sub.email,
+      name: customer.name ?? sub.email,
+      phone: customer.phone ?? '',
+      address,
+      boxId,
+      boxName,
+      price,
+      subscriptionId: sub.id,
+      now,
+    });
+
+    if (!orderId) { errors.push(`${sub.email}: no upcoming delivery day`); continue; }
+
+    // Update subscription tracking
+    const updateData: Record<string, unknown> = { lastOrderGeneratedAt: now, updatedAt: now };
+    if (sub.alternateBoxId) updateData.nextIsAlternate = !sub.nextIsAlternate;
+    await db.update(subscriptions).set(updateData).where(eq(subscriptions.id, sub.id));
+
+    created++;
+  }
+
+  return c.json({ created, skipped: activeSubs.length - created - errors.length, errors });
 });
 
 // Flip next delivery box (alternate ↔ primary)

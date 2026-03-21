@@ -218,6 +218,7 @@ export const subscriptions = sqliteTable('subscriptions', {
   nextIsAlternate: integer('next_is_alternate', { mode: 'boolean' }).notNull().default(false),
   frequency: text('frequency').notNull(), // 'weekly' | 'fortnightly' | 'monthly'
   status: text('status').notNull().default('active'), // 'active' | 'paused' | 'cancelled'
+  lastOrderGeneratedAt: integer('last_order_generated_at'), // unix ms — when the last order was auto-created
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull(),
 });

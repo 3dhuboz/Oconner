@@ -2,7 +2,8 @@ import { Hono } from 'hono';
 import { notifyCustomer } from './push';
 import { drizzle } from 'drizzle-orm/d1';
 import { eq, asc, gte, and } from 'drizzle-orm';
-import { deliveryDays, orders, stops, notifications } from '@butcher/db';
+import { deliveryDays, orders, stops, notifications, subscriptions, customers } from '@butcher/db';
+import { deductStock } from '../lib/stock';
 import { sendEmail, buildOrderEmail, getSubject } from '../lib/email';
 import type { Env, AuthUser } from '../types';
 
@@ -86,6 +87,91 @@ app.post('/:id/generate-stops', async (c) => {
   const db = drizzle(c.env.DB);
   const dayId = c.req.param('id');
 
+  // ── Auto-generate subscription orders for this delivery day ──
+  const now = Date.now();
+  const FREQ_MS: Record<string, number> = {
+    weekly: 7 * 24 * 60 * 60 * 1000,
+    fortnightly: 14 * 24 * 60 * 60 * 1000,
+    monthly: 30 * 24 * 60 * 60 * 1000,
+  };
+  const BOX_PRICES: Record<string, number> = {
+    bbq: 29000, family: 29000, double: 55000, value: 22000,
+  };
+
+  const activeSubs = await db.select().from(subscriptions)
+    .where(eq(subscriptions.status, 'active'));
+
+  for (const sub of activeSubs) {
+    const interval = FREQ_MS[sub.frequency] ?? FREQ_MS.fortnightly;
+    const lastGenerated = sub.lastOrderGeneratedAt ?? sub.createdAt;
+    if (now - lastGenerated < interval * 0.8) continue;
+
+    let customerId = sub.customerId;
+    if (!customerId) {
+      const [cust] = await db.select().from(customers).where(eq(customers.email, sub.email)).limit(1);
+      if (!cust) continue;
+      customerId = cust.id;
+    }
+    const [customer] = await db.select().from(customers).where(eq(customers.id, customerId)).limit(1);
+    if (!customer) continue;
+
+    let address = { line1: '', line2: '', suburb: '', state: 'QLD', postcode: '' };
+    try {
+      const addresses = JSON.parse(customer.addresses ?? '[]') as Array<typeof address>;
+      if (addresses.length > 0) address = addresses[0];
+    } catch {}
+    if (!address.line1) continue;
+
+    const price = BOX_PRICES[sub.boxId];
+    if (!price) continue;
+
+    const boxId = sub.nextIsAlternate && sub.alternateBoxId ? sub.alternateBoxId : sub.boxId;
+    const boxName = sub.nextIsAlternate && sub.alternateBoxName ? sub.alternateBoxName : sub.boxName;
+
+    const orderId = crypto.randomUUID();
+    const gst = Math.round(price / 11);
+    const subtotal = price - gst;
+    const item = { productId: boxId, productName: boxName, isMeatPack: true, quantity: 1, lineTotal: price };
+
+    await db.insert(orders).values({
+      id: orderId,
+      customerId,
+      customerEmail: sub.email,
+      customerName: customer.name ?? sub.email,
+      customerPhone: customer.phone ?? '',
+      items: JSON.stringify([item]),
+      subtotal, deliveryFee: 0, gst, total: price,
+      status: 'confirmed',
+      deliveryDayId: dayId,
+      deliveryAddress: JSON.stringify(address),
+      postcodeZone: '',
+      paymentIntentId: '',
+      paymentProvider: 'square',
+      paymentStatus: 'paid',
+      notes: `Subscription: ${boxName} (${sub.frequency})`,
+      createdAt: now, updatedAt: now,
+    });
+
+    await deductStock(db, [item], orderId, now);
+
+    // Update delivery day order count
+    const [day] = await db.select().from(deliveryDays).where(eq(deliveryDays.id, dayId)).limit(1);
+    if (day) await db.update(deliveryDays).set({ orderCount: day.orderCount + 1 }).where(eq(deliveryDays.id, dayId));
+
+    // Update customer stats
+    await db.update(customers).set({
+      orderCount: customer.orderCount + 1,
+      totalSpent: customer.totalSpent + price,
+      updatedAt: now,
+    }).where(eq(customers.id, customerId));
+
+    // Mark subscription as generated
+    const updateData: Record<string, unknown> = { lastOrderGeneratedAt: now, updatedAt: now };
+    if (sub.alternateBoxId) updateData.nextIsAlternate = !sub.nextIsAlternate;
+    await db.update(subscriptions).set(updateData).where(eq(subscriptions.id, sub.id));
+  }
+
+  // Now generate stops from all orders (including just-created subscription orders)
   const dayOrders = await db.select().from(orders).where(eq(orders.deliveryDayId, dayId));
   const existingStops = await db.select({ orderId: stops.orderId }).from(stops).where(eq(stops.deliveryDayId, dayId));
   const existingOrderIds = new Set(existingStops.map((s) => s.orderId));
