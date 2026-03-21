@@ -117,20 +117,38 @@ app.post('/:id/generate-stops', async (c) => {
       const addresses = JSON.parse(customer.addresses ?? '[]') as Array<typeof address>;
       if (addresses.length > 0) address = addresses[0];
     } catch {}
+    // Fallback: get address from customer's most recent order
+    if (!address.line1) {
+      const { desc: descOrd } = await import('drizzle-orm');
+      const [lastOrder] = await db.select().from(orders)
+        .where(eq(orders.customerId, customerId))
+        .orderBy(descOrd(orders.createdAt)).limit(1);
+      if (lastOrder) {
+        try { address = JSON.parse(lastOrder.deliveryAddress) as typeof address; } catch {}
+      }
+    }
     if (!address.line1) continue;
 
     const boxId = sub.nextIsAlternate && sub.alternateBoxId ? sub.alternateBoxId : sub.boxId;
     const boxName = sub.nextIsAlternate && sub.alternateBoxName ? sub.alternateBoxName : sub.boxName;
 
-    // Look up actual product price from DB (fixedPrice is in cents)
-    const [boxProduct] = await db.select().from(products).where(eq(products.id, boxId)).limit(1);
+    // Look up product price — try exact ID, then prod-{name}-box pattern, then name match
+    const { like } = await import('drizzle-orm');
+    let [boxProduct] = await db.select().from(products).where(eq(products.id, boxId)).limit(1);
+    if (!boxProduct) {
+      [boxProduct] = await db.select().from(products).where(eq(products.id, `prod-${boxId}-box`)).limit(1);
+    }
+    if (!boxProduct) {
+      [boxProduct] = await db.select().from(products).where(like(products.name, `%${boxName.replace(' Box', '')}%Box%`)).limit(1);
+    }
     const price = boxProduct?.fixedPrice ?? 0;
     if (!price) continue;
 
+    const resolvedBoxId = boxProduct.id!;
     const orderId = crypto.randomUUID();
     const gst = Math.round(price / 11);
     const subtotal = price - gst;
-    const item = { productId: boxId, productName: boxName, isMeatPack: true, quantity: 1, lineTotal: price };
+    const item = { productId: resolvedBoxId, productName: boxName, isMeatPack: true, quantity: 1, lineTotal: price };
 
     await db.insert(orders).values({
       id: orderId,

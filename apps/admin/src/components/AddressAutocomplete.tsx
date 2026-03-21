@@ -61,19 +61,21 @@ export default function AddressAutocomplete({ value, onChange }: Props) {
     debounceRef.current = setTimeout(async () => {
       try {
         const params = new URLSearchParams({
-          q,
+          q: `${q}, Queensland, Australia`,
           limit: '5',
           lang: 'en',
-          lat: '-23.8',
-          lon: '151.2',
-          location_bias_scale: '2',
+          lat: '-23.3791',
+          lon: '150.5100',
+          location_bias_scale: '10',
+          bbox: '137.0,-29.5,154.0,-10.0',
         });
         const res = await fetch(`https://photon.komoot.io/api/?${params}`);
         const data = await res.json() as { features: PhotonFeature[] };
 
-        // Filter to Australian results only
+        // Filter to Queensland results only
         const auResults = data.features.filter(
           (f) => f.properties.country === 'Australia' && f.properties.street
+            && (f.properties.state === 'Queensland' || f.properties.postcode?.startsWith('4'))
         );
         setSuggestions(auResults);
         setShowDropdown(auResults.length > 0);
@@ -126,7 +128,9 @@ export default function AddressAutocomplete({ value, onChange }: Props) {
           onFocus={() => { if (suggestions.length > 0) setShowDropdown(true); }}
           placeholder="Start typing address…"
           className={cls}
-          autoComplete="off"
+          autoComplete="one-time-code"
+          data-1p-ignore
+          data-lpignore="true"
         />
         <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded">
           Auto
@@ -163,6 +167,7 @@ export default function AddressAutocomplete({ value, onChange }: Props) {
           onChange={(e) => onChange({ ...value, suburb: e.target.value })}
           placeholder="Suburb *"
           className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
+          autoComplete="one-time-code"
         />
         <select
           value={value.state}
