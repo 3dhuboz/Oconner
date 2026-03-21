@@ -487,7 +487,7 @@ export default function OrdersPage() {
                           <div>
                             <p className="text-sm font-medium">{item.productName}</p>
                             <p className="text-xs text-gray-400">
-                              {item.weightKg ? `${item.weightKg}kg @ $${item.pricePerKg}/kg` : `${item.quantity}x @ $${item.fixedPrice} ea`}
+                              {item.weightKg ? `${item.weightKg}kg${item.pricePerKg ? ` @ $${item.pricePerKg}/kg` : ''}` : `${item.quantity ?? 1}x${item.fixedPrice ? ` @ $${item.fixedPrice} ea` : ''}`}
                             </p>
                           </div>
                           <div className="flex items-center gap-3">
@@ -629,7 +629,7 @@ export default function OrdersPage() {
                           <div>
                             <p className="text-sm font-medium">{item.productName}</p>
                             <p className="text-xs text-gray-400">
-                              {item.weightKg ? `${item.weightKg}kg @ $${item.pricePerKg}/kg` : `${item.quantity}x @ $${item.fixedPrice} ea`}
+                              {item.weightKg ? `${item.weightKg}kg${item.pricePerKg ? ` @ $${item.pricePerKg}/kg` : ''}` : `${item.quantity ?? 1}x${item.fixedPrice ? ` @ $${item.fixedPrice} ea` : ''}`}
                             </p>
                           </div>
                           <div className="flex items-center gap-3">
