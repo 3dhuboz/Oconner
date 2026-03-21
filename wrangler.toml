@@ -8,13 +8,13 @@ ENVIRONMENT = "production"
 # D1 Database
 [[d1_databases]]
 binding = "DB"
-database_name = "wirez-r-us"
-database_id = "placeholder-create-with-wrangler-d1-create"
+database_name = "wirez-r-us-db"
+database_id = "4e54dda5-f1e0-417e-b0ce-145fddadc15c"
 
 # R2 Bucket for photos/files
 [[r2_buckets]]
 binding = "STORAGE"
-bucket_name = "wirez-r-us-files"
+bucket_name = "wirez-r-us-uploads"
 
 # Cron triggers (replaces Vercel cron)
 [triggers]
