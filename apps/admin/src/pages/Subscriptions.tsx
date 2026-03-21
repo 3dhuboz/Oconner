@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { api } from '@butcher/shared';
 import type { Product } from '@butcher/shared';
-import { RefreshCcw, Check, X, Phone, Mail, Plus, Upload, Image, Save, ArrowLeftRight, PackageCheck, ShoppingCart, Calendar, Package, User, Clock, Pencil } from 'lucide-react';
+import { RefreshCcw, Check, X, Phone, Mail, Plus, Upload, Image, Save, ArrowLeftRight, PackageCheck, ShoppingCart, Calendar, Package, User, Clock, Pencil, Trash2, MapPin } from 'lucide-react';
 import { toast } from '../lib/toast';
 
 interface Subscription {
@@ -14,6 +14,7 @@ interface Subscription {
   frequency: string;
   customerName?: string | null;
   customerPhone?: string | null;
+  customerId?: string | null;
   email: string;
   notes?: string;
   status: 'pending' | 'active' | 'cancelled';
@@ -130,6 +131,8 @@ export default function SubscriptionsPage() {
   const [editingSub, setEditingSub] = useState(false);
   const [editForm, setEditForm] = useState<Partial<Subscription>>({});
   const [editSaving, setEditSaving] = useState(false);
+  const [customerAddress, setCustomerAddress] = useState('');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const generateOrder = async (sub: Subscription) => {
     setGeneratingOrder(sub.id);
@@ -218,7 +221,20 @@ export default function SubscriptionsPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-3 mb-1">
                       <div>
-                        <button onClick={() => setViewingSub(s)} className="font-semibold text-left hover:text-brand transition-colors">
+                        <button onClick={async () => {
+                          setViewingSub(s);
+                          setCustomerAddress('');
+                          if (s.customerId) {
+                            try {
+                              const cust = await api.get(`/api/customers/${s.customerId}`) as any;
+                              const addrs = JSON.parse(cust?.addresses ?? '[]');
+                              if (addrs.length > 0) {
+                                const a = addrs[0];
+                                setCustomerAddress(`${a.line1}${a.line2 ? ', ' + a.line2 : ''}, ${a.suburb} ${a.state} ${a.postcode}`);
+                              }
+                            } catch {}
+                          }
+                        }} className="font-semibold text-left hover:text-brand transition-colors">
                           {s.customerName || s.email}
                         </button>
                         {s.alternateBoxId ? (
@@ -453,6 +469,13 @@ export default function SubscriptionsPage() {
                       )}
                     </div>
 
+                    {customerAddress && (
+                      <div className="bg-gray-50 rounded-lg p-3">
+                        <p className="text-xs text-gray-500 mb-1 flex items-center gap-1"><MapPin className="h-3 w-3" /> Delivery Address</p>
+                        <p className="font-medium">{customerAddress}</p>
+                      </div>
+                    )}
+
                     <div className="bg-gray-50 rounded-lg p-3">
                       <p className="text-xs text-gray-500 mb-1 flex items-center gap-1"><Package className="h-3 w-3" /> Subscription Box</p>
                       <p className="font-medium">{s.boxName}</p>
@@ -490,6 +513,20 @@ export default function SubscriptionsPage() {
                   </div>
 
                   <div className="flex gap-3 mt-6">
+                    <button onClick={async () => {
+                      if (!confirm(`Delete subscription for ${s.customerName || s.email}? This cannot be undone.`)) return;
+                      setDeletingId(s.id);
+                      try {
+                        await api.delete(`/api/subscriptions/${s.id}`);
+                        setSubs((prev) => prev.filter((x) => x.id !== s.id));
+                        setViewingSub(null);
+                        toast('Subscription deleted');
+                      } catch { toast('Failed to delete', 'error'); }
+                      finally { setDeletingId(null); }
+                    }} disabled={deletingId === s.id}
+                      className="border border-red-200 text-red-600 py-2 px-3 rounded-lg text-sm font-medium hover:bg-red-50 flex items-center gap-1 disabled:opacity-50">
+                      <Trash2 className="h-4 w-4" /> {deletingId === s.id ? '…' : 'Delete'}
+                    </button>
                     <button onClick={() => { setViewingSub(null); setEditingSub(false); }}
                       className="flex-1 border py-2 rounded-lg text-sm font-medium hover:bg-gray-50">Close</button>
                     <button onClick={startEdit}

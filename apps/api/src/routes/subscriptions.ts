@@ -342,6 +342,12 @@ app.patch('/:id', async (c) => {
   return c.json({ ok: true });
 });
 
+app.delete('/:id', async (c) => {
+  const db = drizzle(c.env.DB);
+  await db.delete(subscriptions).where(eq(subscriptions.id, c.req.param('id')));
+  return c.json({ ok: true });
+});
+
 // Generate an order from an active subscription for the next delivery day
 app.post('/:id/generate-order', async (c) => {
   const db = drizzle(c.env.DB);
