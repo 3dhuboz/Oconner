@@ -412,6 +412,9 @@ export default function OrdersPage() {
                     <button onClick={() => openEdit(order)} className="text-gray-400 hover:text-brand transition-colors" title="Edit order">
                       <Pencil className="h-3.5 w-3.5" />
                     </button>
+                    <button onClick={() => setDeleteTarget(order)} className="text-gray-400 hover:text-red-500 transition-colors" title="Delete order">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
                   </div>
                 </td>
               </tr>
@@ -712,6 +715,30 @@ export default function OrdersPage() {
                   {creating ? 'Creating…' : `Create Order — ${formatCurrency(total)}`}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete Confirmation Modal ── */}
+      {deleteTarget && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setDeleteTarget(null)}>
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-lg text-red-600">Delete Order</h2>
+              <button onClick={() => setDeleteTarget(null)}><X className="h-5 w-5 text-gray-400" /></button>
+            </div>
+            <p className="text-sm text-gray-600 mb-2">
+              Are you sure you want to delete order <span className="font-semibold">#{(deleteTarget.id ?? '').slice(-8).toUpperCase()}</span>?
+            </p>
+            <p className="text-sm text-gray-500 mb-1">{deleteTarget.customerName} — {formatCurrency(deleteTarget.total)}</p>
+            <p className="text-xs text-red-500 mb-5">This action cannot be undone.</p>
+            <div className="flex gap-3">
+              <button onClick={() => setDeleteTarget(null)} className="flex-1 border py-2 rounded-lg text-sm font-medium hover:bg-gray-50">Cancel</button>
+              <button onClick={handleDelete} disabled={deleting}
+                className="flex-1 bg-red-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50">
+                {deleting ? 'Deleting…' : 'Delete Order'}
+              </button>
             </div>
           </div>
         </div>
