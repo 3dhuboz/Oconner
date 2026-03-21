@@ -53,7 +53,7 @@ function LiveDriverMap({ deliveryAddress }: { deliveryAddress: { line1: string; 
   // Poll driver location
   const fetchDriver = useCallback(async () => {
     try {
-      const sessions = await api.drivers.active() as DriverLocation[];
+      const sessions = await api.drivers.activeSessions() as DriverLocation[];
       if (sessions.length > 0) setDriver(sessions[0]);
     } catch {}
   }, []);
