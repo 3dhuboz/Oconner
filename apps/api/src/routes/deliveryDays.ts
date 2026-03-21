@@ -144,8 +144,9 @@ app.post('/:id/send-reminders', async (c) => {
   const [day] = await db.select().from(deliveryDays).where(eq(deliveryDays.id, dayId)).limit(1);
   if (!day) return c.json({ error: 'Not found' }, 404);
 
-  const pendingOrders = await db.select().from(orders)
-    .where(and(eq(orders.deliveryDayId, dayId), eq(orders.status, 'confirmed')));
+  // Send to all active orders (not cancelled/refunded/delivered)
+  const allOrders = await db.select().from(orders).where(eq(orders.deliveryDayId, dayId));
+  const pendingOrders = allOrders.filter((o) => !['cancelled', 'refunded', 'delivered'].includes(o.status));
 
   const dateLabel = new Date(day.date).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' });
   let sent = 0;
