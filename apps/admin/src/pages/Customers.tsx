@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { api, formatCurrency } from '@butcher/shared';
-import type { Customer } from '@butcher/shared';
-import { Search, Plus, X, Save, UserX } from 'lucide-react';
+import type { Customer, Address } from '@butcher/shared';
+import { Search, Plus, X, Save, UserX, MapPin } from 'lucide-react';
 import { toast } from '../lib/toast';
 
-const BLANK: Partial<Customer> = { name: '', email: '', phone: '', notes: '', blacklisted: false };
+const BLANK_ADDR: Address = { line1: '', suburb: '', state: 'QLD', postcode: '', country: 'AU' };
+const BLANK: Partial<Customer> & { address: Address } = { name: '', email: '', phone: '', notes: '', blacklisted: false, address: { ...BLANK_ADDR } };
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
@@ -26,7 +27,7 @@ export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState<Partial<Customer> | null>(null);
+  const [editing, setEditing] = useState<(Partial<Customer> & { address: Address }) | null>(null);
   const [isNew, setIsNew] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -46,20 +47,21 @@ export default function CustomersPage() {
     c.email?.toLowerCase().includes(search.toLowerCase()),
   );
 
-  const openNew = () => { setEditing({ ...BLANK }); setIsNew(true); setError(''); };
-  const openEdit = (c: Customer) => { setEditing({ ...c }); setIsNew(false); setError(''); };
+  const openNew = () => { setEditing({ ...BLANK, address: { ...BLANK_ADDR } }); setIsNew(true); setError(''); };
+  const openEdit = (c: Customer) => { setEditing({ ...c, address: c.addresses?.[0] ?? { ...BLANK_ADDR } }); setIsNew(false); setError(''); };
   const close = () => { setEditing(null); setIsNew(false); setError(''); };
 
   const handleSave = async () => {
     if (!editing?.name || !editing?.email) { setError('Name and email are required.'); return; }
     setSaving(true); setError('');
     try {
+      const addresses = editing.address?.line1 ? [editing.address] : [];
       if (isNew) {
         const id = crypto.randomUUID();
-        await api.customers.create({ ...editing, id, createdAt: Date.now(), updatedAt: Date.now() });
+        await api.customers.create({ ...editing, id, addresses, createdAt: Date.now(), updatedAt: Date.now() });
         toast('Customer created');
       } else {
-        await api.customers.update(editing.id!, { name: editing.name, email: editing.email, phone: editing.phone, notes: editing.notes, blacklisted: editing.blacklisted, blacklistReason: editing.blacklistReason });
+        await api.customers.update(editing.id!, { name: editing.name, email: editing.email, phone: editing.phone, notes: editing.notes, blacklisted: editing.blacklisted, blacklistReason: editing.blacklistReason, addresses });
         toast('Customer saved');
       }
       load(); close();
@@ -96,6 +98,7 @@ export default function CustomersPage() {
             <tr>
               <th className="px-4 py-3 text-left">Customer</th>
               <th className="px-4 py-3 text-left">Phone</th>
+              <th className="px-4 py-3 text-left">Address</th>
               <th className="px-4 py-3 text-right">Orders</th>
               <th className="px-4 py-3 text-right">Spent</th>
               <th className="px-4 py-3 text-right">Status</th>
@@ -103,9 +106,9 @@ export default function CustomersPage() {
           </thead>
           <tbody className="divide-y">
             {loading ? (
-              <tr><td colSpan={5} className="text-center py-10 text-gray-400">Loading…</td></tr>
+              <tr><td colSpan={6} className="text-center py-10 text-gray-400">Loading…</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={5} className="text-center py-10 text-gray-400">No customers found</td></tr>
+              <tr><td colSpan={6} className="text-center py-10 text-gray-400">No customers found</td></tr>
             ) : filtered.map((c) => (
               <tr key={c.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => openEdit(c)}>
                 <td className="px-4 py-3">
@@ -113,6 +116,9 @@ export default function CustomersPage() {
                   <p className="text-xs text-gray-400">{c.email}</p>
                 </td>
                 <td className="px-4 py-3 text-gray-600">{c.phone || '—'}</td>
+                <td className="px-4 py-3 text-gray-500 text-xs max-w-[200px] truncate">
+                  {c.addresses?.[0] ? `${c.addresses[0].line1}, ${c.addresses[0].suburb}` : '—'}
+                </td>
                 <td className="px-4 py-3 text-right">{c.orderCount ?? 0}</td>
                 <td className="px-4 py-3 text-right font-medium">{formatCurrency(c.totalSpent ?? 0)}</td>
                 <td className="px-4 py-3 text-right">
@@ -153,6 +159,17 @@ export default function CustomersPage() {
                 <input className={inp} value={editing.blacklistReason ?? ''} onChange={(e) => set('blacklistReason', e.target.value)} />
               </div>
             )}
+            <div className="col-span-2 border-t pt-3">
+              <label className="block text-xs font-medium text-gray-600 mb-2 flex items-center gap-1"><MapPin className="h-3 w-3" /> Delivery Address</label>
+              <div className="space-y-2">
+                <input className={inp} value={editing.address?.line1 ?? ''} onChange={(e) => setEditing((prev) => prev ? { ...prev, address: { ...prev.address, line1: e.target.value } } : prev)} placeholder="Street address" />
+                <div className="grid grid-cols-3 gap-2">
+                  <input className={`${inp} col-span-1`} value={editing.address?.suburb ?? ''} onChange={(e) => setEditing((prev) => prev ? { ...prev, address: { ...prev.address, suburb: e.target.value } } : prev)} placeholder="Suburb" />
+                  <input className={inp} value={editing.address?.state ?? 'QLD'} onChange={(e) => setEditing((prev) => prev ? { ...prev, address: { ...prev.address, state: e.target.value } } : prev)} placeholder="State" />
+                  <input className={inp} value={editing.address?.postcode ?? ''} onChange={(e) => setEditing((prev) => prev ? { ...prev, address: { ...prev.address, postcode: e.target.value } } : prev)} placeholder="Postcode" />
+                </div>
+              </div>
+            </div>
             <div className="col-span-2">
               <label className="block text-xs font-medium text-gray-600 mb-1">Internal Notes</label>
               <textarea className={`${inp} resize-none`} rows={3} value={editing.notes ?? ''} onChange={(e) => set('notes', e.target.value)} />

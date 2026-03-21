@@ -148,11 +148,78 @@ export default function AccountPage() {
 
   const activeSubscription = subscriptions.find((s) => s.status === 'active' || s.status === 'paused');
   const defaultAddress = customer?.addresses?.[0];
+  const isNewUser = !customer || (!customer.phone && !defaultAddress);
+
+  const [setupName, setSetupName] = useState('');
+  const [setupPhone, setSetupPhone] = useState('');
+  const [setupAddr, setSetupAddr] = useState<Address>({ line1: '', suburb: '', state: 'QLD', postcode: '' });
+  const [setupSaving, setSetupSaving] = useState(false);
+
+  const handleSetup = async () => {
+    if (!setupAddr.line1 || !setupAddr.suburb || !setupAddr.postcode) {
+      toast('Please fill in your delivery address', 'error');
+      return;
+    }
+    setSetupSaving(true);
+    try {
+      await api.customers.updateMe({
+        name: setupName || user.fullName || user.primaryEmailAddress?.emailAddress || '',
+        phone: setupPhone,
+        addresses: [setupAddr],
+      });
+      setCustomer((prev) => prev
+        ? { ...prev, name: setupName || prev.name, phone: setupPhone, addresses: [setupAddr] }
+        : { id: '', name: setupName, email: user.primaryEmailAddress?.emailAddress ?? '', phone: setupPhone, addresses: [setupAddr], orderCount: 0, totalSpent: 0, createdAt: Date.now() }
+      );
+      setPhoneVal(setupPhone);
+      setAddrVal(setupAddr);
+      toast('Welcome! Your account is set up.');
+    } catch {
+      toast('Failed to save. Please try again.', 'error');
+    } finally { setSetupSaving(false); }
+  };
 
   return (
     <>
       <Navbar />
       <main className="flex-1 max-w-3xl mx-auto px-4 py-8 space-y-6">
+
+        {/* ── New user setup prompt ── */}
+        {isNewUser && (
+          <div className="bg-brand/5 border-2 border-brand/20 rounded-2xl p-6">
+            <h2 className="text-lg font-bold text-brand mb-1">Welcome to O'Connor Agriculture!</h2>
+            <p className="text-sm text-gray-600 mb-5">Complete your profile so we know where to deliver your orders.</p>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Your Name</label>
+                  <input value={setupName || user.fullName || ''} onChange={(e) => setSetupName(e.target.value)}
+                    placeholder="Full name" className="w-full text-sm border rounded-lg px-3 py-2 focus:outline-none focus:border-brand" />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Phone Number</label>
+                  <input value={setupPhone} onChange={(e) => setSetupPhone(e.target.value)}
+                    placeholder="04xx xxx xxx" className="w-full text-sm border rounded-lg px-3 py-2 focus:outline-none focus:border-brand" />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Delivery Address *</label>
+                <input value={setupAddr.line1} onChange={(e) => setSetupAddr((a) => ({ ...a, line1: e.target.value }))}
+                  placeholder="Street address" className="w-full text-sm border rounded-lg px-3 py-2 focus:outline-none focus:border-brand" />
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <input value={setupAddr.suburb} onChange={(e) => setSetupAddr((a) => ({ ...a, suburb: e.target.value }))}
+                  placeholder="Suburb" className="col-span-2 text-sm border rounded-lg px-3 py-2 focus:outline-none focus:border-brand" />
+                <input value={setupAddr.postcode} onChange={(e) => setSetupAddr((a) => ({ ...a, postcode: e.target.value }))}
+                  placeholder="Postcode" className="text-sm border rounded-lg px-3 py-2 focus:outline-none focus:border-brand" />
+              </div>
+              <button onClick={handleSetup} disabled={setupSaving}
+                className="bg-brand text-white text-sm font-medium px-6 py-2.5 rounded-lg hover:bg-[#6A9E48] transition-colors disabled:opacity-50">
+                {setupSaving ? 'Saving…' : 'Save & Continue'}
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* ── Profile card ── */}
         <div className="bg-white rounded-2xl border p-6 flex items-start gap-5">
