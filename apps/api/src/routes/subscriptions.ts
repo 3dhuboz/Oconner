@@ -315,6 +315,68 @@ app.patch('/:id', async (c) => {
   return c.json({ ok: true });
 });
 
+// Generate an order from an active subscription for the next delivery day
+app.post('/:id/generate-order', async (c) => {
+  const db = drizzle(c.env.DB);
+  const [sub] = await db.select().from(subscriptions).where(eq(subscriptions.id, c.req.param('id'))).limit(1);
+  if (!sub) return c.json({ error: 'Subscription not found' }, 404);
+  if (sub.status !== 'active') return c.json({ error: 'Subscription is not active' }, 400);
+
+  // Find the customer
+  let customerId = sub.customerId;
+  if (!customerId) {
+    const [cust] = await db.select().from(customers).where(eq(customers.email, sub.email)).limit(1);
+    if (!cust) return c.json({ error: 'Customer not found — create the customer first' }, 400);
+    customerId = cust.id;
+  }
+
+  const [customer] = await db.select().from(customers).where(eq(customers.id, customerId)).limit(1);
+  if (!customer) return c.json({ error: 'Customer not found' }, 400);
+
+  const price = BOX_PRICES[sub.boxId];
+  if (!price) return c.json({ error: 'Unknown box type' }, 400);
+
+  // Use the correct box (primary or alternate)
+  const boxId = sub.nextIsAlternate && sub.alternateBoxId ? sub.alternateBoxId : sub.boxId;
+  const boxName = sub.nextIsAlternate && sub.alternateBoxName ? sub.alternateBoxName : sub.boxName;
+
+  // Get customer address
+  let address = { line1: '', suburb: '', state: 'QLD', postcode: '' };
+  try {
+    const addresses = JSON.parse(customer.addresses ?? '[]') as Array<{ line1: string; suburb: string; state: string; postcode: string }>;
+    if (addresses.length > 0) address = addresses[0];
+  } catch {}
+
+  if (!address.line1) {
+    return c.json({ error: 'Customer has no delivery address — add one in Customers first' }, 400);
+  }
+
+  const now = Date.now();
+  const orderId = await createSubscriptionOrder(db, {
+    customerId,
+    email: sub.email,
+    name: customer.name ?? sub.email,
+    phone: customer.phone ?? '',
+    address,
+    boxId,
+    boxName,
+    price,
+    subscriptionId: sub.id,
+    now,
+  });
+
+  if (!orderId) return c.json({ error: 'No upcoming delivery day available' }, 400);
+
+  // Flip to alternate box for next time if configured
+  if (sub.alternateBoxId) {
+    await db.update(subscriptions)
+      .set({ nextIsAlternate: !sub.nextIsAlternate, updatedAt: now })
+      .where(eq(subscriptions.id, sub.id));
+  }
+
+  return c.json({ orderId });
+});
+
 // Flip next delivery box (alternate ↔ primary)
 app.post('/:id/mark-sent', async (c) => {
   const db = drizzle(c.env.DB);

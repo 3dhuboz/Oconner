@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { api } from '@butcher/shared';
 import type { Product } from '@butcher/shared';
-import { RefreshCcw, Check, X, Phone, Mail, Plus, Upload, Image, Save, ArrowLeftRight, PackageCheck } from 'lucide-react';
+import { RefreshCcw, Check, X, Phone, Mail, Plus, Upload, Image, Save, ArrowLeftRight, PackageCheck, ShoppingCart } from 'lucide-react';
 import { toast } from '../lib/toast';
 
 interface Subscription {
@@ -124,6 +124,24 @@ export default function SubscriptionsPage() {
     }
   };
 
+  const [generatingOrder, setGeneratingOrder] = useState<string | null>(null);
+
+  const generateOrder = async (sub: Subscription) => {
+    setGeneratingOrder(sub.id);
+    try {
+      const result = await api.post<{ orderId?: string; error?: string }>(`/api/subscriptions/${sub.id}/generate-order`, {});
+      if (result.orderId) {
+        toast(`Order created for ${sub.customerName || sub.email}`);
+      } else {
+        toast(result.error ?? 'No delivery day available', 'error');
+      }
+    } catch {
+      toast('Failed to create order', 'error');
+    } finally {
+      setGeneratingOrder(null);
+    }
+  };
+
   const markSent = async (id: string) => {
     try {
       const res = await api.post<{ nextIsAlternate: boolean }>(`/api/subscriptions/${id}/mark-sent`, {});
@@ -243,6 +261,17 @@ export default function SubscriptionsPage() {
                         title="Mark this delivery as sent and flip to the other box for next time"
                       >
                         <PackageCheck className="h-3.5 w-3.5" /> Mark Sent
+                      </button>
+                    )}
+                    {s.status === 'active' && (
+                      <button
+                        onClick={() => generateOrder(s)}
+                        disabled={generatingOrder === s.id}
+                        className="flex items-center gap-1 bg-brand text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-brand-mid disabled:opacity-50"
+                        title="Create an order for the next delivery day"
+                      >
+                        <ShoppingCart className="h-3.5 w-3.5" />
+                        {generatingOrder === s.id ? 'Creating…' : 'Create Order'}
                       </button>
                     )}
                     {s.status === 'active' && (
