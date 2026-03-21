@@ -126,18 +126,33 @@ export default function StockPage() {
           <div className="divide-y max-h-[520px] overflow-y-auto">
             {movements.length === 0 ? (
               <p className="px-5 py-8 text-sm text-gray-400 text-center">No movements yet.</p>
-            ) : movements.map((m) => (
-              <div key={m.id} className="px-5 py-3 flex items-start justify-between text-sm gap-3">
-                <div className="min-w-0">
-                  <p className="font-medium truncate">{m.productName}</p>
-                  <p className="text-xs text-gray-400">{(m as any).reason ?? m.type} · {m.orderId ?? 'manual'}</p>
-                  {(m as any).note && <p className="text-xs text-gray-500 italic">{(m as any).note}</p>}
+            ) : movements.map((m) => {
+              const typeLabel: Record<string, { label: string; color: string }> = {
+                sale: { label: 'Sale', color: 'bg-red-100 text-red-700' },
+                refund: { label: 'Refund', color: 'bg-blue-100 text-blue-700' },
+                adjustment: { label: 'Adjustment', color: 'bg-gray-100 text-gray-600' },
+                stocktake_correction: { label: 'Stocktake', color: 'bg-purple-100 text-purple-700' },
+                wastage: { label: 'Wastage', color: 'bg-orange-100 text-orange-700' },
+                supplier_delivery: { label: 'Delivery', color: 'bg-green-100 text-green-700' },
+              };
+              const badge = typeLabel[m.type] ?? { label: m.type, color: 'bg-gray-100 text-gray-600' };
+              const date = new Date(m.createdAt);
+              return (
+                <div key={m.id} className="px-5 py-3 flex items-start justify-between text-sm gap-3">
+                  <div className="min-w-0">
+                    <p className="font-medium truncate">{m.productName}</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${badge.color}`}>{badge.label}</span>
+                      <span className="text-xs text-gray-400">{(m as any).reason || (m.orderId ? `Order #${m.orderId.slice(-8).toUpperCase()}` : 'manual')}</span>
+                    </div>
+                    <p className="text-[10px] text-gray-300 mt-0.5">{date.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })} {date.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}</p>
+                  </div>
+                  <span className={`font-bold flex-shrink-0 ${m.qty < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                    {m.qty > 0 ? '+' : ''}{m.qty} {m.unit}
+                  </span>
                 </div>
-                <span className={`font-bold flex-shrink-0 ${m.qty < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                  {m.qty > 0 ? '+' : ''}{m.qty} {m.unit}
-                </span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>

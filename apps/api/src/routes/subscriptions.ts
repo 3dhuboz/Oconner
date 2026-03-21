@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/d1';
-import { desc, eq } from 'drizzle-orm';
-import { subscriptions, customers } from '@butcher/db';
+import { desc, eq, and, gte, asc } from 'drizzle-orm';
+import { subscriptions, customers, orders, deliveryDays } from '@butcher/db';
 import type { Env, AuthUser } from '../types';
 
 const SQUARE_API = 'https://connect.squareup.com/v2';
@@ -30,6 +30,74 @@ async function squareRequest(accessToken: string, path: string, body: unknown): 
     body: JSON.stringify(body),
   });
   return res.json() as Promise<Record<string, unknown>>;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function createSubscriptionOrder(db: any, opts: {
+  customerId: string;
+  email: string;
+  name: string;
+  phone: string;
+  address: { line1: string; line2?: string; suburb: string; state: string; postcode: string };
+  boxName: string;
+  price: number; // cents
+  subscriptionId: string;
+  now: number;
+}) {
+  // Find the next upcoming active delivery day
+  const [nextDay] = await db.select().from(deliveryDays)
+    .where(and(eq(deliveryDays.active, true), gte(deliveryDays.date, opts.now)))
+    .orderBy(asc(deliveryDays.date))
+    .limit(1);
+  if (!nextDay) return null; // No delivery day available
+
+  const orderId = crypto.randomUUID();
+  const gst = Math.round(opts.price / 11); // GST inclusive
+  const subtotal = opts.price - gst;
+
+  const item = {
+    productId: `sub-${opts.subscriptionId}`,
+    productName: opts.boxName,
+    isMeatPack: true,
+    quantity: 1,
+    lineTotal: opts.price,
+  };
+
+  await db.insert(orders).values({
+    id: orderId,
+    customerId: opts.customerId,
+    customerEmail: opts.email,
+    customerName: opts.name,
+    customerPhone: opts.phone,
+    items: JSON.stringify([item]),
+    subtotal,
+    deliveryFee: 0,
+    gst,
+    total: opts.price,
+    status: 'confirmed',
+    deliveryDayId: nextDay.id,
+    deliveryAddress: JSON.stringify(opts.address),
+    postcodeZone: '',
+    paymentIntentId: '',
+    paymentProvider: 'square',
+    paymentStatus: 'paid',
+    notes: `Subscription box: ${opts.boxName}`,
+    createdAt: opts.now,
+    updatedAt: opts.now,
+  });
+
+  // Update delivery day order count and customer stats
+  await db.update(deliveryDays).set({ orderCount: nextDay.orderCount + 1 }).where(eq(deliveryDays.id, nextDay.id));
+  const [cust] = await db.select().from(customers).where(eq(customers.id, opts.customerId)).limit(1);
+  if (cust) {
+    await db.update(customers).set({
+      orderCount: cust.orderCount + 1,
+      totalSpent: cust.totalSpent + opts.price,
+      updatedAt: opts.now,
+    }).where(eq(customers.id, opts.customerId));
+  }
+
+  return orderId;
 }
 
 const app = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
@@ -126,6 +194,19 @@ app.post('/checkout', async (c) => {
     updatedAt: now,
   });
 
+  // Create a linked order so subscription appears on Orders page
+  await createSubscriptionOrder(db, {
+    customerId: customerId!,
+    email: body.email,
+    name: body.name,
+    phone: body.phone,
+    address: { line1: body.address, suburb: body.suburb, state: 'QLD', postcode: body.postcode },
+    boxName: body.boxName,
+    price,
+    subscriptionId: subId,
+    now,
+  });
+
   return c.json({ url: paymentLink.url });
 });
 
@@ -164,9 +245,31 @@ app.post('/', async (c) => {
   const now = Date.now();
   const id = crypto.randomUUID();
 
+  // Find or create customer for admin-created subscriptions
+  let customerId: string | null = null;
+  const [existing] = await db.select().from(customers).where(eq(customers.email, body.email)).limit(1);
+  if (existing) {
+    customerId = existing.id;
+  } else if (body.name) {
+    customerId = crypto.randomUUID();
+    await db.insert(customers).values({
+      id: customerId,
+      email: body.email,
+      name: body.name,
+      phone: body.phone ?? '',
+      accountType: 'registered',
+      orderCount: 0,
+      totalSpent: 0,
+      blacklisted: false,
+      notes: body.notes ? `Delivery notes: ${body.notes}` : '',
+      createdAt: now,
+      updatedAt: now,
+    });
+  }
+
   await db.insert(subscriptions).values({
     id,
-    customerId: null,
+    customerId,
     email: body.email,
     boxId: body.boxId,
     boxName: body.boxName,
@@ -178,6 +281,22 @@ app.post('/', async (c) => {
     createdAt: now,
     updatedAt: now,
   });
+
+  // Create linked order if customer and address info available
+  const price = BOX_PRICES[body.boxId];
+  if (customerId && body.address && price) {
+    await createSubscriptionOrder(db, {
+      customerId,
+      email: body.email,
+      name: body.name ?? body.email,
+      phone: body.phone ?? '',
+      address: { line1: body.address, suburb: body.suburb ?? '', state: 'QLD', postcode: body.postcode ?? '' },
+      boxName: body.boxName,
+      price,
+      subscriptionId: id,
+      now,
+    });
+  }
 
   return c.json({ id }, 201);
 });
