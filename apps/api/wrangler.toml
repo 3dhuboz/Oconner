@@ -14,7 +14,7 @@ bucket_name = "oconner-images"
 
 [vars]
 ENVIRONMENT = "production"
-STOREFRONT_URL = "https://butcher-storefront.pages.dev"
+STOREFRONT_URL = "https://oconnoragriculture.com.au"
 DRIVER_APP_URL = "https://driver.oconnoragriculture.com.au"
 FROM_EMAIL = "orders@oconnoragriculture.com.au"
 
