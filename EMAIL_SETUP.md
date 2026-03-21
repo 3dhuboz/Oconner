@@ -59,7 +59,7 @@ Send an email to: `jobs-8f92a@inbound.wirezrus.com`
 The email will:
 1. Arrive at SendGrid's servers
 2. Get parsed and forwarded to your webhook
-3. Create a new job in your Firestore database
+3. Create a new job in your D1 database
 
 ---
 
@@ -119,7 +119,7 @@ Your app already has the webhook endpoint at `/api/email/inbound` in `server.ts`
 2. Extracts: from, subject, body
 3. Generates job ID
 4. Creates comprehensive work order description
-5. Saves to Firestore as new job
+5. Saves to D1 (Cloudflare) as new job
 6. Returns success response
 
 ### What You Need:
@@ -143,7 +143,7 @@ Change the email format in your app to use a domain you control:
 
 1. Set up a Gmail address (e.g. `wirezrusjobs@gmail.com`)
 2. Configure Gmail OAuth credentials (Client ID, Client Secret, Refresh Token)
-3. The Vercel cron at `/api/email/poll-inbox` polls every 5 minutes
+3. Use cron-job.org to POST `/api/email/poll-inbox` every 5 minutes with `Authorization: Bearer <CRON_SECRET>`
 4. Emails are parsed and jobs created automatically
 
 ### Option C: Buy the Domain
@@ -159,7 +159,7 @@ Once configured, test by:
 
 1. Sending an email to `jobs-8f92a@inbound.wirezrus.com`
 2. Check your app's server logs for webhook receipt
-3. Check Firestore → `jobs` collection for new job
+3. Check Job Board in your app for the new job
 4. Check the Job Board in your app
 
 ---
@@ -174,7 +174,7 @@ Once configured, test by:
 **Email received but no job created**
 - Check webhook URL is correct and accessible
 - Check server logs for errors
-- Verify Firestore credentials are configured
+- Verify GMAIL_REFRESH_TOKEN and OPENROUTER_API_KEY are set in Cloudflare secrets
 
 **Email goes to spam**
 - Add SPF and DKIM records (provided by email service)

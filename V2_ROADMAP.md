@@ -18,7 +18,7 @@
 - 🆕 **Duplicate detection**: before creating a job, check if an active (non-CLOSED) job exists at the same address. If yes, flag it and offer merge option instead of creating a new job.
 - 🆕 **Follow-up email handling**: if a follow-up email arrives for an existing active job at the same address, attach it as a note to the existing job rather than creating a new one.
 - 🆕 **Mark email as processed**: add `emailProcessed: true` flag visible in admin so they know the app has "read" it.
-- 🔧 **Env var setup**: OPENAI_API_KEY, VITE_FIREBASE_PROJECT_ID, VITE_FIREBASE_API_KEY, WEBHOOK_AUTH_EMAIL/PASSWORD must be set on Vercel.
+- 🔧 **Env var setup**: OPENROUTER_API_KEY, CLERK_SECRET_KEY, GMAIL_REFRESH_TOKEN, CRON_SECRET must be set in Cloudflare dashboard secrets.
 
 ### 1.2 Form 9 Auto-Generation 🔧
 - ✅ Form 9 PDF generation exists (from RTA template)
@@ -145,7 +145,7 @@
 ---
 
 ## What Already Works (V1)
-- ✅ Firebase real-time job management
+- ✅ Cloudflare D1 job management via REST API
 - ✅ Job Board with Kanban columns
 - ✅ Priority/urgency colour coding + sorting
 - ✅ Real-time new job notifications (toast + browser)

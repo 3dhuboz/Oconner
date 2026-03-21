@@ -50,7 +50,7 @@ You need to create the following products in your Stripe Dashboard:
 
 ## Environment Variables
 
-Add these to your `.env` file and Vercel environment variables:
+Add these to your `.env` file and Cloudflare dashboard secrets:
 
 ```env
 # Stripe Configuration
@@ -122,13 +122,13 @@ Set up a webhook endpoint to handle these events:
 
 1. **`checkout.session.completed`**
    - Customer completed payment
-   - Create tenant record in Firestore
+   - Create tenant record in D1
    - Activate licenses (1 admin + 1 tech)
    - Send welcome email
 
 2. **`customer.subscription.updated`**
    - Subscription modified (licenses added/removed)
-   - Update tenant record in Firestore
+   - Update tenant record in D1
    - Update license counts
 
 3. **`customer.subscription.deleted`**
@@ -173,7 +173,7 @@ Use Stripe test mode for development:
 - Never expose `STRIPE_SECRET_KEY` in client-side code
 - Always verify webhook signatures using `STRIPE_WEBHOOK_SECRET`
 - Use `VITE_STRIPE_PUBLISHABLE_KEY` for client-side Stripe.js
-- Store Stripe customer IDs and subscription IDs in Firestore for reference
+- Store Stripe customer IDs and subscription IDs in D1 (tenants table) for reference
 
 ## Support
 
