@@ -4,6 +4,7 @@ import type { Order, OrderStatus } from '@butcher/shared';
 import { Link } from 'react-router-dom';
 import { Search, Plus, X, Trash2, Pencil } from 'lucide-react';
 import { toast } from '../lib/toast';
+import AddressAutocomplete from '../components/AddressAutocomplete';
 
 interface Product {
   id: string;
@@ -505,17 +506,7 @@ export default function OrdersPage() {
 
                 <div>
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Delivery Address</p>
-                  <div className="space-y-2">
-                    <input value={editForm.address.line1} onChange={(e) => setEditAddr('line1', e.target.value)} placeholder="Street address *" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
-                    <input value={editForm.address.line2} onChange={(e) => setEditAddr('line2', e.target.value)} placeholder="Unit / apartment (optional)" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
-                    <div className="grid grid-cols-3 gap-2">
-                      <input value={editForm.address.suburb} onChange={(e) => setEditAddr('suburb', e.target.value)} placeholder="Suburb *" className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
-                      <select value={editForm.address.state} onChange={(e) => setEditAddr('state', e.target.value)} className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
-                        {AU_STATES.map((s) => <option key={s}>{s}</option>)}
-                      </select>
-                      <input value={editForm.address.postcode} onChange={(e) => setEditAddr('postcode', e.target.value)} placeholder="Postcode *" maxLength={4} className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
-                    </div>
-                  </div>
+                  <AddressAutocomplete value={editForm.address} onChange={(addr) => setEditForm((f) => ({ ...f, address: addr }))} />
                 </div>
 
                 <div>
@@ -657,17 +648,7 @@ export default function OrdersPage() {
 
                 <div>
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Delivery Address</p>
-                  <div className="space-y-2">
-                    <input value={form.address.line1} onChange={(e) => setAddr('line1', e.target.value)} placeholder="Street address *" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
-                    <input value={form.address.line2} onChange={(e) => setAddr('line2', e.target.value)} placeholder="Unit / apartment (optional)" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
-                    <div className="grid grid-cols-3 gap-2">
-                      <input value={form.address.suburb} onChange={(e) => setAddr('suburb', e.target.value)} placeholder="Suburb *" className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
-                      <select value={form.address.state} onChange={(e) => setAddr('state', e.target.value)} className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
-                        {AU_STATES.map((s) => <option key={s}>{s}</option>)}
-                      </select>
-                      <input value={form.address.postcode} onChange={(e) => setAddr('postcode', e.target.value)} placeholder="Postcode *" maxLength={4} className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
-                    </div>
-                  </div>
+                  <AddressAutocomplete value={form.address} onChange={(addr) => setForm((f) => ({ ...f, address: addr }))} />
                 </div>
 
                 <div>
