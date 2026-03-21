@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '@butcher/shared';
 import type { DeliveryRun, Stop } from '@butcher/shared';
-import { Plus, X, Truck, User, Pencil, Trash2, ChevronRight, MapPin, CheckCircle, Clock, AlertTriangle, MoreHorizontal } from 'lucide-react';
+import { Plus, X, Truck, User, Pencil, Trash2, ChevronRight, MapPin, CheckCircle, Clock, AlertTriangle, MoreHorizontal, Package, Route } from 'lucide-react';
 import { toast } from '../lib/toast';
 
 const RUN_COLORS = [
@@ -34,6 +34,8 @@ export default function DeliveryRunsTab({ dayId }: { dayId: string }) {
   const [expandedRun, setExpandedRun] = useState<string | null>(null);
   const [assigningStop, setAssigningStop] = useState<string | null>(null);
   const [autoAssigning, setAutoAssigning] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [optimising, setOptimising] = useState(false);
 
   const load = async () => {
     try {
@@ -125,6 +127,43 @@ export default function DeliveryRunsTab({ dayId }: { dayId: string }) {
     }
   };
 
+  const generateStops = async () => {
+    setGenerating(true);
+    try {
+      await api.deliveryDays.generateStops(dayId);
+      await load();
+      toast('Stops generated');
+    } catch {
+      toast('Failed to generate stops', 'error');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const optimiseRun = async (runId: string) => {
+    const runStops = allStops.filter((s) => s.runId === runId);
+    if (runStops.length < 2) return;
+    setOptimising(true);
+    try {
+      // Sort furthest to closest (by lat/lng distance from depot)
+      const DEPOT = { lat: -23.3791, lng: 150.5100 };
+      const withDist = runStops.map((s) => {
+        const lat = (s as any).lat ?? 0;
+        const lng = (s as any).lng ?? 0;
+        const dist = Math.sqrt(Math.pow(lat - DEPOT.lat, 2) + Math.pow(lng - DEPOT.lng, 2));
+        return { ...s, dist };
+      });
+      withDist.sort((a, b) => b.dist - a.dist); // furthest first
+      await Promise.all(withDist.map((s, i) => api.stops.updateSequence(s.id!, i + 1)));
+      await load();
+      toast('Route optimised — furthest to closest');
+    } catch {
+      toast('Failed to optimise', 'error');
+    } finally {
+      setOptimising(false);
+    }
+  };
+
   const getRunStops = (runId: string) => allStops.filter((s) => s.runId === runId);
 
   const getDriver = (uid?: string) => drivers.find((d) => d.id === uid);
@@ -138,9 +177,15 @@ export default function DeliveryRunsTab({ dayId }: { dayId: string }) {
         <div>
           <p className="text-sm text-gray-500">{runs.length} run{runs.length !== 1 ? 's' : ''} · {allStops.length} total stops · {unassigned.length} unassigned</p>
         </div>
-        <button onClick={openCreate} className="flex items-center gap-2 bg-brand text-white px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90">
-          <Plus className="h-4 w-4" /> Add Run
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={generateStops} disabled={generating}
+            className="flex items-center gap-2 bg-green-600 text-white px-3 py-2 rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-50">
+            <Package className="h-3.5 w-3.5" /> {generating ? 'Generating…' : 'Generate Stops'}
+          </button>
+          <button onClick={openCreate} className="flex items-center gap-2 bg-brand text-white px-3 py-2 rounded-lg text-xs font-medium hover:opacity-90">
+            <Plus className="h-3.5 w-3.5" /> Add Run
+          </button>
+        </div>
       </div>
 
       {/* Runs list */}
@@ -195,6 +240,12 @@ export default function DeliveryRunsTab({ dayId }: { dayId: string }) {
                     )}
                   </div>
                   <div className="flex items-center gap-2">
+                    {runStops.length >= 2 && (
+                      <button onClick={() => optimiseRun(run.id)} disabled={optimising}
+                        className="flex items-center gap-1 text-xs text-brand border border-brand/30 px-2 py-1 rounded-lg hover:bg-brand/5 disabled:opacity-50">
+                        <Route className="h-3 w-3" /> {optimising ? '…' : 'Optimise'}
+                      </button>
+                    )}
                     <button onClick={() => openEdit(run)} className="p-2 text-gray-400 hover:text-brand rounded-lg hover:bg-gray-50"><Pencil className="h-4 w-4" /></button>
                     <button onClick={() => handleDelete(run)} className="p-2 text-gray-400 hover:text-red-500 rounded-lg hover:bg-gray-50"><Trash2 className="h-4 w-4" /></button>
                     <button onClick={() => setExpandedRun(isExpanded ? null : run.id)} className={`p-2 rounded-lg hover:bg-gray-50 transition-transform ${isExpanded ? 'rotate-90' : ''}`}>

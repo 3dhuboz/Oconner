@@ -10,10 +10,10 @@ interface Feature {
 }
 
 interface PaymentConfig {
-  provider: 'stripe';
+  provider: 'square';
   mode: 'test' | 'live';
-  publishableKey: string;
-  webhookSecret: string;
+  accessToken: string;
+  locationId: string;
   statementDescriptor: string;
 }
 
@@ -65,10 +65,10 @@ interface StorefrontConfig {
 }
 
 const PAYMENT_DEFAULTS: PaymentConfig = {
-  provider: 'stripe',
-  mode: 'test',
-  publishableKey: '',
-  webhookSecret: '',
+  provider: 'square',
+  mode: 'live',
+  accessToken: '',
+  locationId: '',
   statementDescriptor: "O'Connor Agriculture",
 };
 
@@ -363,8 +363,8 @@ export default function SettingsPage() {
       <Section title="Payment Gateway" icon={CreditCard}>
         <Field label="Provider">
           <div className="flex items-center gap-3 py-1.5">
-            <span className="text-sm font-medium">Stripe</span>
-            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">Supported</span>
+            <span className="text-sm font-medium">Square</span>
+            <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Connected</span>
           </div>
         </Field>
         <Field label="Mode">
@@ -380,33 +380,33 @@ export default function SettingsPage() {
                   className="accent-brand"
                 />
                 <span className={`text-sm font-medium ${m === 'live' ? 'text-green-700' : 'text-amber-700'}`}>
-                  {m === 'live' ? 'Live (real payments)' : 'Test mode'}
+                  {m === 'live' ? 'Live (real payments)' : 'Sandbox'}
                 </span>
               </label>
             ))}
           </div>
         </Field>
         <Field
-          label="Stripe Publishable Key"
-          hint={`Starts with pk_${payment.mode === 'live' ? 'live' : 'test'}_…`}
-        >
-          <input
-            className={inputCls}
-            placeholder={`pk_${payment.mode === 'live' ? 'live' : 'test'}_…`}
-            value={payment.publishableKey}
-            onChange={(e) => setPay('publishableKey', e.target.value)}
-          />
-        </Field>
-        <Field
-          label="Stripe Webhook Secret"
-          hint="From Stripe dashboard → Webhooks. Stored server-side only."
+          label="Square Access Token"
+          hint="From Square Developer Dashboard → Credentials"
         >
           <input
             className={inputCls}
             type="password"
-            placeholder="whsec_…"
-            value={payment.webhookSecret}
-            onChange={(e) => setPay('webhookSecret', e.target.value)}
+            placeholder="sq0atp-…"
+            value={payment.accessToken}
+            onChange={(e) => setPay('accessToken', e.target.value)}
+          />
+        </Field>
+        <Field
+          label="Square Location ID"
+          hint="From Square Developer Dashboard → Locations"
+        >
+          <input
+            className={inputCls}
+            placeholder="L…"
+            value={payment.locationId}
+            onChange={(e) => setPay('locationId', e.target.value)}
           />
         </Field>
         <Field label="Statement descriptor (shows on bank statements)">
