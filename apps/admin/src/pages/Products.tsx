@@ -129,10 +129,10 @@ export default function ProductsPage() {
               <tr key={p.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3">
                   {(p as any).imageUrl && !isStaleUrl((p as any).imageUrl) ? (
-                    <img src={(p as any).imageUrl} alt={p.name} className="w-10 h-10 rounded-lg object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
+                    <img src={(p as any).imageUrl} alt={p.name} className="w-14 h-14 rounded-xl object-cover bg-gray-100" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
                   ) : (
-                    <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center">
-                      <Image className="h-4 w-4 text-gray-300" />
+                    <div className="w-14 h-14 rounded-xl bg-gray-100 flex items-center justify-center">
+                      <Image className="h-6 w-6 text-gray-300" />
                     </div>
                   )}
                 </td>
