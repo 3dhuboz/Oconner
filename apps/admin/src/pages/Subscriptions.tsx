@@ -65,14 +65,14 @@ function BoxPlanCard({ product, onSaved }: { product: Product & { imageUrl?: str
       <p className="font-semibold text-sm">{product.name}</p>
       {url ? (
         <div className="relative">
-          <img src={url} alt={product.name} className="w-full h-32 object-cover rounded-lg bg-gray-100"
+          <img src={url} alt={product.name} className="w-full h-48 object-cover rounded-lg bg-gray-100"
             onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />
           <button onClick={() => setUrl('')} className="absolute top-1.5 right-1.5 w-5 h-5 bg-black/50 text-white rounded-full flex items-center justify-center">
             <X className="h-3 w-3" />
           </button>
         </div>
       ) : (
-        <div className="w-full h-32 rounded-lg bg-gray-50 border-2 border-dashed border-gray-200 flex items-center justify-center text-gray-300 cursor-pointer hover:bg-gray-100 transition-colors"
+        <div className="w-full h-48 rounded-lg bg-gray-50 border-2 border-dashed border-gray-200 flex items-center justify-center text-gray-300 cursor-pointer hover:bg-gray-100 transition-colors"
           onClick={() => fileRef.current?.click()}>
           <Image className="h-8 w-8" />
         </div>
@@ -186,10 +186,10 @@ export default function SubscriptionsPage() {
               return (
                 <div key={s.id} className="px-5 py-4 flex gap-4 items-start">
                   {boxImg ? (
-                    <img src={boxImg} alt={s.boxName} className="w-14 h-14 rounded-lg object-cover flex-shrink-0 bg-gray-100" />
+                    <img src={boxImg} alt={s.boxName} className="w-24 h-24 rounded-xl object-cover flex-shrink-0 bg-gray-100" />
                   ) : (
-                    <div className="w-14 h-14 rounded-lg bg-gray-100 flex items-center justify-center flex-shrink-0">
-                      <Image className="h-5 w-5 text-gray-300" />
+                    <div className="w-24 h-24 rounded-xl bg-gray-100 flex items-center justify-center flex-shrink-0">
+                      <Image className="h-8 w-8 text-gray-300" />
                     </div>
                   )}
                   <div className="flex-1 min-w-0">

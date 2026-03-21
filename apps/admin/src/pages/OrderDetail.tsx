@@ -91,13 +91,25 @@ export default function OrderDetailPage() {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {order.items.map((item, i) => (
-                <tr key={i}>
-                  <td className="py-2">{item.productName}</td>
-                  <td className="py-2 text-right text-gray-500">{item.isMeatPack ? `x${item.quantity}` : `${item.weight}g`}</td>
-                  <td className="py-2 text-right font-medium">{formatCurrency(item.lineTotal)}</td>
-                </tr>
-              ))}
+              {order.items.map((item, i) => {
+                const isSub = item.productId?.startsWith('sub-') || (order.notes ?? '').toLowerCase().includes('subscription');
+                return (
+                  <tr key={i}>
+                    <td className="py-2">
+                      {item.productName}
+                      {isSub && (
+                        <span className="ml-2 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700">Subscription</span>
+                      )}
+                    </td>
+                    <td className="py-2 text-right text-gray-500">
+                      {item.isMeatPack
+                        ? (item.quantity ? `x${item.quantity}` : 'x1')
+                        : (item.weight ? `${item.weight >= 1000 ? `${(item.weight / 1000).toFixed(1)}kg` : `${item.weight}g`}` : '—')}
+                    </td>
+                    <td className="py-2 text-right font-medium">{formatCurrency(item.lineTotal)}</td>
+                  </tr>
+                );
+              })}
             </tbody>
             <tfoot className="border-t text-sm">
               <tr><td colSpan={2} className="pt-2 text-gray-500">Subtotal</td><td className="pt-2 text-right">{formatCurrency(order.subtotal)}</td></tr>
