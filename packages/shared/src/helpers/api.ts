@@ -57,6 +57,8 @@ export const api = {
     create: (data: unknown) => api.post('/api/orders', data),
     updateStatus: (id: string, status: string, extra?: { packedBy?: string; internalNotes?: string }) =>
       api.patch(`/api/orders/${id}/status`, { status, ...extra }),
+    update: (id: string, data: unknown) => api.patch(`/api/orders/${id}`, data),
+    remove: (id: string) => api.delete(`/api/orders/${id}`),
   },
 
   deliveryDays: {

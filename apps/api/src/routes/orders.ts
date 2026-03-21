@@ -163,11 +163,115 @@ app.patch('/:id/status', async (c) => {
   return c.json({ ok: true });
 });
 
+app.patch('/:id', async (c) => {
+  const db = drizzle(c.env.DB);
+  const user = c.get('user');
+  if (user.role !== 'admin') return c.json({ error: 'Forbidden' }, 403);
+  const orderId = c.req.param('id');
+  const now = Date.now();
+
+  const [order] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+  if (!order) return c.json({ error: 'Not found' }, 404);
+
+  const body = await c.req.json<{
+    customerName?: string; customerEmail?: string; customerPhone?: string;
+    items?: unknown[]; subtotal?: number; deliveryFee?: number; gst?: number; total?: number;
+    deliveryAddress?: object; deliveryDayId?: string;
+    notes?: string; internalNotes?: string; status?: string;
+  }>();
+
+  const patch: Partial<typeof orders.$inferInsert> = { updatedAt: now };
+  if (body.customerName !== undefined) patch.customerName = body.customerName;
+  if (body.customerEmail !== undefined) patch.customerEmail = body.customerEmail;
+  if (body.customerPhone !== undefined) patch.customerPhone = body.customerPhone;
+  if (body.items !== undefined) patch.items = JSON.stringify(body.items);
+  if (body.subtotal !== undefined) patch.subtotal = body.subtotal;
+  if (body.deliveryFee !== undefined) patch.deliveryFee = body.deliveryFee;
+  if (body.gst !== undefined) patch.gst = body.gst;
+  if (body.total !== undefined) patch.total = body.total;
+  if (body.deliveryAddress !== undefined) patch.deliveryAddress = JSON.stringify(body.deliveryAddress);
+  if (body.notes !== undefined) patch.notes = body.notes;
+  if (body.internalNotes !== undefined) patch.internalNotes = body.internalNotes;
+  if (body.status !== undefined) patch.status = body.status;
+
+  // Handle delivery day change
+  if (body.deliveryDayId !== undefined && body.deliveryDayId !== order.deliveryDayId) {
+    // Decrement old day
+    const [oldDay] = await db.select().from(deliveryDays).where(eq(deliveryDays.id, order.deliveryDayId)).limit(1);
+    if (oldDay) await db.update(deliveryDays).set({ orderCount: Math.max(0, oldDay.orderCount - 1) }).where(eq(deliveryDays.id, oldDay.id));
+    // Increment new day
+    const [newDay] = await db.select().from(deliveryDays).where(eq(deliveryDays.id, body.deliveryDayId)).limit(1);
+    if (newDay) await db.update(deliveryDays).set({ orderCount: newDay.orderCount + 1 }).where(eq(deliveryDays.id, newDay.id));
+    patch.deliveryDayId = body.deliveryDayId;
+  }
+
+  // Update customer totalSpent if total changed
+  if (body.total !== undefined && body.total !== order.total && order.customerId) {
+    const [cust] = await db.select().from(customers).where(eq(customers.id, order.customerId)).limit(1);
+    if (cust) {
+      const newSpent = Math.max(0, cust.totalSpent - order.total + body.total);
+      await db.update(customers).set({ totalSpent: newSpent, updatedAt: now }).where(eq(customers.id, cust.id));
+    }
+  }
+
+  await db.update(orders).set(patch).where(eq(orders.id, orderId));
+
+  await db.insert(auditLog).values({
+    id: crypto.randomUUID(),
+    action: 'update_order',
+    entity: 'orders',
+    entityId: orderId,
+    before: JSON.stringify({ customerName: order.customerName, total: order.total, items: order.items }),
+    after: JSON.stringify(body),
+    adminUid: user.id,
+    adminEmail: user.email,
+    timestamp: now,
+  });
+
+  const [updated] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+  return c.json({ ...updated, items: JSON.parse(updated.items), deliveryAddress: JSON.parse(updated.deliveryAddress) });
+});
+
 app.delete('/:id', async (c) => {
   const db = drizzle(c.env.DB);
   const user = c.get('user');
   if (user.role !== 'admin') return c.json({ error: 'Forbidden' }, 403);
-  await db.delete(orders).where(eq(orders.id, c.req.param('id')));
+  const orderId = c.req.param('id');
+
+  const [order] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+  if (!order) return c.json({ error: 'Not found' }, 404);
+
+  // Rollback delivery day order count
+  if (order.deliveryDayId) {
+    const [day] = await db.select().from(deliveryDays).where(eq(deliveryDays.id, order.deliveryDayId)).limit(1);
+    if (day) await db.update(deliveryDays).set({ orderCount: Math.max(0, day.orderCount - 1) }).where(eq(deliveryDays.id, day.id));
+  }
+
+  // Rollback customer stats
+  if (order.customerId) {
+    const [cust] = await db.select().from(customers).where(eq(customers.id, order.customerId)).limit(1);
+    if (cust) {
+      await db.update(customers).set({
+        orderCount: Math.max(0, cust.orderCount - 1),
+        totalSpent: Math.max(0, cust.totalSpent - order.total),
+        updatedAt: Date.now(),
+      }).where(eq(customers.id, cust.id));
+    }
+  }
+
+  await db.insert(auditLog).values({
+    id: crypto.randomUUID(),
+    action: 'delete_order',
+    entity: 'orders',
+    entityId: orderId,
+    before: JSON.stringify({ customerName: order.customerName, total: order.total, status: order.status }),
+    after: JSON.stringify({ deleted: true }),
+    adminUid: user.id,
+    adminEmail: user.email,
+    timestamp: Date.now(),
+  });
+
+  await db.delete(orders).where(eq(orders.id, orderId));
   return c.json({ ok: true });
 });
 

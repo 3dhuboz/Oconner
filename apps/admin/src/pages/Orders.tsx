@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { api, formatCurrency, ORDER_STATUS_LABELS } from '@butcher/shared';
 import type { Order, OrderStatus } from '@butcher/shared';
 import { Link } from 'react-router-dom';
-import { Search, Plus, X, Trash2 } from 'lucide-react';
+import { Search, Plus, X, Trash2, Pencil } from 'lucide-react';
 import { toast } from '../lib/toast';
 
 interface Product {
@@ -58,6 +58,19 @@ export default function OrdersPage() {
   const [itemWeight, setItemWeight] = useState('');
   const [itemQty, setItemQty] = useState('1');
   const [creating, setCreating] = useState(false);
+
+  // Edit state
+  const [editingOrder, setEditingOrder] = useState<Order | null>(null);
+  const [editForm, setEditForm] = useState(EMPTY_FORM);
+  const [editItems, setEditItems] = useState<OrderItem[]>([]);
+  const [editSelectedProduct, setEditSelectedProduct] = useState('');
+  const [editItemWeight, setEditItemWeight] = useState('');
+  const [editItemQty, setEditItemQty] = useState('1');
+  const [saving, setSaving] = useState(false);
+
+  // Delete state
+  const [deleteTarget, setDeleteTarget] = useState<Order | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -166,6 +179,124 @@ export default function OrdersPage() {
   const setAddr = (k: keyof typeof form.address, v: string) =>
     setForm((f) => ({ ...f, address: { ...f.address, [k]: v } }));
 
+  const setEditAddr = (k: keyof typeof editForm.address, v: string) =>
+    setEditForm((f) => ({ ...f, address: { ...f.address, [k]: v } }));
+
+  const editCurrentProduct = products.find((p) => p.id === editSelectedProduct);
+  const editIsWeightBased = !!(editCurrentProduct && editCurrentProduct.pricePerKg != null);
+
+  const addEditItem = () => {
+    if (!editCurrentProduct) return;
+    let lineTotal = 0;
+    let weightKg: number | undefined;
+    let quantity: number | undefined;
+    if (editIsWeightBased) {
+      weightKg = parseFloat(editItemWeight);
+      if (!weightKg || weightKg <= 0) return;
+      lineTotal = weightKg * (editCurrentProduct.pricePerKg ?? 0);
+    } else {
+      quantity = parseInt(editItemQty, 10);
+      if (!quantity || quantity <= 0) return;
+      lineTotal = quantity * (editCurrentProduct.fixedPrice ?? 0);
+    }
+    setEditItems((prev) => [...prev, {
+      productId: editCurrentProduct.id,
+      productName: editCurrentProduct.name,
+      ...(editIsWeightBased ? { weightKg, pricePerKg: editCurrentProduct.pricePerKg ?? 0 } : { quantity, fixedPrice: editCurrentProduct.fixedPrice ?? 0 }),
+      lineTotal,
+    }]);
+    setEditSelectedProduct('');
+    setEditItemWeight('');
+    setEditItemQty('1');
+  };
+
+  const editSubtotal = editItems.reduce((s, i) => s + i.lineTotal, 0);
+  const editTotal = editSubtotal + (editForm.deliveryFee || 0);
+
+  const openEdit = (order: Order) => {
+    const addr = order.deliveryAddress ?? { line1: '', line2: '', suburb: '', state: 'QLD', postcode: '' };
+    setEditForm({
+      customerName: order.customerName ?? '',
+      customerEmail: order.customerEmail ?? '',
+      customerPhone: order.customerPhone ?? '',
+      deliveryDayId: order.deliveryDayId ?? '',
+      status: order.status as OrderStatus,
+      internalNotes: order.internalNotes ?? '',
+      deliveryFee: order.deliveryFee ?? 0,
+      address: {
+        line1: addr.line1 ?? '', line2: addr.line2 ?? '',
+        suburb: addr.suburb ?? '', state: addr.state ?? 'QLD', postcode: addr.postcode ?? '',
+      },
+    });
+    // Convert order items to edit format
+    const orderItems: OrderItem[] = (order.items ?? []).map((item: any) => ({
+      productId: item.productId ?? '',
+      productName: item.productName ?? '',
+      weightKg: item.weight ? item.weight / 1000 : item.weightKg,
+      quantity: item.quantity,
+      pricePerKg: item.pricePerKg,
+      fixedPrice: item.fixedPrice,
+      lineTotal: item.lineTotal ?? 0,
+    }));
+    setEditItems(orderItems);
+    setEditSelectedProduct('');
+    setEditItemWeight('');
+    setEditItemQty('1');
+    Promise.all([api.products.list() as Promise<Product[]>, api.deliveryDays.list() as Promise<DeliveryDay[]>])
+      .then(([prods, days]) => {
+        setProducts((prods as Product[]).filter((p) => p.active !== false));
+        setDeliveryDays(days as DeliveryDay[]);
+      }).catch(() => {});
+    setEditingOrder(order);
+  };
+
+  const handleEdit = async () => {
+    if (!editingOrder?.id) return;
+    if (!editForm.customerName || !editForm.customerEmail) {
+      toast('Name and email are required', 'error'); return;
+    }
+    if (editItems.length === 0) { toast('Add at least one item', 'error'); return; }
+    setSaving(true);
+    try {
+      const updated = await api.orders.update(editingOrder.id, {
+        customerName: editForm.customerName,
+        customerEmail: editForm.customerEmail,
+        customerPhone: editForm.customerPhone || undefined,
+        deliveryDayId: editForm.deliveryDayId,
+        items: editItems,
+        deliveryAddress: { line1: editForm.address.line1, line2: editForm.address.line2 || undefined, suburb: editForm.address.suburb, state: editForm.address.state, postcode: editForm.address.postcode },
+        subtotal: editSubtotal,
+        deliveryFee: editForm.deliveryFee,
+        gst: 0,
+        total: editTotal,
+        status: editForm.status,
+        internalNotes: editForm.internalNotes || undefined,
+      }) as Order;
+      setOrders((prev) => prev.map((o) => o.id === editingOrder.id ? updated : o));
+      setEditingOrder(null);
+      toast('Order updated successfully');
+    } catch (e: any) {
+      toast(e?.message ?? 'Failed to update order', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget?.id) return;
+    setDeleting(true);
+    try {
+      await api.orders.remove(deleteTarget.id);
+      setOrders((prev) => prev.filter((o) => o.id !== deleteTarget.id));
+      setDeleteTarget(null);
+      toast('Order deleted');
+    } catch (e: any) {
+      toast(e?.message ?? 'Failed to delete order', 'error');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -236,13 +367,193 @@ export default function OrdersPage() {
                   </select>
                 </td>
                 <td className="px-4 py-3">
-                  <Link to={`/orders/${order.id}`} className="text-brand hover:underline text-xs font-medium">View</Link>
+                  <div className="flex items-center gap-2">
+                    <Link to={`/orders/${order.id}`} className="text-brand hover:underline text-xs font-medium">View</Link>
+                    <button onClick={() => openEdit(order)} className="text-gray-400 hover:text-brand transition-colors" title="Edit order">
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    <button onClick={() => setDeleteTarget(order)} className="text-gray-400 hover:text-red-500 transition-colors" title="Delete order">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      {/* ── Delete Confirmation ── */}
+      {deleteTarget && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-2">Delete Order</h2>
+            <p className="text-sm text-gray-500 mb-1">
+              Are you sure you want to delete order <span className="font-mono font-bold">#{(deleteTarget.id ?? '').slice(-8).toUpperCase()}</span>?
+            </p>
+            <p className="text-xs text-gray-400 mb-4">This will also update delivery day counts and customer stats. This action cannot be undone.</p>
+            <div className="flex gap-3">
+              <button onClick={() => setDeleteTarget(null)} className="flex-1 border py-2.5 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">Cancel</button>
+              <button onClick={handleDelete} disabled={deleting} className="flex-1 bg-red-600 text-white py-2.5 rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-red-700 transition-colors">
+                {deleting ? 'Deleting…' : 'Delete Order'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Edit Order Modal ── */}
+      {editingOrder && (
+        <div className="fixed inset-0 bg-black/50 z-50 overflow-y-auto">
+          <div className="min-h-screen flex items-start justify-center p-4 py-8">
+            <div className="bg-white rounded-2xl w-full max-w-2xl shadow-xl">
+              <div className="flex items-center justify-between p-6 border-b">
+                <h2 className="text-lg font-semibold flex items-center gap-2">
+                  <Pencil className="h-5 w-5 text-brand" /> Edit Order #{(editingOrder.id ?? '').slice(-8).toUpperCase()}
+                </h2>
+                <button onClick={() => setEditingOrder(null)} className="p-1.5 rounded-lg hover:bg-gray-100">
+                  <X className="h-5 w-5 text-gray-400" />
+                </button>
+              </div>
+
+              <div className="p-6 space-y-6 overflow-y-auto max-h-[75vh]">
+                <div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Customer</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs text-gray-500 mb-1 block">Full Name *</label>
+                      <input value={editForm.customerName} onChange={(e) => setEditForm((f) => ({ ...f, customerName: e.target.value }))} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500 mb-1 block">Email *</label>
+                      <input type="email" value={editForm.customerEmail} onChange={(e) => setEditForm((f) => ({ ...f, customerEmail: e.target.value }))} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500 mb-1 block">Phone</label>
+                      <input value={editForm.customerPhone} onChange={(e) => setEditForm((f) => ({ ...f, customerPhone: e.target.value }))} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500 mb-1 block">Delivery Day</label>
+                      <select value={editForm.deliveryDayId} onChange={(e) => setEditForm((f) => ({ ...f, deliveryDayId: e.target.value }))} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
+                        <option value="">Select delivery day…</option>
+                        {deliveryDays.map((d) => (
+                          <option key={d.id} value={d.id}>
+                            {new Date(d.date).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })} — {d.orderCount}/{d.maxOrders} orders
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Order Items</p>
+                  <div className="flex gap-2 mb-2">
+                    <select
+                      value={editSelectedProduct}
+                      onChange={(e) => { setEditSelectedProduct(e.target.value); setEditItemWeight(''); setEditItemQty('1'); }}
+                      className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
+                    >
+                      <option value="">Add product…</option>
+                      {products.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} — {p.pricePerKg != null ? `$${p.pricePerKg}/kg` : `$${p.fixedPrice} ea`}
+                        </option>
+                      ))}
+                    </select>
+                    {editCurrentProduct && (
+                      editIsWeightBased ? (
+                        <input type="number" placeholder="kg" value={editItemWeight} onChange={(e) => setEditItemWeight(e.target.value)} step="0.1" min="0.1" className="w-24 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                      ) : (
+                        <input type="number" placeholder="qty" value={editItemQty} onChange={(e) => setEditItemQty(e.target.value)} min="1" className="w-20 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                      )
+                    )}
+                    <button onClick={addEditItem} disabled={!editCurrentProduct} className="bg-brand text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-40 hover:bg-brand-mid transition-colors">
+                      Add
+                    </button>
+                  </div>
+                  {editCurrentProduct && (
+                    <p className="text-xs text-gray-400 mb-2">
+                      {editIsWeightBased
+                        ? `$${editCurrentProduct.pricePerKg}/kg${editItemWeight ? ` → ${formatCurrency(parseFloat(editItemWeight || '0') * (editCurrentProduct.pricePerKg ?? 0))}` : ''}`
+                        : `$${editCurrentProduct.fixedPrice} each${editItemQty ? ` → ${formatCurrency(parseInt(editItemQty || '1') * (editCurrentProduct.fixedPrice ?? 0))}` : ''}`}
+                    </p>
+                  )}
+                  {editItems.length > 0 ? (
+                    <div className="border rounded-lg overflow-hidden divide-y">
+                      {editItems.map((item, i) => (
+                        <div key={i} className="flex items-center justify-between px-3 py-2.5 bg-gray-50">
+                          <div>
+                            <p className="text-sm font-medium">{item.productName}</p>
+                            <p className="text-xs text-gray-400">
+                              {item.weightKg ? `${item.weightKg}kg @ $${item.pricePerKg}/kg` : `${item.quantity}x @ $${item.fixedPrice} ea`}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="text-sm font-semibold">{formatCurrency(item.lineTotal)}</span>
+                            <button onClick={() => setEditItems((prev) => prev.filter((_, j) => j !== i))} className="p-1 hover:bg-red-50 rounded text-red-400">
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-400 text-center py-4 border border-dashed rounded-lg">No items — add at least one</p>
+                  )}
+                </div>
+
+                <div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Delivery Address</p>
+                  <div className="space-y-2">
+                    <input value={editForm.address.line1} onChange={(e) => setEditAddr('line1', e.target.value)} placeholder="Street address *" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                    <input value={editForm.address.line2} onChange={(e) => setEditAddr('line2', e.target.value)} placeholder="Unit / apartment (optional)" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                    <div className="grid grid-cols-3 gap-2">
+                      <input value={editForm.address.suburb} onChange={(e) => setEditAddr('suburb', e.target.value)} placeholder="Suburb *" className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                      <select value={editForm.address.state} onChange={(e) => setEditAddr('state', e.target.value)} className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
+                        {AU_STATES.map((s) => <option key={s}>{s}</option>)}
+                      </select>
+                      <input value={editForm.address.postcode} onChange={(e) => setEditAddr('postcode', e.target.value)} placeholder="Postcode *" maxLength={4} className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Summary</p>
+                  <div className="grid grid-cols-2 gap-3 mb-3">
+                    <div>
+                      <label className="text-xs text-gray-500 mb-1 block">Order Status</label>
+                      <select value={editForm.status} onChange={(e) => setEditForm((f) => ({ ...f, status: e.target.value as OrderStatus }))} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
+                        {STATUSES.map((s) => <option key={s} value={s}>{ORDER_STATUS_LABELS[s] ?? s}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500 mb-1 block">Delivery Fee ($)</label>
+                      <input type="number" value={editForm.deliveryFee} onChange={(e) => setEditForm((f) => ({ ...f, deliveryFee: parseFloat(e.target.value) || 0 }))} step="0.01" min="0" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                    </div>
+                  </div>
+                  <div className="mb-3">
+                    <label className="text-xs text-gray-500 mb-1 block">Internal Notes</label>
+                    <textarea value={editForm.internalNotes} onChange={(e) => setEditForm((f) => ({ ...f, internalNotes: e.target.value }))} rows={2} placeholder="Notes visible to staff only…" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand resize-none" />
+                  </div>
+                  <div className="bg-gray-50 rounded-lg p-3 space-y-1.5 text-sm">
+                    <div className="flex justify-between text-gray-500"><span>Subtotal</span><span>{formatCurrency(editSubtotal)}</span></div>
+                    <div className="flex justify-between text-gray-500"><span>Delivery</span><span>{formatCurrency(editForm.deliveryFee)}</span></div>
+                    <div className="flex justify-between font-bold text-base pt-1.5 border-t border-gray-200"><span>Total</span><span className="text-brand">{formatCurrency(editTotal)}</span></div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-3 p-6 border-t">
+                <button onClick={() => setEditingOrder(null)} className="flex-1 border py-2.5 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">Cancel</button>
+                <button onClick={handleEdit} disabled={saving} className="flex-1 bg-brand text-white py-2.5 rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-brand-mid transition-colors">
+                  {saving ? 'Saving…' : `Save Changes — ${formatCurrency(editTotal)}`}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showCreate && (
         <div className="fixed inset-0 bg-black/50 z-50 overflow-y-auto">
