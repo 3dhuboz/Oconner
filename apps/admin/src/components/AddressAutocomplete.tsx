@@ -1,7 +1,4 @@
-/// <reference types="@types/google.maps" />
 import { useEffect, useRef, useState } from 'react';
-
-const API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY ?? '';
 
 interface Address {
   line1: string;
@@ -16,91 +13,142 @@ interface Props {
   onChange: (addr: Address) => void;
 }
 
-let scriptLoaded = false;
-let scriptLoading = false;
-const callbacks: (() => void)[] = [];
-
-function loadGooglePlaces() {
-  return new Promise<void>((resolve) => {
-    if (scriptLoaded) { resolve(); return; }
-    callbacks.push(resolve);
-    if (scriptLoading) return;
-    scriptLoading = true;
-    const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${API_KEY}&libraries=places`;
-    script.async = true;
-    script.onload = () => {
-      scriptLoaded = true;
-      callbacks.forEach((cb) => cb());
-      callbacks.length = 0;
-    };
-    document.head.appendChild(script);
-  });
+interface PhotonFeature {
+  properties: {
+    housenumber?: string;
+    street?: string;
+    name?: string;
+    city?: string;
+    state?: string;
+    postcode?: string;
+    country?: string;
+  };
 }
 
+const AU_STATE_MAP: Record<string, string> = {
+  'Queensland': 'QLD',
+  'New South Wales': 'NSW',
+  'Victoria': 'VIC',
+  'South Australia': 'SA',
+  'Western Australia': 'WA',
+  'Tasmania': 'TAS',
+  'Northern Territory': 'NT',
+  'Australian Capital Territory': 'ACT',
+};
+
 export default function AddressAutocomplete({ value, onChange }: Props) {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
-  const [enabled, setEnabled] = useState(false);
+  const [suggestions, setSuggestions] = useState<PhotonFeature[]>([]);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [query, setQuery] = useState('');
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const wrapperRef = useRef<HTMLDivElement>(null);
 
+  // Close dropdown on outside click
   useEffect(() => {
-    if (!API_KEY || !inputRef.current) return;
-    loadGooglePlaces().then(() => {
-      if (!inputRef.current || autocompleteRef.current) return;
-      const ac = new google.maps.places.Autocomplete(inputRef.current, {
-        componentRestrictions: { country: 'au' },
-        types: ['address'],
-        fields: ['address_components', 'formatted_address'],
-      });
-      ac.addListener('place_changed', () => {
-        const place = ac.getPlace();
-        if (!place.address_components) return;
-
-        let streetNumber = '';
-        let streetName = '';
-        let suburb = '';
-        let state = '';
-        let postcode = '';
-
-        for (const comp of place.address_components) {
-          const t = comp.types[0];
-          if (t === 'street_number') streetNumber = comp.long_name;
-          if (t === 'route') streetName = comp.long_name;
-          if (t === 'locality') suburb = comp.long_name;
-          if (t === 'administrative_area_level_1') state = comp.short_name;
-          if (t === 'postal_code') postcode = comp.long_name;
-        }
-
-        onChange({
-          line1: `${streetNumber} ${streetName}`.trim(),
-          line2: value.line2,
-          suburb,
-          state: state || value.state,
-          postcode,
-        });
-      });
-      autocompleteRef.current = ac;
-      setEnabled(true);
-    });
+    const handler = (e: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
   }, []);
+
+  const search = (q: string) => {
+    if (q.length < 3) { setSuggestions([]); setShowDropdown(false); return; }
+
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const params = new URLSearchParams({
+          q,
+          limit: '5',
+          lang: 'en',
+          lat: '-23.8',
+          lon: '151.2',
+          location_bias_scale: '2',
+        });
+        const res = await fetch(`https://photon.komoot.io/api/?${params}`);
+        const data = await res.json() as { features: PhotonFeature[] };
+
+        // Filter to Australian results only
+        const auResults = data.features.filter(
+          (f) => f.properties.country === 'Australia' && f.properties.street
+        );
+        setSuggestions(auResults);
+        setShowDropdown(auResults.length > 0);
+      } catch {
+        setSuggestions([]);
+        setShowDropdown(false);
+      }
+    }, 300);
+  };
+
+  const handleInputChange = (val: string) => {
+    setQuery(val);
+    onChange({ ...value, line1: val });
+    search(val);
+  };
+
+  const selectSuggestion = (feature: PhotonFeature) => {
+    const p = feature.properties;
+    const streetNum = p.housenumber ?? '';
+    const street = p.street ?? p.name ?? '';
+    const stateCode = AU_STATE_MAP[p.state ?? ''] ?? value.state;
+
+    onChange({
+      line1: `${streetNum} ${street}`.trim(),
+      line2: value.line2,
+      suburb: p.city ?? '',
+      state: stateCode,
+      postcode: p.postcode ?? '',
+    });
+    setQuery(`${streetNum} ${street}`.trim());
+    setShowDropdown(false);
+    setSuggestions([]);
+  };
+
+  const formatSuggestion = (f: PhotonFeature) => {
+    const p = f.properties;
+    const line = `${p.housenumber ?? ''} ${p.street ?? p.name ?? ''}`.trim();
+    const detail = [p.city, AU_STATE_MAP[p.state ?? ''] ?? p.state, p.postcode].filter(Boolean).join(' ');
+    return { line, detail };
+  };
 
   const cls = 'w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand';
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2" ref={wrapperRef}>
       <div className="relative">
         <input
-          ref={inputRef}
-          value={value.line1}
-          onChange={(e) => onChange({ ...value, line1: e.target.value })}
-          placeholder={enabled ? 'Start typing address…' : 'Street address *'}
+          value={query || value.line1}
+          onChange={(e) => handleInputChange(e.target.value)}
+          onFocus={() => { if (suggestions.length > 0) setShowDropdown(true); }}
+          placeholder="Start typing address…"
           className={cls}
           autoComplete="off"
         />
-        {enabled && (
-          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded">
-            Auto
-          </span>
+        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded">
+          Auto
+        </span>
+
+        {showDropdown && suggestions.length > 0 && (
+          <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
+            {suggestions.map((f, i) => {
+              const { line, detail } = formatSuggestion(f);
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => selectSuggestion(f)}
+                  className="w-full text-left px-3 py-2.5 hover:bg-brand/5 transition-colors border-b border-gray-50 last:border-0"
+                >
+                  <p className="text-sm font-medium text-gray-800">{line}</p>
+                  <p className="text-xs text-gray-400">{detail}</p>
+                </button>
+              );
+            })}
+          </div>
         )}
       </div>
       <input
@@ -114,12 +162,12 @@ export default function AddressAutocomplete({ value, onChange }: Props) {
           value={value.suburb}
           onChange={(e) => onChange({ ...value, suburb: e.target.value })}
           placeholder="Suburb *"
-          className={`border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand`}
+          className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
         />
         <select
           value={value.state}
           onChange={(e) => onChange({ ...value, state: e.target.value })}
-          className={`border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand`}
+          className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
         >
           {['QLD', 'NSW', 'VIC', 'SA', 'WA', 'TAS', 'NT', 'ACT'].map((s) => (
             <option key={s}>{s}</option>
@@ -130,7 +178,7 @@ export default function AddressAutocomplete({ value, onChange }: Props) {
           onChange={(e) => onChange({ ...value, postcode: e.target.value })}
           placeholder="Postcode *"
           maxLength={4}
-          className={`border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand`}
+          className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
         />
       </div>
     </div>
