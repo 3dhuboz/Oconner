@@ -139,6 +139,15 @@ export const api = {
     update: (data: unknown) => api.put('/api/config', data),
   },
 
+  reports: {
+    revenue: (period: string, from?: number, to?: number) => {
+      const params = new URLSearchParams({ period });
+      if (from) params.set('from', String(from));
+      if (to) params.set('to', String(to));
+      return api.get(`/api/reports/revenue?${params}`);
+    },
+  },
+
   images: {
     upload: async (file: File, folder?: string): Promise<string> => {
       const headers = await authHeaders();

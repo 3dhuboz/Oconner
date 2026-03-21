@@ -17,6 +17,7 @@ import stripeRouter from './routes/stripe';
 import stockRouter from './routes/stock';
 import subscriptionsRouter from './routes/subscriptions';
 import pushRouter from './routes/push';
+import reportsRouter from './routes/reports';
 import { reels as reelsRouter } from './routes/reels';
 
 const app = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
@@ -218,6 +219,7 @@ app.route('/api/drivers', driversRouter);
 app.route('/api/delivery-runs', deliveryRunsRouter);
 app.route('/api/stock', stockRouter);
 app.route('/api/subscriptions', subscriptionsRouter);
+app.route('/api/reports', reportsRouter);
 
 app.route('/webhook', stripeRouter);
 
