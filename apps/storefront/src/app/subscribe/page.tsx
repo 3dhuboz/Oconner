@@ -64,17 +64,17 @@ export default function SubscribePage() {
     setSaving(true);
     try {
       const altBox = alternating && alternateBox ? BOX_DEFS.find((b) => b.id === alternateBox) : null;
-      await api.subscriptions.create({
+      const result = await api.post<{ url: string }>('/api/subscriptions/checkout', {
         boxId: selectedBox,
         boxName: BOX_DEFS.find((b) => b.id === selectedBox)?.name,
         alternateBoxId: altBox?.id ?? undefined,
         alternateBoxName: altBox?.name ?? undefined,
         frequency,
         ...form,
-        status: 'pending',
       });
-      setStep('done');
-    } finally {
+      // Redirect to Stripe Checkout
+      window.location.href = result.url;
+    } catch {
       setSaving(false);
     }
   };
@@ -92,9 +92,9 @@ export default function SubscribePage() {
             <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <CheckCircle className="h-8 w-8 text-green-600" />
             </div>
-            <h2 className="text-2xl font-bold text-brand mb-2">You&apos;re on the list!</h2>
+            <h2 className="text-2xl font-bold text-brand mb-2">Subscription Active!</h2>
             <p className="text-gray-600 mb-6">
-              Thanks, <strong>{form.name}</strong>. We&apos;ll be in touch to confirm your <strong>{box.name}</strong> subscription ({frequency}).
+              Thanks, <strong>{form.name}</strong>. Your <strong>{box.name}</strong> subscription ({frequency}) is now active. We&apos;ll deliver your first box soon.
             </p>
             <a href="/" className="inline-block bg-brand text-white px-6 py-3 rounded-xl font-semibold hover:bg-brand-mid transition-colors">
               Back to Home
@@ -403,7 +403,7 @@ export default function SubscribePage() {
                 disabled={saving}
                 className="w-full bg-brand text-white py-4 rounded-xl font-black text-lg disabled:opacity-50 hover:bg-brand-mid transition-colors"
               >
-                {saving ? 'Submitting…' : 'Confirm Subscription →'}
+                {saving ? 'Redirecting to payment…' : 'Subscribe & Pay →'}
               </button>
             </form>
           )}
