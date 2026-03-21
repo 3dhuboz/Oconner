@@ -398,7 +398,7 @@ export default function SubscriptionsPage() {
                   <div className="bg-green-50 border border-green-200 rounded-lg p-3">
                     <p className="text-xs text-green-600 mb-1 flex items-center gap-1"><Calendar className="h-3 w-3" /> Next Order Due</p>
                     <p className="font-medium text-green-700">{fmt(nextDue)}</p>
-                    <p className="text-xs text-green-500 mt-1">Orders are auto-generated when delivery stops are created</p>
+                    <p className="text-xs text-green-500 mt-1">Orders are automatically created each delivery cycle</p>
                   </div>
                 )}
               </div>
