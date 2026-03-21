@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '@butcher/shared';
 import type { Stop, StopStatus } from '@butcher/shared';
-import { ArrowLeft, MapPin, Phone, Navigation, CheckCircle, Camera, AlertTriangle, Image } from 'lucide-react';
+import { ArrowLeft, MapPin, Phone, Navigation, CheckCircle, Camera, AlertTriangle } from 'lucide-react';
 import { useRef } from 'react';
+import { formatWeight } from '@butcher/shared';
 
 export default function StopDetailPage() {
   const { stopId } = useParams<{ stopId: string }>();
@@ -28,8 +29,10 @@ export default function StopDetailPage() {
     setUploadingPhoto(true);
     try {
       const url = await api.images.upload(file, 'proof');
-      await api.stops.updateStatus(stopId, { status: stop?.status ?? 'arrived', proofUrl: url });
       setProofUrl(url);
+      // Save proof immediately, then mark as delivered
+      await api.stops.updateStatus(stopId, { status: 'delivered', proofUrl: url, driverNote: note || undefined });
+      setStop((s) => s ? { ...s, status: 'delivered' as StopStatus, proofUrl: url } : s);
     } catch {
       // best-effort
     } finally {
@@ -40,9 +43,13 @@ export default function StopDetailPage() {
   const updateStatus = async (status: StopStatus, extra?: { driverNote?: string; failReason?: string }) => {
     if (!stopId) return;
     setUpdating(true);
-    await api.stops.updateStatus(stopId, { status, ...extra });
+    await api.stops.updateStatus(stopId, { status, proofUrl: proofUrl ?? undefined, ...extra });
     setUpdating(false);
     if (status === 'delivered' || status === 'failed') navigate('/');
+  };
+
+  const deliverWithPhoto = () => {
+    fileInputRef.current?.click();
   };
 
   const openMaps = () => {
@@ -117,7 +124,7 @@ export default function StopDetailPage() {
               <div key={i} className="flex justify-between text-sm">
                 <span className="text-gray-700">{item.productName}</span>
                 <span className="font-medium text-gray-500">
-                  {item.isMeatPack ? `x${item.quantity}` : `${item.weight}g`}
+                  {item.isMeatPack ? `x${item.quantity ?? 1}` : item.weight ? formatWeight(item.weight) : '—'}
                 </span>
               </div>
             ))}
@@ -196,14 +203,29 @@ export default function StopDetailPage() {
             )}
             {(stop.status === 'en_route' || stop.status === 'arrived') && (
               <>
-                <button
-                  onClick={() => updateStatus('delivered', { driverNote: note })}
-                  disabled={updating}
-                  className="w-full bg-green-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50"
-                >
-                  <CheckCircle className="h-5 w-5" />
-                  Mark as Delivered
-                </button>
+                {!proofUrl && !stop.proofUrl ? (
+                  <button
+                    onClick={deliverWithPhoto}
+                    disabled={updating || uploadingPhoto}
+                    className="w-full bg-green-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {uploadingPhoto ? (
+                      <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
+                    ) : (
+                      <Camera className="h-5 w-5" />
+                    )}
+                    {uploadingPhoto ? 'Uploading & Delivering…' : 'Take Photo & Deliver'}
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => updateStatus('delivered', { driverNote: note })}
+                    disabled={updating}
+                    className="w-full bg-green-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    <CheckCircle className="h-5 w-5" />
+                    Mark as Delivered
+                  </button>
+                )}
                 <button
                   onClick={() => updateStatus('failed', { failReason: note || 'No answer', driverNote: note })}
                   disabled={updating}
