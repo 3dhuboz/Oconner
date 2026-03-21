@@ -472,11 +472,100 @@ export default app;
 export const scheduled: ExportedHandlerScheduledHandler<Env> = async (event, env) => {
   if (event.cron === '0 8 * * *') {
     const { drizzle } = await import('drizzle-orm/d1');
-    const { eq, and, gte, lt } = await import('drizzle-orm');
-    const { deliveryDays, orders, notifications } = await import('@butcher/db');
+    const { eq, and, gte, lt, desc, like } = await import('drizzle-orm');
+    const { deliveryDays, orders, notifications, subscriptions, customers, products } = await import('@butcher/db');
     const { sendEmail, buildOrderEmail, getSubject } = await import('./lib/email');
     const db = drizzle(env.DB);
 
+    // ── 1. Auto-generate subscription orders for due subscriptions ──
+    try {
+      const now = Date.now();
+      const FREQ_MS: Record<string, number> = {
+        weekly: 7 * 24 * 60 * 60 * 1000,
+        fortnightly: 14 * 24 * 60 * 60 * 1000,
+        monthly: 30 * 24 * 60 * 60 * 1000,
+      };
+      const { deductStock } = await import('./lib/stock');
+
+      const activeSubs = await db.select().from(subscriptions).where(eq(subscriptions.status, 'active'));
+
+      for (const sub of activeSubs) {
+        const interval = FREQ_MS[sub.frequency] ?? FREQ_MS.fortnightly;
+        const lastGenerated = sub.lastOrderGeneratedAt ?? sub.createdAt;
+        if (now - lastGenerated < interval * 0.8) continue;
+
+        let customerId = sub.customerId;
+        if (!customerId) {
+          const [cust] = await db.select().from(customers).where(eq(customers.email, sub.email)).limit(1);
+          if (!cust) continue;
+          customerId = cust.id;
+        }
+        const [customer] = await db.select().from(customers).where(eq(customers.id, customerId)).limit(1);
+        if (!customer) continue;
+
+        let address = { line1: '', suburb: '', state: 'QLD', postcode: '' };
+        try {
+          const addrs = JSON.parse(customer.addresses ?? '[]') as Array<{ line1: string; suburb: string; state: string; postcode: string }>;
+          if (addrs.length > 0) address = addrs[0];
+        } catch {}
+        if (!address.line1) {
+          const [lastOrder] = await db.select().from(orders).where(eq(orders.customerId, customerId)).orderBy(desc(orders.createdAt)).limit(1);
+          if (lastOrder) { try { address = JSON.parse(lastOrder.deliveryAddress) as typeof address; } catch {} }
+        }
+        if (!address.line1) continue;
+
+        const boxId = sub.nextIsAlternate && sub.alternateBoxId ? sub.alternateBoxId : sub.boxId;
+        const boxName = sub.nextIsAlternate && sub.alternateBoxName ? sub.alternateBoxName : sub.boxName;
+
+        let [boxProduct] = await db.select().from(products).where(eq(products.id, boxId)).limit(1);
+        if (!boxProduct) [boxProduct] = await db.select().from(products).where(eq(products.id, `prod-${boxId}-box`)).limit(1);
+        if (!boxProduct) [boxProduct] = await db.select().from(products).where(like(products.name, `%${boxName.replace(' Box', '')}%Box%`)).limit(1);
+        const price = boxProduct?.fixedPrice ?? 0;
+        if (!price) continue;
+
+        // Find next active delivery day
+        const [nextDay] = await db.select().from(deliveryDays)
+          .where(and(eq(deliveryDays.active, true), gte(deliveryDays.date, now)))
+          .orderBy(deliveryDays.date).limit(1);
+        if (!nextDay) continue;
+
+        const orderId = crypto.randomUUID();
+        const items = [{ productId: boxProduct?.id ?? boxId, productName: boxName, quantity: 1, isMeatPack: true, lineTotal: price }];
+
+        await db.insert(orders).values({
+          id: orderId,
+          customerId,
+          customerName: customer.name ?? sub.email,
+          customerEmail: sub.email,
+          customerPhone: customer.phone ?? '',
+          deliveryDayId: nextDay.id,
+          deliveryAddress: JSON.stringify(address),
+          items: JSON.stringify(items),
+          subtotal: price,
+          deliveryFee: 0,
+          gst: Math.round(price / 11),
+          total: price,
+          status: 'confirmed',
+          paymentStatus: 'paid',
+          subscriptionId: sub.id,
+          internalNotes: `Auto-generated from ${boxName} ${sub.frequency} subscription`,
+          createdAt: now,
+          updatedAt: now,
+        });
+
+        await deductStock(db, items as any[], orderId, now);
+        await db.update(deliveryDays).set({ orderCount: nextDay.orderCount + 1 }).where(eq(deliveryDays.id, nextDay.id));
+        await db.update(customers).set({ orderCount: customer.orderCount + 1, totalSpent: customer.totalSpent + price, updatedAt: now }).where(eq(customers.id, customerId));
+
+        const updateData: Record<string, unknown> = { lastOrderGeneratedAt: now, updatedAt: now };
+        if (sub.alternateBoxId) updateData.nextIsAlternate = !sub.nextIsAlternate;
+        await db.update(subscriptions).set(updateData).where(eq(subscriptions.id, sub.id));
+      }
+    } catch (e) {
+      console.error('Subscription auto-generate failed:', e);
+    }
+
+    // ── 2. Send "delivery tomorrow" notifications ──
     const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1); tomorrow.setHours(0, 0, 0, 0);
     const dayAfter = new Date(tomorrow); dayAfter.setDate(dayAfter.getDate() + 1);
 
