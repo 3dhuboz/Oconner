@@ -3,9 +3,7 @@ const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 // All fetch calls include Clerk session token
 export async function apiFetch(path: string, options: RequestInit = {}) {
-  // Get Clerk token from window.__clerk__ or the Clerk instance
-  // Use @clerk/clerk-react's useAuth().getToken() — but since this is outside React,
-  // we store the token getter globally
+  // Get Clerk session token — registered via setAuthTokenGetter() in AuthContext
   const token = await getAuthToken();
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,

@@ -3,7 +3,7 @@ import { Zap, CheckCircle2, Shield, Users, CreditCard, ArrowRight, Loader2, Exte
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { tenantsApi, licensesApi, userProfilesApi } from '../services/api';
-import { SignUp } from '@clerk/clerk-react';
+import { SignUp } from '@clerk/react';
 import toast from 'react-hot-toast';
 
 const PLANS = [
