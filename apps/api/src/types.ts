@@ -15,6 +15,7 @@ export interface Env {
   VAPID_PRIVATE_KEY: string;
   OPENROUTER_API_KEY: string;
   ZERNIO_API_KEY: string;
+  FB_PAGE_ACCESS_TOKEN: string;
   SQUARE_ACCESS_TOKEN: string;
   SQUARE_LOCATION_ID: string;
 }
