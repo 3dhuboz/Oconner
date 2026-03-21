@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/d1';
 import { desc, eq, and, gte, asc } from 'drizzle-orm';
-import { subscriptions, customers, orders, deliveryDays } from '@butcher/db';
+import { subscriptions, customers, orders, deliveryDays, products } from '@butcher/db';
 import { deductStock } from '../lib/stock';
 import type { Env, AuthUser } from '../types';
 
@@ -117,7 +117,13 @@ app.post('/checkout', async (c) => {
     frequency: string;
   }>();
 
-  const price = BOX_PRICES[body.boxId];
+  // Try hardcoded prices first (storefront short IDs), then look up product by UUID
+  let price = BOX_PRICES[body.boxId];
+  if (!price) {
+    const db2 = drizzle(c.env.DB);
+    const [prod] = await db2.select().from(products).where(eq(products.id, body.boxId)).limit(1);
+    price = prod?.fixedPrice ?? 0;
+  }
   if (!price) return c.json({ error: 'Invalid box' }, 400);
 
   if (!FREQUENCY_MAP[body.frequency]) return c.json({ error: 'Invalid frequency' }, 400);
@@ -290,8 +296,12 @@ app.post('/', async (c) => {
   });
 
   // Create linked order if customer and address info available
-  const price = BOX_PRICES[body.boxId];
-  if (customerId && body.address && price) {
+  let orderPrice = BOX_PRICES[body.boxId];
+  if (!orderPrice) {
+    const [prod] = await db.select().from(products).where(eq(products.id, body.boxId)).limit(1);
+    orderPrice = prod?.fixedPrice ?? 0;
+  }
+  if (customerId && body.address && orderPrice) {
     await createSubscriptionOrder(db, {
       customerId,
       email: body.email,
@@ -300,7 +310,7 @@ app.post('/', async (c) => {
       address: { line1: body.address, suburb: body.suburb ?? '', state: 'QLD', postcode: body.postcode ?? '' },
       boxId: body.boxId,
       boxName: body.boxName,
-      price,
+      price: orderPrice,
       subscriptionId: id,
       now,
     });
@@ -334,12 +344,14 @@ app.post('/:id/generate-order', async (c) => {
   const [customer] = await db.select().from(customers).where(eq(customers.id, customerId)).limit(1);
   if (!customer) return c.json({ error: 'Customer not found' }, 400);
 
-  const price = BOX_PRICES[sub.boxId];
-  if (!price) return c.json({ error: 'Unknown box type' }, 400);
-
   // Use the correct box (primary or alternate)
   const boxId = sub.nextIsAlternate && sub.alternateBoxId ? sub.alternateBoxId : sub.boxId;
   const boxName = sub.nextIsAlternate && sub.alternateBoxName ? sub.alternateBoxName : sub.boxName;
+
+  // Look up actual product price from DB (fixedPrice is in cents)
+  const [boxProduct] = await db.select().from(products).where(eq(products.id, boxId)).limit(1);
+  const price = boxProduct?.fixedPrice ?? 0;
+  if (!price) return c.json({ error: 'Box product not found or has no price' }, 400);
 
   // Get customer address
   let address = { line1: '', suburb: '', state: 'QLD', postcode: '' };
@@ -424,12 +436,14 @@ app.post('/auto-generate', async (c) => {
 
     if (!address.line1) { errors.push(`${sub.email}: no delivery address`); continue; }
 
-    const price = BOX_PRICES[sub.boxId] ?? BOX_PRICES[sub.alternateBoxId ?? ''];
-    if (!price) { errors.push(`${sub.email}: unknown box type ${sub.boxId}`); continue; }
-
     // Use the correct box (primary or alternate)
     const boxId = sub.nextIsAlternate && sub.alternateBoxId ? sub.alternateBoxId : sub.boxId;
     const boxName = sub.nextIsAlternate && sub.alternateBoxName ? sub.alternateBoxName : sub.boxName;
+
+    // Look up actual product price from DB (fixedPrice is in cents)
+    const [boxProduct] = await db.select().from(products).where(eq(products.id, boxId)).limit(1);
+    const price = boxProduct?.fixedPrice ?? 0;
+    if (!price) { errors.push(`${sub.email}: box product not found or no price`); continue; }
 
     const orderId = await createSubscriptionOrder(db, {
       customerId,

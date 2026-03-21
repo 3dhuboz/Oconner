@@ -412,9 +412,6 @@ export default function OrdersPage() {
                     <button onClick={() => openEdit(order)} className="text-gray-400 hover:text-brand transition-colors" title="Edit order">
                       <Pencil className="h-3.5 w-3.5" />
                     </button>
-                    <button onClick={() => setDeleteTarget(order)} className="text-gray-400 hover:text-red-500 transition-colors" title="Delete order">
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
                   </div>
                 </td>
               </tr>
@@ -422,25 +419,6 @@ export default function OrdersPage() {
           </tbody>
         </table>
       </div>
-
-      {/* ── Delete Confirmation ── */}
-      {deleteTarget && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-2">Delete Order</h2>
-            <p className="text-sm text-gray-500 mb-1">
-              Are you sure you want to delete order <span className="font-mono font-bold">#{(deleteTarget.id ?? '').slice(-8).toUpperCase()}</span>?
-            </p>
-            <p className="text-xs text-gray-400 mb-4">This will also update delivery day counts and customer stats. This action cannot be undone.</p>
-            <div className="flex gap-3">
-              <button onClick={() => setDeleteTarget(null)} className="flex-1 border py-2.5 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">Cancel</button>
-              <button onClick={handleDelete} disabled={deleting} className="flex-1 bg-red-600 text-white py-2.5 rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-red-700 transition-colors">
-                {deleting ? 'Deleting…' : 'Delete Order'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ── Edit Order Modal ── */}
       {editingOrder && (
