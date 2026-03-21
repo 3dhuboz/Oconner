@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Database, DollarSign, CheckCircle2, AlertCircle, Loader2, Mail, MessageSquare, ExternalLink, Copy, PlayCircle, Phone, Send, Eye, EyeOff, Save, TestTube2, Inbox, RefreshCw, Clock, Zap } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { cn } from '../utils';
-import { settingsApi, jobsApi, apiFetch } from '../services/api';
+import { settingsApi, smsApi, xeroApi, jobsApi } from '../services/api';
 import toast from 'react-hot-toast';
 
 const IntegrationCard = ({ icon: Icon, title, status, statusColor, children, onAction, actionText, actionDisabled, isConnecting }: any) => {
@@ -34,7 +34,7 @@ const IntegrationCard = ({ icon: Icon, title, status, statusColor, children, onA
       </div>
       {actionText && (
         <div className="shrink-0 w-full sm:w-auto">
-          <button 
+          <button
             onClick={onAction}
             disabled={actionDisabled || isConnecting}
             className="w-full sm:w-auto px-4 py-2 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
@@ -94,7 +94,7 @@ export function Integrations() {
   const [forwardingEmail, setForwardingEmail] = useState<string | null>(null);
   const [isGeneratingEmail, setIsGeneratingEmail] = useState(false);
   const [isSimulating, setIsSimulating] = useState(false);
-  
+
   // ─── SMS Provider State ─────────────────────────────────────
   const [smsProvider, setSmsProvider] = useState<'twilio' | 'vonage'>('twilio');
   const [smsConfig, setSmsConfig] = useState({
@@ -141,44 +141,75 @@ export function Integrations() {
   const [emailTesting, setEmailTesting] = useState(false);
   const [emailTestAddress, setEmailTestAddress] = useState('');
 
-  // ─── Load saved settings via REST API ──────────────────────
+  // ─── Load saved settings from API ─────────────────────────
   useEffect(() => {
+    // Load SMS config
     settingsApi.get('sms').then(data => {
-      if (!data) return;
-      setSmsProvider(data.provider || 'twilio');
-      setSmsConfig({ accountSid: data.accountSid || '', authToken: data.authToken || '', fromNumber: data.fromNumber || '', enabled: data.enabled || false });
-    });
+      if (data) {
+        setSmsProvider(data.provider || 'twilio');
+        setSmsConfig({
+          accountSid: data.accountSid || '',
+          authToken: data.authToken || '',
+          fromNumber: data.fromNumber || '',
+          enabled: data.enabled || false,
+        });
+      }
+    }).catch(() => {});
+    // Load Email config
     settingsApi.get('email').then(data => {
-      if (!data) return;
-      setEmailProvider(data.provider || 'smtp');
-      setEmailConfig({ host: data.host || '', port: data.port || '587', username: data.username || '', password: data.password || '', fromEmail: data.fromEmail || '', fromName: data.fromName || 'Wirez R Us', apiKey: data.apiKey || '', enabled: data.enabled || false });
-    });
+      if (data) {
+        setEmailProvider(data.provider || 'smtp');
+        setEmailConfig({
+          host: data.host || '',
+          port: data.port || '587',
+          username: data.username || '',
+          password: data.password || '',
+          fromEmail: data.fromEmail || '',
+          fromName: data.fromName || 'Wirez R Us',
+          apiKey: data.apiKey || '',
+          enabled: data.enabled || false,
+        });
+      }
+    }).catch(() => {});
+    // Load Gmail catch-all config
     settingsApi.get('gmail').then(data => {
-      if (!data) return;
-      setGmailConfig({ emailAddress: data.emailAddress || '', clientId: data.clientId || '', clientSecret: data.clientSecret || '', refreshToken: data.refreshToken || '', pollingInterval: data.pollingInterval || '5', autoCreateJobs: data.autoCreateJobs !== false, markAsRead: data.markAsRead !== false, enabled: data.enabled || false });
-    });
+      if (data) {
+        setGmailConfig({
+          emailAddress: data.emailAddress || '',
+          clientId: data.clientId || '',
+          clientSecret: data.clientSecret || '',
+          refreshToken: data.refreshToken || '',
+          pollingInterval: data.pollingInterval || '5',
+          autoCreateJobs: data.autoCreateJobs !== false,
+          markAsRead: data.markAsRead !== false,
+          enabled: data.enabled || false,
+        });
+      }
+    }).catch(() => {});
   }, []);
 
   // ─── Save SMS Settings ──────────────────────────────────────
   const handleSaveSms = async () => {
     setSmsSaving(true);
     try {
-      await settingsApi.save('sms', { provider: smsProvider, ...smsConfig, updatedAt: new Date().toISOString() });
+      await settingsApi.set('sms', {
+        provider: smsProvider,
+        ...smsConfig,
+        updatedAt: new Date().toISOString(),
+      });
       toast.success('SMS settings saved');
-    } catch { toast.error('Failed to save SMS settings'); }
-    finally { setSmsSaving(false); }
+    } catch (err) {
+      toast.error('Failed to save SMS settings');
+    } finally {
+      setSmsSaving(false);
+    }
   };
 
   const handleTestSms = async () => {
     if (!smsTestNumber.trim()) { toast.error('Enter a test phone number'); return; }
     setSmsTesting(true);
     try {
-      const res = await apiFetch('/api/sms/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: smsTestNumber, provider: smsProvider, ...smsConfig }),
-      });
-      const data = await res.json();
+      const data = await smsApi.test({ to: smsTestNumber, provider: smsProvider, ...smsConfig });
       if (data.success && data.simulated) toast.success('SMS API reachable (simulated — credentials not reaching server)');
       else if (data.success) toast.success('Test SMS sent via Twilio!');
       else toast.error(data.error || 'SMS test failed');
@@ -193,17 +224,24 @@ export function Integrations() {
   const handleSaveEmail = async () => {
     setEmailSaving(true);
     try {
-      await settingsApi.save('email', { provider: emailProvider, ...emailConfig, updatedAt: new Date().toISOString() });
+      await settingsApi.set('email', {
+        provider: emailProvider,
+        ...emailConfig,
+        updatedAt: new Date().toISOString(),
+      });
       toast.success('Email settings saved');
-    } catch { toast.error('Failed to save email settings'); }
-    finally { setEmailSaving(false); }
+    } catch (err) {
+      toast.error('Failed to save email settings');
+    } finally {
+      setEmailSaving(false);
+    }
   };
 
   const handleTestEmail = async () => {
     if (!emailTestAddress.trim()) { toast.error('Enter a test email address'); return; }
     setEmailTesting(true);
     try {
-      const res = await apiFetch('/api/email/test', {
+      const res = await fetch('/api/email/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ to: emailTestAddress, provider: emailProvider, ...emailConfig }),
@@ -222,10 +260,16 @@ export function Integrations() {
   const handleSaveGmail = async () => {
     setGmailSaving(true);
     try {
-      await settingsApi.save('gmail', { ...gmailConfig, updatedAt: new Date().toISOString() });
+      await settingsApi.set('gmail', {
+        ...gmailConfig,
+        updatedAt: new Date().toISOString(),
+      });
       toast.success('Gmail catch-all settings saved');
-    } catch { toast.error('Failed to save Gmail settings'); }
-    finally { setGmailSaving(false); }
+    } catch (err) {
+      toast.error('Failed to save Gmail settings');
+    } finally {
+      setGmailSaving(false);
+    }
   };
 
   const handleGmailPollNow = async () => {
@@ -268,26 +312,30 @@ export function Integrations() {
   // ─── Load Xero Settings ─────────────────────────────────────
   useEffect(() => {
     settingsApi.get('xero').then(data => {
-      if (!data) return;
-      setXeroConfig({
-        clientId: data.clientId || '',
-        clientSecret: data.clientSecret || '',
-        tenantId: data.tenantId || '',
-        defaultAccountCode: data.defaultAccountCode || '200',
-        defaultTaxType: data.defaultTaxType || 'OUTPUT',
-        invoicePrefix: data.invoicePrefix || 'WRU-',
-        laborDescription: data.laborDescription || 'Electrical Labour',
-        hourlyRate: data.hourlyRate || '120',
-      });
+      if (data) {
+        setXeroConfig({
+          clientId: data.clientId || '',
+          clientSecret: data.clientSecret || '',
+          tenantId: data.tenantId || '',
+          defaultAccountCode: data.defaultAccountCode || '200',
+          defaultTaxType: data.defaultTaxType || 'OUTPUT',
+          invoicePrefix: data.invoicePrefix || 'WRU-',
+          laborDescription: data.laborDescription || 'Electrical Labour',
+          hourlyRate: data.hourlyRate || '120',
+        });
+      }
     }).catch(() => {});
   }, []);
 
   const handleSaveXero = async () => {
     setXeroSaving(true);
     try {
-      await settingsApi.save('xero', { ...xeroConfig, updatedAt: new Date().toISOString() });
+      await settingsApi.set('xero', {
+        ...xeroConfig,
+        updatedAt: new Date().toISOString(),
+      });
       toast.success('Xero settings saved');
-    } catch {
+    } catch (err) {
       toast.error('Failed to save Xero settings');
     } finally {
       setXeroSaving(false);
@@ -297,7 +345,7 @@ export function Integrations() {
   const handleDisconnectXero = async () => {
     if (!confirm('Disconnect Xero? This will revoke the OAuth token.')) return;
     try {
-      await apiFetch('/api/xero/disconnect', { method: 'POST' });
+      await fetch('/api/xero/disconnect', { method: 'POST' });
       setXeroConnected(false);
       toast.success('Xero disconnected');
     } catch {
@@ -306,7 +354,7 @@ export function Integrations() {
   };
 
   useEffect(() => {
-    apiFetch('/api/xero/status').then(res => res.json()).then(data => setXeroConnected(data.connected)).catch(() => {});
+    fetch('/api/xero/status').then(res => res.json()).then(data => setXeroConnected(data.connected)).catch(() => {});
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type === 'OAUTH_AUTH_SUCCESS') {
         setXeroConnected(true);
@@ -320,7 +368,7 @@ export function Integrations() {
   const handleConnectXero = async () => {
     setIsConnecting(true);
     try {
-      const response = await apiFetch('/api/auth/xero/url');
+      const response = await fetch('/api/auth/xero/url');
       const data = await response.json();
       if (data.error) {
         alert(`Configuration Error: ${data.error}`);
@@ -328,16 +376,16 @@ export function Integrations() {
         return;
       }
       window.open(data.url, 'xero_oauth', 'width=600,height=700');
-    } catch (error) { 
-      console.error(error); 
-      setIsConnecting(false); 
+    } catch (error) {
+      console.error(error);
+      setIsConnecting(false);
     }
   };
 
   const handleSimulateEmail = async () => {
     setIsSimulating(true);
+
     try {
-      const { jobsApi } = await import('../services/api');
       const now = new Date();
       const newJob = {
         title: 'Emergency: Sparking Outlet in Kitchen',
@@ -357,12 +405,12 @@ export function Integrations() {
 
       await jobsApi.create(newJob);
       toast.success('Inbound email processed! Job created.');
-      
+
       // Navigate to the job board after a short delay so they can see it
       setTimeout(() => {
         navigate('/');
       }, 1500);
-      
+
     } catch (error) {
       console.error("Error creating job from email simulation:", error);
       toast.error('Failed to process inbound email');
@@ -787,8 +835,8 @@ export function Integrations() {
                   <li>Enable the <strong>Gmail API</strong> in your Google Cloud project</li>
                   <li>Use the <a href="https://developers.google.com/oauthplayground" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-medium">OAuth Playground</a> to generate a refresh token with scope <code className="bg-amber-100 px-1 rounded text-[10px]">https://www.googleapis.com/auth/gmail.modify</code></li>
                   <li>Paste credentials above and click <strong>Save Gmail Settings</strong></li>
-                  <li>Set these as Cloudflare secrets: <code className="bg-amber-100 px-1 rounded text-[10px]">GMAIL_ADDRESS</code>, <code className="bg-amber-100 px-1 rounded text-[10px]">GMAIL_CLIENT_ID</code>, <code className="bg-amber-100 px-1 rounded text-[10px]">GMAIL_CLIENT_SECRET</code>, <code className="bg-amber-100 px-1 rounded text-[10px]">GMAIL_REFRESH_TOKEN</code></li>
-                  <li>Set up a cron via <a href="https://cron-job.org" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-medium">cron-job.org</a> to POST to <code className="bg-amber-100 px-1 rounded text-[10px]">/api/email/poll-inbox</code> every 5 minutes with <code className="bg-amber-100 px-1 rounded text-[10px]">Authorization: Bearer &lt;CRON_SECRET&gt;</code></li>
+                  <li>Set these as Worker secrets via <code className="bg-amber-100 px-1 rounded text-[10px]">wrangler secret put</code>: <code className="bg-amber-100 px-1 rounded text-[10px]">GMAIL_ADDRESS</code>, <code className="bg-amber-100 px-1 rounded text-[10px]">GMAIL_CLIENT_ID</code>, <code className="bg-amber-100 px-1 rounded text-[10px]">GMAIL_CLIENT_SECRET</code>, <code className="bg-amber-100 px-1 rounded text-[10px]">GMAIL_REFRESH_TOKEN</code></li>
+                  <li>Gmail polling runs automatically via Cloudflare Worker cron (every 5 minutes)</li>
                 </ol>
               </div>
             )}
@@ -799,10 +847,10 @@ export function Integrations() {
           icon={Database}
           title="Cloudflare D1 Database"
           status={{ text: backendStatus.database ? 'Connected' : 'Not Configured', color: backendStatus.database ? 'green' : 'amber' }}
-          statusColor={{ bg: 'bg-orange-500/10', text: 'text-orange-600' }}
+          statusColor={{ bg: 'bg-[#F5A623]/10', text: 'text-[#F5A623]' }}
         >
-          <p>Job data, profiles, and field updates are stored in Cloudflare D1 (SQLite). Fully offline-capable with local IndexedDB cache.</p>
-          <p className="text-xs">Managed via <code className="bg-slate-100 px-1 rounded">wrangler d1</code> — see <code>wrangler.toml</code> for config.</p>
+          <p>Cloudflare D1 database for job data, photos, and electrician field updates.</p>
+          <p className="text-xs">Configuration is managed in the <Link to="/admin" className="text-blue-600 underline">Dev Console</Link>.</p>
         </IntegrationCard>
 
         {/* ─── SMS Provider Settings ─────────────────────────── */}

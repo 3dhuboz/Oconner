@@ -38,6 +38,7 @@ export function Team({ electricians, setElectricians }: TeamProps) {
       toast.error('Name and phone are required.');
       return;
     }
+
     const normalisedPhone = normalisePhone(editForm.phone);
 
     setSaving(true);
@@ -98,7 +99,7 @@ export function Team({ electricians, setElectricians }: TeamProps) {
           <h1 className="text-2xl font-bold text-slate-900">Team Management</h1>
           <p className="text-slate-500 mt-1">Manage your electricians and dispatch contacts.</p>
         </div>
-        <button 
+        <button
           onClick={startAdd}
           disabled={isAdding}
           className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-medium hover:bg-slate-800 transition-colors flex items-center gap-2 disabled:opacity-50"
@@ -112,18 +113,18 @@ export function Team({ electricians, setElectricians }: TeamProps) {
           {isAdding && (
             <div className="p-6 bg-slate-50 flex flex-col sm:flex-row gap-4 items-start sm:items-center">
               <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-4 w-full">
-                <input 
-                  type="text" placeholder="Full Name" 
+                <input
+                  type="text" placeholder="Full Name"
                   className="px-3 py-2 border border-slate-200 rounded-lg text-sm w-full"
                   value={editForm.name || ''} onChange={e => setEditForm({...editForm, name: e.target.value})}
                 />
-                <input 
-                  type="text" placeholder="Phone Number (for SMS)" 
+                <input
+                  type="text" placeholder="Phone Number (for SMS)"
                   className="px-3 py-2 border border-slate-200 rounded-lg text-sm w-full"
                   value={editForm.phone || ''} onChange={e => setEditForm({...editForm, phone: e.target.value})}
                 />
-                <input 
-                  type="email" placeholder="Email Address" 
+                <input
+                  type="email" placeholder="Email Address"
                   className="px-3 py-2 border border-slate-200 rounded-lg text-sm w-full"
                   value={editForm.email || ''} onChange={e => setEditForm({...editForm, email: e.target.value})}
                 />
@@ -139,18 +140,18 @@ export function Team({ electricians, setElectricians }: TeamProps) {
             <div key={electrician.id} className="p-6 flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between hover:bg-slate-50 transition-colors">
               {editingId === electrician.id ? (
                 <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-4 w-full">
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     className="px-3 py-2 border border-slate-200 rounded-lg text-sm w-full"
                     value={editForm.name || ''} onChange={e => setEditForm({...editForm, name: e.target.value})}
                   />
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     className="px-3 py-2 border border-slate-200 rounded-lg text-sm w-full"
                     value={editForm.phone || ''} onChange={e => setEditForm({...editForm, phone: e.target.value})}
                   />
-                  <input 
-                    type="email" 
+                  <input
+                    type="email"
                     className="px-3 py-2 border border-slate-200 rounded-lg text-sm w-full"
                     value={editForm.email || ''} onChange={e => setEditForm({...editForm, email: e.target.value})}
                   />
@@ -189,7 +190,7 @@ export function Team({ electricians, setElectricians }: TeamProps) {
               </div>
             </div>
           ))}
-          
+
           {electricians.length === 0 && !isAdding && (
             <div className="p-8 text-center text-slate-500">
               No electricians added yet.

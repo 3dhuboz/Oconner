@@ -1,139 +1,145 @@
-/**
- * Cloudflare-backed REST API client.
- * Replaces the Firebase SDK — all reads/writes go through /api/data/* endpoints.
- * Works identically in dev (Express + SQLite) and prod (CF Workers + D1).
- */
+// Base URL: in dev use '/api' (Vite proxies to Worker), in prod the Worker serves both
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
-const BASE = '/api/data';
-
-/** Generate a short unique ID (collision-resistant for client-side use) */
-export function newId(): string {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
-}
-
-/** Get the current Clerk JWT — Clerk sets window.Clerk after mounting */
-export async function getClerkToken(): Promise<string | null> {
-  try {
-    const clerk = (window as any).Clerk;
-    if (clerk?.session) return await clerk.session.getToken();
-  } catch { /* not logged in or Clerk not yet mounted */ }
-  return null;
-}
-
-/** Drop-in fetch() replacement that automatically adds the Clerk JWT Authorization header */
-export async function apiFetch(url: string, options?: RequestInit): Promise<Response> {
-  const token = await getClerkToken();
-  const authHdr = token ? { Authorization: `Bearer ${token}` } : {};
-  return fetch(url, {
+// All fetch calls include Clerk session token
+export async function apiFetch(path: string, options: RequestInit = {}) {
+  // Get Clerk token from window.__clerk__ or the Clerk instance
+  // Use @clerk/clerk-react's useAuth().getToken() — but since this is outside React,
+  // we store the token getter globally
+  const token = await getAuthToken();
+  const res = await fetch(`${API_BASE}${path}`, {
     ...options,
-    headers: { ...(options?.headers as Record<string, string> || {}), ...authHdr },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers,
+    },
   });
-}
-
-async function req<T>(method: string, path: string, body?: any): Promise<T> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  const token = await getClerkToken();
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-
-  const opts: RequestInit = { method, headers };
-  if (body !== undefined) opts.body = JSON.stringify(body);
-  const res = await fetch(path, opts);
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error((err as any).error || res.statusText);
+    throw new Error(err.error || res.statusText);
   }
-  return res.json() as Promise<T>;
+  return res.json();
 }
 
-// ─── Jobs ──────────────────────────────────────────────────────────────────
+// Token getter — set by AuthContext when Clerk initializes
+let _getToken: (() => Promise<string | null>) | null = null;
+export function setAuthTokenGetter(fn: () => Promise<string | null>) {
+  _getToken = fn;
+}
+async function getAuthToken(): Promise<string | null> {
+  return _getToken ? _getToken() : null;
+}
 
+// ─── Jobs ─────────────────────────────
 export const jobsApi = {
-  list: ()                        => req<any[]>('GET', `${BASE}/jobs`),
-  get:  (id: string)              => req<any>('GET', `${BASE}/jobs?id=${id}`),
-  create: (data: any)             => req<any>('POST', `${BASE}/jobs`, data),
-  update: (id: string, data: any) => req<any>('PUT', `${BASE}/jobs?id=${id}`, data),
-  delete: (id: string)            => req<any>('DELETE', `${BASE}/jobs?id=${id}`),
+  list: () => apiFetch('/jobs'),
+  get: (id: string) => apiFetch(`/jobs/${id}`),
+  create: (data: any) => apiFetch('/jobs', { method: 'POST', body: JSON.stringify(data) }),
+  update: (id: string, data: any) => apiFetch(`/jobs/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  delete: (id: string) => apiFetch(`/jobs/${id}`, { method: 'DELETE' }),
 };
 
-// ─── Electricians ──────────────────────────────────────────────────────────
-
+// ─── Electricians ─────────────────────
 export const electriciansApi = {
-  list: ()                        => req<any[]>('GET', `${BASE}/electricians`),
-  get:  (id: string)              => req<any>('GET', `${BASE}/electricians?id=${id}`),
-  create: (data: any)             => req<any>('POST', `${BASE}/electricians`, data),
-  update: (id: string, data: any) => req<any>('PUT', `${BASE}/electricians?id=${id}`, data),
-  delete: (id: string)            => req<any>('DELETE', `${BASE}/electricians?id=${id}`),
+  list: () => apiFetch('/electricians'),
+  create: (data: any) => apiFetch('/electricians', { method: 'POST', body: JSON.stringify(data) }),
+  update: (id: string, data: any) => apiFetch(`/electricians/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  delete: (id: string) => apiFetch(`/electricians/${id}`, { method: 'DELETE' }),
 };
 
-// ─── Parts catalog ────────────────────────────────────────────────────────
-
-export const partsApi = {
-  list: ()                        => req<any[]>('GET', `${BASE}/parts`),
-  get:  (id: string)              => req<any>('GET', `${BASE}/parts?id=${id}`),
-  upsert: (data: any)             => req<any>('PUT', `${BASE}/parts?id=${data.id}`, data),
-  delete: (id: string)            => req<any>('DELETE', `${BASE}/parts?id=${id}`),
+// ─── Parts Catalog ────────────────────
+export const partsCatalogApi = {
+  list: () => apiFetch('/parts-catalog'),
+  upsert: (data: any) => apiFetch('/parts-catalog', { method: 'POST', body: JSON.stringify(data) }),
+  delete: (id: string) => apiFetch(`/parts-catalog/${id}`, { method: 'DELETE' }),
 };
 
-// ─── User profiles ────────────────────────────────────────────────────────
-
-export const profilesApi = {
-  get:    (id: string)            => req<any>('GET', `${BASE}/profiles?id=${id}`),
-  upsert: (id: string, data: any) => req<any>('PUT', `${BASE}/profiles?id=${id}`, data),
+// ─── Tech Stock ───────────────────────
+export const techStockApi = {
+  list: (technicianId?: string) => apiFetch(`/tech-stock${technicianId ? `?technicianId=${technicianId}` : ''}`),
+  upsert: (data: any) => apiFetch('/tech-stock', { method: 'POST', body: JSON.stringify(data) }),
+  update: (id: string, data: any) => apiFetch(`/tech-stock/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
 };
 
-// ─── Tenants ──────────────────────────────────────────────────────────────
-
-export const tenantsApi = {
-  list: ()                        => req<any[]>('GET', `${BASE}/tenants`),
-  get:  (id: string)              => req<any>('GET', `${BASE}/tenants?id=${id}`),
-  create: (data: any)             => req<any>('POST', `${BASE}/tenants`, data),
-  update: (id: string, data: any) => req<any>('PUT', `${BASE}/tenants?id=${id}`, data),
-  delete: (id: string)            => req<any>('DELETE', `${BASE}/tenants?id=${id}`),
+// ─── Stock Movements ──────────────────
+export const stockMovementsApi = {
+  create: (data: any) => apiFetch('/stock-movements', { method: 'POST', body: JSON.stringify(data) }),
+  list: () => apiFetch('/stock-movements'),
 };
 
-// ─── Tech locations ───────────────────────────────────────────────────────
-
-export const locationsApi = {
-  list: ()                                           => req<any[]>('GET', `${BASE}/locations`),
-  upsert: (uid: string, lat: number, lng: number, accuracy: number) =>
-    req<any>('PUT', `${BASE}/locations?uid=${uid}`, { uid, lat, lng, accuracy }),
+// ─── Tech Locations ───────────────────
+export const techLocationsApi = {
+  list: () => apiFetch('/tech-locations'),
+  upsert: (data: any) => apiFetch('/tech-locations', { method: 'POST', body: JSON.stringify(data) }),
 };
 
-// ─── Settings (integration config) ───────────────────────────────────────
-
+// ─── Settings ─────────────────────────
 export const settingsApi = {
-  get:   (key: string)              => req<any>('GET', `${BASE}/settings?key=${key}`).catch(() => null),
-  save:  (key: string, data: any)   => req<any>('PUT', `${BASE}/settings?key=${key}`, data),
+  get: (key: string) => apiFetch(`/settings/${key}`),
+  set: (key: string, value: any) => apiFetch(`/settings/${key}`, { method: 'POST', body: JSON.stringify(value) }),
 };
 
-// ─── Stock management ─────────────────────────────────────────────────────
-
-export const stockApi = {
-  listItems:     ()                              => req<any[]>('GET', `${BASE}/stock?resource=items`),
-  upsertItem:    (id: string, data: any)         => req<any>('PUT', `${BASE}/stock?resource=items&id=${id}`, data),
-  listMovements: ()                              => req<any[]>('GET', `${BASE}/stock?resource=movements`),
-  addMovement:   (data: any)                     => req<any>('POST', `${BASE}/stock?resource=movements`, data),
+// ─── Tenants ──────────────────────────
+export const tenantsApi = {
+  list: () => apiFetch('/tenants'),
+  create: (data: any) => apiFetch('/tenants', { method: 'POST', body: JSON.stringify(data) }),
+  update: (id: string, data: any) => apiFetch(`/tenants/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  delete: (id: string) => apiFetch(`/tenants/${id}`, { method: 'DELETE' }),
 };
 
-// ─── User profiles (list all — for SuperAdmin) ────────────────────────────
-
-export const usersApi = {
-  list: () => req<any[]>('GET', `${BASE}/profiles`),
+// ─── User Profiles ────────────────────
+export const userProfilesApi = {
+  list: () => apiFetch('/user-profiles'),
+  get: (uid: string) => apiFetch(`/user-profiles/${uid}`),
+  upsert: (data: any) => apiFetch('/user-profiles', { method: 'POST', body: JSON.stringify(data) }),
+  update: (uid: string, data: any) => apiFetch(`/user-profiles/${uid}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  delete: (uid: string) => apiFetch(`/user-profiles/${uid}`, { method: 'DELETE' }),
 };
 
-// ─── File storage (R2) ────────────────────────────────────────────────────
+// ─── Licenses ─────────────────────────
+export const licensesApi = {
+  list: (tenantId?: string) => apiFetch(`/licenses${tenantId ? `?tenantId=${tenantId}` : ''}`),
+  create: (data: any) => apiFetch('/licenses', { method: 'POST', body: JSON.stringify(data) }),
+  update: (id: string, data: any) => apiFetch(`/licenses/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  delete: (id: string) => apiFetch(`/licenses/${id}`, { method: 'DELETE' }),
+};
 
-export const storageApi = {
-  /** Upload a file as base64 and get back a public URL */
-  upload: (fileName: string, contentType: string, base64: string) =>
-    req<{ url: string; key: string }>('POST', '/api/storage/upload', { fileName, contentType, base64 }),
+// ─── Integrations ─────────────────────
+export const smsApi = {
+  send: (data: any) => apiFetch('/sms/send', { method: 'POST', body: JSON.stringify(data) }),
+  test: (data: any) => apiFetch('/sms/test', { method: 'POST', body: JSON.stringify(data) }),
+};
 
-  /** Convert a File/Blob to base64 string */
-  toBase64: (file: File): Promise<string> =>
-    new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve((reader.result as string).split(',')[1]);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    }),
+export const stripeApi = {
+  plans: () => apiFetch('/stripe/plans'),
+  createCheckout: (data: any) => apiFetch('/stripe/create-checkout-session', { method: 'POST', body: JSON.stringify(data) }),
+  createPaymentLink: (data: any) => apiFetch('/stripe/create-payment-link', { method: 'POST', body: JSON.stringify(data) }),
+};
+
+export const xeroApi = {
+  status: () => apiFetch('/xero/status'),
+  createInvoice: (data: any) => apiFetch('/xero/invoice', { method: 'POST', body: JSON.stringify(data) }),
+};
+
+export const form9Api = {
+  generate: async (data: any) => {
+    const token = await getAuthToken();
+    const res = await fetch(`${API_BASE}/form9/generate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to generate Form 9');
+    return res.blob();
+  },
+};
+
+export const uploadsApi = {
+  getPresignedUrl: (filename: string, contentType: string) =>
+    apiFetch('/uploads/presign', { method: 'POST', body: JSON.stringify({ filename, contentType }) }),
+  getUrl: (key: string) => `${API_BASE}/uploads/${key}`,
 };

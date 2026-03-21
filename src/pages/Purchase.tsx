@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { Zap, CheckCircle2, Shield, Users, CreditCard, ArrowRight, Loader2, ExternalLink, Headphones } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { tenantsApi, profilesApi, newId } from '../services/api';
+import { tenantsApi, licensesApi, userProfilesApi } from '../services/api';
+import { SignUp } from '@clerk/clerk-react';
 import toast from 'react-hot-toast';
 
 const PLANS = [
@@ -61,65 +62,12 @@ const EXTRA_TECH_PRICE = 29;
 export function Purchase() {
   const [selectedPlan, setSelectedPlan] = useState('professional');
   const [extraTechs, setExtraTechs] = useState(0);
-  const [step, setStep] = useState<'plan' | 'details' | 'confirm'>('plan');
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [form, setForm] = useState({
-    companyName: '',
-    contactName: '',
-    contactEmail: '',
-    contactPhone: '',
-    password: '',
-  });
-  const { register, user } = useAuth();
+  const [step, setStep] = useState<'plan' | 'signup'>('plan');
+  const { user } = useAuth();
   const navigate = useNavigate();
 
   const plan = PLANS.find(p => p.id === selectedPlan)!;
   const totalMonthly = plan.price + (extraTechs * EXTRA_TECH_PRICE);
-
-  const handlePurchase = async () => {
-    if (!form.companyName || !form.contactEmail || !form.password) {
-      toast.error('Please fill in all required fields');
-      return;
-    }
-    if (form.password.length < 6) {
-      toast.error('Password must be at least 6 characters');
-      return;
-    }
-
-    setIsProcessing(true);
-    try {
-      // 1. Create Clerk account
-      await register(form.contactEmail, form.password);
-
-      // 2. Create tenant via REST API
-      const tenantId = newId();
-      await tenantsApi.create({
-        id: tenantId,
-        companyName: form.companyName,
-        contactName: form.contactName,
-        contactEmail: form.contactEmail,
-        contactPhone: form.contactPhone,
-        plan: selectedPlan,
-        status: 'active',
-        adminLicenses: 1,
-        techLicenses: 1 + extraTechs,
-        maxTechLicenses: plan.maxTech,
-        createdAt: new Date().toISOString(),
-      });
-
-      // 3. Profile will be created by AuthContext on first login;
-      //    store pending tenant assignment in sessionStorage for AuthContext to pick up.
-      sessionStorage.setItem('pending_tenant_id', tenantId);
-
-      toast.success('Account created! Welcome to Wirez R Us!');
-      // Navigate to dashboard after a brief delay
-      setTimeout(() => navigate('/'), 2000);
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to create account');
-    } finally {
-      setIsProcessing(false);
-    }
-  };
 
   // If already logged in, redirect
   if (user) {
@@ -161,8 +109,8 @@ export function Purchase() {
       <div className="max-w-6xl mx-auto py-12 px-4">
         {/* Step Indicator */}
         <div className="flex items-center justify-center gap-4 mb-12">
-          {['Choose Plan', 'Your Details', 'Confirm'].map((label, i) => {
-            const stepMap = ['plan', 'details', 'confirm'];
+          {['Choose Plan', 'Create Account'].map((label, i) => {
+            const stepMap = ['plan', 'signup'];
             const isActive = stepMap.indexOf(step) >= i;
             return (
               <React.Fragment key={label}>
@@ -239,7 +187,7 @@ export function Purchase() {
                 Total: ${totalMonthly}<span className="text-sm font-normal text-slate-500">/month</span>
               </div>
               <button
-                onClick={() => setStep('details')}
+                onClick={() => setStep('signup')}
                 className="inline-flex items-center gap-2 px-8 py-3 bg-[#F5A623] text-slate-900 rounded-xl font-bold text-lg hover:bg-[#F5A623] transition-colors"
               >
                 Continue <ArrowRight className="w-5 h-5" />
@@ -248,151 +196,37 @@ export function Purchase() {
           </div>
         )}
 
-        {/* STEP 2: Customer Details */}
-        {step === 'details' && (
+        {/* STEP 2: Clerk Sign Up */}
+        {step === 'signup' && (
           <div className="max-w-xl mx-auto space-y-8">
             <div className="text-center">
-              <h1 className="text-3xl font-bold text-slate-900">Your Details</h1>
-              <p className="text-slate-500 mt-2">This creates your admin account and company profile.</p>
-            </div>
-
-            <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm space-y-5">
-              <div className="space-y-1">
-                <label className="text-sm font-medium text-slate-700">Company Name *</label>
-                <input
-                  type="text"
-                  required
-                  value={form.companyName}
-                  onChange={e => setForm(p => ({ ...p, companyName: e.target.value }))}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#F5A623] focus:border-[#F5A623]"
-                  placeholder="e.g. Spark Electrical"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-sm font-medium text-slate-700">Your Name</label>
-                <input
-                  type="text"
-                  value={form.contactName}
-                  onChange={e => setForm(p => ({ ...p, contactName: e.target.value }))}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#F5A623] focus:border-[#F5A623]"
-                  placeholder="e.g. John Smith"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-sm font-medium text-slate-700">Email Address * (this will be your login)</label>
-                <input
-                  type="email"
-                  required
-                  value={form.contactEmail}
-                  onChange={e => setForm(p => ({ ...p, contactEmail: e.target.value }))}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#F5A623] focus:border-[#F5A623]"
-                  placeholder="you@company.com"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-sm font-medium text-slate-700">Phone</label>
-                <input
-                  type="tel"
-                  value={form.contactPhone}
-                  onChange={e => setForm(p => ({ ...p, contactPhone: e.target.value }))}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#F5A623] focus:border-[#F5A623]"
-                  placeholder="04XX XXX XXX"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-sm font-medium text-slate-700">Create Password * (min 6 characters)</label>
-                <input
-                  type="password"
-                  required
-                  minLength={6}
-                  value={form.password}
-                  onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#F5A623] focus:border-[#F5A623]"
-                  placeholder="••••••••"
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <button onClick={() => setStep('plan')} className="text-sm text-slate-500 hover:text-slate-700">&larr; Back to plans</button>
-              <button
-                onClick={() => {
-                  if (!form.companyName || !form.contactEmail || !form.password) {
-                    toast.error('Please fill in all required fields');
-                    return;
-                  }
-                  setStep('confirm');
-                }}
-                className="inline-flex items-center gap-2 px-8 py-3 bg-[#F5A623] text-slate-900 rounded-xl font-bold hover:bg-[#F5A623] transition-colors"
-              >
-                Review Order <ArrowRight className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* STEP 3: Confirm */}
-        {step === 'confirm' && (
-          <div className="max-w-xl mx-auto space-y-8">
-            <div className="text-center">
-              <h1 className="text-3xl font-bold text-slate-900">Confirm Your Order</h1>
-              <p className="text-slate-500 mt-2">Review your plan and details before activating.</p>
-            </div>
-
-            <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm space-y-6">
-              <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-                <div>
-                  <p className="font-bold text-slate-900 text-lg">{plan.name} Plan</p>
-                  <p className="text-sm text-slate-500">1 Admin + 1 Tech license included</p>
-                </div>
-                <p className="font-bold text-slate-900 text-xl">${plan.price}/mo</p>
-              </div>
-
-              {extraTechs > 0 && (
-                <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-                  <div>
-                    <p className="font-medium text-slate-900">{extraTechs} Extra Technician License{extraTechs > 1 ? 's' : ''}</p>
-                    <p className="text-sm text-slate-500">${EXTRA_TECH_PRICE}/mo each</p>
-                  </div>
-                  <p className="font-bold text-slate-900">${extraTechs * EXTRA_TECH_PRICE}/mo</p>
-                </div>
-              )}
-
-              <div className="flex items-center justify-between text-lg">
-                <p className="font-bold text-slate-900">Total</p>
-                <p className="font-bold text-[#E8862A] text-2xl">${totalMonthly}/mo</p>
-              </div>
-
-              <div className="bg-slate-50 rounded-xl p-4 space-y-2 text-sm">
-                <div className="flex justify-between"><span className="text-slate-500">Company</span><span className="font-medium">{form.companyName}</span></div>
-                <div className="flex justify-between"><span className="text-slate-500">Admin</span><span className="font-medium">{form.contactName || form.contactEmail}</span></div>
-                <div className="flex justify-between"><span className="text-slate-500">Email</span><span className="font-medium">{form.contactEmail}</span></div>
-                <div className="flex justify-between"><span className="text-slate-500">Phone</span><span className="font-medium">{form.contactPhone || 'Not provided'}</span></div>
-                <div className="flex justify-between"><span className="text-slate-500">Total Licenses</span><span className="font-medium">1 Admin + {1 + extraTechs} Tech</span></div>
-              </div>
-
-              <button
-                onClick={handlePurchase}
-                disabled={isProcessing}
-                className="w-full py-4 bg-[#F5A623] text-slate-900 rounded-xl font-bold text-lg hover:bg-[#F5A623] transition-colors flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
-              >
-                {isProcessing ? (
-                  <><Loader2 className="w-5 h-5 animate-spin" /> Creating your account...</>
-                ) : (
-                  <><CreditCard className="w-5 h-5" /> Activate Account &mdash; ${totalMonthly}/mo</>
-                )}
-              </button>
-
-              <p className="text-xs text-slate-400 text-center">
-                By continuing, you agree to the Wirez R Us Terms of Service. Need help?{' '}
-                <a href="https://www.facebook.com/pennywiseitoz" target="_blank" rel="noopener noreferrer" className="text-[#E8862A] hover:underline">
-                  Contact Penny Wise I.T
-                </a>
+              <h1 className="text-3xl font-bold text-slate-900">Create Your Account</h1>
+              <p className="text-slate-500 mt-2">
+                {plan.name} Plan &mdash; ${totalMonthly}/mo ({1 + extraTechs} tech license{1 + extraTechs > 1 ? 's' : ''})
               </p>
             </div>
 
+            <SignUp
+              appearance={{
+                elements: {
+                  rootBox: 'w-full mx-auto',
+                  card: 'bg-white border border-slate-200 shadow-lg',
+                  headerTitle: 'text-slate-900',
+                  headerSubtitle: 'text-slate-500',
+                  formFieldLabel: 'text-slate-700',
+                  formFieldInput: 'border-slate-200 focus:ring-[#F5A623] focus:border-[#F5A623]',
+                  formButtonPrimary: 'bg-[#F5A623] hover:bg-[#E8862A] text-slate-900 font-bold',
+                  footerActionLink: 'text-[#E8862A] hover:text-[#F5A623]',
+                },
+              }}
+              routing="path"
+              path="/purchase"
+              signInUrl="/login"
+              forceRedirectUrl="/"
+            />
+
             <div className="flex items-center justify-between">
-              <button onClick={() => setStep('details')} className="text-sm text-slate-500 hover:text-slate-700">&larr; Back to details</button>
+              <button onClick={() => setStep('plan')} className="text-sm text-slate-500 hover:text-slate-700">&larr; Back to plans</button>
             </div>
           </div>
         )}

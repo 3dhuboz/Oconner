@@ -42,6 +42,7 @@ export function NewJob({ electricians }: NewJobProps) {
       toast.error('Tenant name and property address are required.');
       return;
     }
+
     setSaving(true);
     try {
       const id = `WO-${Date.now()}`;

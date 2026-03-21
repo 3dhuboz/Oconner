@@ -26,7 +26,7 @@ export function useSyncStatus(): SyncStatus {
 // ─── Offline-aware job update ───────────────────────────────────
 export function useOfflineJobUpdate() {
   /**
-   * Updates a job. If online, updates via REST API.
+   * Updates a job. If online, updates via API.
    * If offline, writes to IndexedDB and queues for sync.
    */
   const updateJobOffline = useCallback(async (

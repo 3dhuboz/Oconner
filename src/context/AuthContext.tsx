@@ -1,9 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { useUser, useSignIn, useSignUp, useClerk } from '@clerk/react';
-import { profilesApi, tenantsApi } from '../services/api';
-import type { Tenant, UserRole } from '../types';
+import { useUser, useAuth as useClerkAuth, useClerk } from '@clerk/clerk-react';
+import { userProfilesApi, setAuthTokenGetter } from '../services/api';
+import type { UserRole } from '../types';
 
-// Developer emails — only these get dev access
+// Developer emails — these get dev access
 const DEV_EMAILS = ['admin@cupcycle.au', 'steve@3dhub.au'];
 
 interface User {
@@ -31,126 +31,130 @@ interface AuthContextType {
   backendStatus: { database: boolean; api: boolean; latency: number };
   login: (email: string, pass: string) => Promise<void>;
   register: (email: string, pass: string) => Promise<void>;
-  logout: () => Promise<void>;
+  logout: () => void;
   isLoading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// ─── Inner provider (must be inside ClerkProvider) ────────────────────────────
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const { user: clerkUser, isLoaded: clerkLoaded } = useUser();
-  const { signIn } = useSignIn();
-  const { signUp } = useSignUp();
-  const { signOut } = useClerk();
-
+  const { user: clerkUser, isLoaded, isSignedIn } = useUser();
+  const { getToken, signOut } = useClerkAuth();
+  const clerk = useClerk();
   const [user, setUser] = useState<User | null>(null);
   const [license, setLicense] = useState<LicenseInfo | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [backendStatus, setBackendStatus] = useState({ database: true, api: true, latency: 45 });
 
-  // Sync Clerk user → D1 profile → app user state
+  // Register the token getter for the API client
   useEffect(() => {
-    if (!clerkLoaded) return;
+    setAuthTokenGetter(() => getToken());
+  }, [getToken]);
 
-    if (!clerkUser) {
+  // Load user profile when Clerk user changes
+  useEffect(() => {
+    if (!isLoaded) return;
+
+    if (!isSignedIn || !clerkUser) {
       setUser(null);
       setLicense(null);
+      setIsLoading(false);
       return;
     }
 
-    const email = clerkUser.emailAddresses[0]?.emailAddress || '';
-    const uid = clerkUser.id;
-    const displayName = clerkUser.fullName || clerkUser.firstName || 'User';
+    const email = clerkUser.primaryEmailAddress?.emailAddress || '';
+    const isDev = DEV_EMAILS.includes(email);
 
-    // Dev shortcut — no D1 lookup needed
-    if (DEV_EMAILS.includes(email)) {
-      setUser({ email, name: displayName, role: 'dev', uid });
+    if (isDev) {
+      setUser({
+        email,
+        name: clerkUser.fullName || 'Developer',
+        role: 'dev',
+        uid: clerkUser.id,
+      });
       setLicense({ status: 'Active', plan: 'Developer', type: 'dev' });
+      setIsLoading(false);
       return;
     }
 
-    // Load profile via REST API
+    // Look up user profile from D1 via API
     (async () => {
       try {
-        const profile = await profilesApi.get(uid).catch(() => null);
+        const profile = await userProfilesApi.get(clerkUser.id);
+        setUser({
+          email,
+          name: profile.displayName || clerkUser.fullName || 'User',
+          role: (profile.role as UserRole) || 'user',
+          uid: clerkUser.id,
+          tenantId: profile.tenantId,
+          licenseId: profile.licenseId,
+        });
 
-        if (profile) {
-          setUser({
-            email,
-            name: profile.displayName || displayName,
-            role: (profile.role as UserRole) || 'user',
-            uid,
-            tenantId: profile.tenantId,
-            licenseId: profile.licenseId,
+        if (profile.tenantId) {
+          // Tenant info is included in profile response or fetch separately
+          // For now set basic license info
+          setLicense({
+            status: 'Active',
+            plan: 'Professional',
+            type: profile.role === 'admin' ? 'admin' : 'technician',
           });
-
-          if (profile.tenantId) {
-            const tenant = await tenantsApi.get(profile.tenantId).catch(() => null) as Tenant | null;
-            if (tenant) {
-              setLicense({
-                status: tenant.status === 'active' ? 'Active' : 'Suspended',
-                plan: tenant.plan.charAt(0).toUpperCase() + tenant.plan.slice(1),
-                type: profile.role === 'admin' ? 'admin' : 'technician',
-                tenantName: tenant.companyName,
-                adminLicenses: tenant.adminLicenses,
-                techLicenses: tenant.techLicenses,
-                maxTechLicenses: tenant.maxTechLicenses,
-              });
-            }
-          } else {
-            setLicense({ status: 'No License', plan: 'None' });
-          }
-
-          await profilesApi.upsert(uid, { lastLogin: new Date().toISOString() });
         } else {
-          // First login — check for pending tenant from Purchase.tsx signup
-          const pendingTenantId = sessionStorage.getItem('pending_tenant_id');
-          if (pendingTenantId) sessionStorage.removeItem('pending_tenant_id');
-
-          await profilesApi.upsert(uid, {
-            uid, email, displayName,
-            role: pendingTenantId ? 'admin' : 'user',
-            tenantId: pendingTenantId || undefined,
-            createdAt: new Date().toISOString(),
-            isActive: true,
-          });
-          setUser({ email, name: displayName, role: pendingTenantId ? 'admin' : 'user', uid });
-          setLicense({ status: pendingTenantId ? 'Active' : 'No License', plan: pendingTenantId ? 'Pending' : 'None' });
+          setLicense({ status: 'No License', plan: 'None' });
         }
-      } catch {
-        // API not available yet (first boot / dev)
-        setUser({ email, name: displayName, role: 'user', uid });
-        setLicense({ status: 'Active', plan: 'Offline Mode' });
-      }
-    })();
-  }, [clerkUser, clerkLoaded]);
 
-  // Backend health monitor
+        // Update last login
+        await userProfilesApi.update(clerkUser.id, { lastLogin: new Date().toISOString() });
+      } catch {
+        // New user — create profile
+        const newProfile = {
+          uid: clerkUser.id,
+          email,
+          displayName: clerkUser.fullName || 'New User',
+          role: 'user',
+          createdAt: new Date().toISOString(),
+          isActive: true,
+        };
+        try {
+          await userProfilesApi.upsert(newProfile);
+        } catch { /* swallow — may fail if API not ready */ }
+
+        setUser({
+          email,
+          name: clerkUser.fullName || 'New User',
+          role: 'user',
+          uid: clerkUser.id,
+        });
+        setLicense({ status: 'No License', plan: 'None' });
+      }
+      setIsLoading(false);
+    })();
+  }, [isLoaded, isSignedIn, clerkUser]);
+
+  // Backend monitoring
   useEffect(() => {
     const interval = setInterval(() => {
-      setBackendStatus(prev => ({ ...prev, database: navigator.onLine, api: navigator.onLine, latency: navigator.onLine ? prev.latency : 0 }));
+      setBackendStatus(prev => ({
+        ...prev,
+        api: navigator.onLine,
+        latency: navigator.onLine ? prev.latency : 0,
+      }));
     }, 10000);
     return () => clearInterval(interval);
   }, []);
 
   const login = async (email: string, pass: string) => {
-    if (!signIn) throw new Error('Clerk not initialized');
-    const result = await (signIn as any).create({ identifier: email, password: pass });
-    if (result?.status && result.status !== 'complete') throw new Error('Sign-in incomplete. Check your email for a verification link.');
+    // With Clerk, login is handled by Clerk components (<SignIn>)
+    // This method exists for backward compat — redirect to Clerk sign-in
+    throw new Error('Use Clerk sign-in components');
   };
 
   const register = async (email: string, pass: string) => {
-    if (!signUp) throw new Error('Clerk not initialized');
-    await (signUp as any).create({ emailAddress: email, password: pass });
+    throw new Error('Use Clerk sign-up components');
   };
 
   const logout = async () => {
     await signOut();
-    setUser(null);
-    setLicense(null);
   };
-
-  const isLoading = !clerkLoaded;
 
   return (
     <AuthContext.Provider value={{ user, license, backendStatus, login, register, logout, isLoading }}>

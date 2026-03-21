@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Electrician, CatalogPart } from '../types';
 import { Package, Search, Plus, Minus, BarChart3, ScanBarcode, RefreshCw, ChevronDown, ChevronRight, Truck, Warehouse, ArrowRight, ShoppingCart } from 'lucide-react';
 import { cn } from '../utils';
-import { stockApi } from '../services/api';
+import { techStockApi, stockMovementsApi } from '../services/api';
 
 const HQ_ID = '__HQ__';
 const HQ_NAME = 'HQ Warehouse';
@@ -42,29 +42,32 @@ interface StocktakeProps {
   partsCatalog: CatalogPart[];
 }
 
-// ─── Helper: upsert a stock item via REST API ──────────────
+// ─── Helper: upsert a stock doc (increment or create) ──────────
 async function upsertStock(
   locationId: string,
   locationName: string,
   part: CatalogPart,
   qty: number,
-  currentStock: any[],
+  currentStock: StockItem[],
 ) {
   const stockKey = `${locationId}_${part.id}`;
   const existing = currentStock.find(s => s.id === stockKey);
-  const current = existing?.quantity || 0;
-  await stockApi.upsertItem(stockKey, {
-    id: stockKey,
-    partId: part.id,
-    partName: part.name,
-    barcode: part.barcode || null,
-    technicianId: locationId,
-    technicianName: locationName,
-    quantity: Math.max(0, current + qty),
-    sellPrice: part.sellPrice ?? part.defaultCost,
-    costPrice: part.costPrice ?? part.defaultCost,
-    lastUpdated: new Date().toISOString(),
-  });
+  if (existing) {
+    await techStockApi.update(stockKey, { quantity: Math.max(0, existing.quantity + qty), lastUpdated: new Date().toISOString() });
+  } else {
+    await techStockApi.upsert({
+      id: stockKey,
+      partId: part.id,
+      partName: part.name,
+      barcode: part.barcode || null,
+      technicianId: locationId,
+      technicianName: locationName,
+      quantity: Math.max(0, qty),
+      sellPrice: part.sellPrice ?? part.defaultCost,
+      costPrice: part.costPrice ?? part.defaultCost,
+      lastUpdated: new Date().toISOString(),
+    });
+  }
 }
 
 export function Stocktake({ electricians, partsCatalog }: StocktakeProps) {
@@ -85,27 +88,30 @@ export function Stocktake({ electricians, partsCatalog }: StocktakeProps) {
   const [formSupplier, setFormSupplier] = useState('');
   const [formSaving, setFormSaving] = useState(false);
 
-  // ─── Poll stock + movements every 30s ────────────────────────────
+  // ─── Poll API for stock data ────────────────────────────────
   useEffect(() => {
-    const fetch = async () => {
-      try { setStock((await stockApi.listItems()) as StockItem[]); } catch {}
-    };
-    fetch();
-    const id = setInterval(fetch, 30_000);
-    return () => clearInterval(id);
+    async function fetchStock() {
+      try {
+        const data = await techStockApi.list();
+        setStock(data);
+      } catch (err: any) { console.warn('Stock fetch error:', err.message); }
+    }
+    fetchStock();
+    const interval = setInterval(fetchStock, 5000);
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
-    const fetch = async () => {
+    async function fetchMovements() {
       try {
-        const items = (await stockApi.listMovements()) as StockMovementItem[];
-        items.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        const items = await stockMovementsApi.list();
+        items.sort((a: StockMovementItem, b: StockMovementItem) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
         setMovements(items.slice(0, 150));
-      } catch {}
-    };
-    fetch();
-    const id = setInterval(fetch, 30_000);
-    return () => clearInterval(id);
+      } catch (err: any) { console.warn('Movements fetch error:', err.message); }
+    }
+    fetchMovements();
+    const interval = setInterval(fetchMovements, 10000);
+    return () => clearInterval(interval);
   }, []);
 
   // ─── Derived data ───────────────────────────────────────────
@@ -158,7 +164,7 @@ export function Stocktake({ electricians, partsCatalog }: StocktakeProps) {
     if (!part) { setFormSaving(false); return; }
     try {
       await upsertStock(HQ_ID, HQ_NAME, part, formQty, stock);
-      await stockApi.addMovement({
+      await stockMovementsApi.create({
         partId: part.id, partName: part.name, barcode: part.barcode || null,
         technicianId: HQ_ID,
         type: 'stock_in', quantity: formQty,
@@ -178,6 +184,7 @@ export function Stocktake({ electricians, partsCatalog }: StocktakeProps) {
     if (!part) { setFormSaving(false); return; }
     const tech = electricians.find(e => e.id === formTechId);
 
+    // Check HQ has enough
     const hqItem = stock.find(s => s.technicianId === HQ_ID && s.partId === formPartId);
     const hqQty = hqItem?.quantity || 0;
     if (hqQty < formQty) {
@@ -189,7 +196,7 @@ export function Stocktake({ electricians, partsCatalog }: StocktakeProps) {
     try {
       await upsertStock(HQ_ID, HQ_NAME, part, -formQty, stock);
       await upsertStock(formTechId, tech?.name || formTechId, part, formQty, stock);
-      await stockApi.addMovement({
+      await stockMovementsApi.create({
         partId: part.id, partName: part.name, barcode: part.barcode || null,
         technicianId: formTechId,
         type: 'transfer', quantity: formQty,
@@ -212,7 +219,7 @@ export function Stocktake({ electricians, partsCatalog }: StocktakeProps) {
 
     try {
       await upsertStock(formTechId, tech?.name || formTechId, part, formQty, stock);
-      await stockApi.addMovement({
+      await stockMovementsApi.create({
         partId: part.id, partName: part.name, barcode: part.barcode || null,
         technicianId: formTechId,
         type: 'stock_in', quantity: formQty,
@@ -227,15 +234,14 @@ export function Stocktake({ electricians, partsCatalog }: StocktakeProps) {
   // Adjust stock quantity inline (works for HQ or tech)
   const handleAdjust = async (item: StockItem, delta: number) => {
     const newQty = Math.max(0, item.quantity + delta);
-    await stockApi.upsertItem(item.id, { ...item, quantity: newQty, lastUpdated: new Date().toISOString() });
-    await stockApi.addMovement({
+    await techStockApi.update(item.id, { quantity: newQty, lastUpdated: new Date().toISOString() });
+    await stockMovementsApi.create({
       partId: item.partId, partName: item.partName, barcode: item.barcode || null,
       technicianId: item.technicianId,
       type: 'adjust', quantity: delta,
       reason: `Manual ${delta > 0 ? 'increase' : 'decrease'}${item.technicianId === HQ_ID ? ' (HQ)' : ''}`,
       timestamp: new Date().toISOString(),
     });
-    setStock(prev => prev.map(s => s.id === item.id ? { ...s, quantity: newQty } : s));
   };
 
   // ─── Shared stock row renderer ──────────────────────────────

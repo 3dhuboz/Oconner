@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { APIProvider, Map, AdvancedMarker, InfoWindow } from '@vis.gl/react-google-maps';
-import { locationsApi } from '../services/api';
+import { techLocationsApi } from '../services/api';
 import { Job, Electrician } from '../types';
 import { MapPin, Users, Briefcase, Navigation, Clock, Zap, RefreshCw, Layers } from 'lucide-react';
 import { cn } from '../utils';
@@ -34,18 +34,29 @@ export function LiveMap({ jobs, electricians }: LiveMapProps) {
   const [showTechs, setShowTechs] = useState(true);
   const [lastRefresh, setLastRefresh] = useState(new Date());
 
-  // Poll tech locations every 15s
+  // Poll for tech locations instead of real-time listener
   useEffect(() => {
+    let active = true;
+
     const fetchLocations = async () => {
       try {
-        const locs = (await locationsApi.list()) as TechLocation[];
-        setTechLocations(locs);
-        setLastRefresh(new Date());
-      } catch (err) { console.warn('[LiveMap] Tech locations fetch error'); }
+        const locs = await techLocationsApi.list();
+        if (active) {
+          setTechLocations(Array.isArray(locs) ? locs : []);
+          setLastRefresh(new Date());
+        }
+      } catch (err) {
+        console.warn('[LiveMap] Tech locations fetch error:', err);
+      }
     };
+
     fetchLocations();
-    const id = setInterval(fetchLocations, 15_000);
-    return () => clearInterval(id);
+    const interval = setInterval(fetchLocations, 10000); // Poll every 10 seconds
+
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
   }, []);
 
   // Active jobs (not closed) for map pins
@@ -96,7 +107,7 @@ export function LiveMap({ jobs, electricians }: LiveMapProps) {
             <li>Go to <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Google Cloud Console</a></li>
             <li>Create an API key with Maps JavaScript API, Geocoding API, and Places API enabled</li>
             <li>Add to <code className="bg-slate-100 px-1.5 py-0.5 rounded text-xs">.env</code>: <code className="bg-slate-100 px-1.5 py-0.5 rounded text-xs">VITE_GOOGLE_MAPS_API_KEY=your-key</code></li>
-            <li>Add to Cloudflare dashboard secrets and redeploy</li>
+            <li>Add to Cloudflare Pages environment variables and redeploy</li>
           </ol>
         </div>
       </div>
@@ -200,7 +211,7 @@ export function LiveMap({ jobs, electricians }: LiveMapProps) {
                     <p className="flex items-center gap-1"><MapPin className="w-3 h-3" /> {selectedTech.lat.toFixed(5)}, {selectedTech.lng.toFixed(5)}</p>
                     <p className="flex items-center gap-1"><Navigation className="w-3 h-3" /> Accuracy: {Math.round(selectedTech.accuracy)}m</p>
                     {selectedTech.updatedAt && (
-                      <p className="flex items-center gap-1"><Clock className="w-3 h-3" /> Last ping: {selectedTech.updatedAt?.toDate ? format(selectedTech.updatedAt.toDate(), 'h:mm:ss a') : 'just now'}</p>
+                      <p className="flex items-center gap-1"><Clock className="w-3 h-3" /> Last ping: {typeof selectedTech.updatedAt === 'string' ? format(new Date(selectedTech.updatedAt), 'h:mm:ss a') : 'just now'}</p>
                     )}
                   </div>
                 </div>

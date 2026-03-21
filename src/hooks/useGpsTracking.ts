@@ -1,7 +1,8 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { locationsApi } from '../services/api';
+import { techLocationsApi } from '../services/api';
 
 interface GpsOptions {
+  /** User ID for tech location tracking */
   uid: string;
   /** Update interval in ms (default 30s) */
   intervalMs?: number;
@@ -11,7 +12,7 @@ interface GpsOptions {
 
 /**
  * Background GPS tracker for technicians.
- * Writes { lat, lng, accuracy, updatedAt } to D1 via REST API every N seconds.
+ * Posts { lat, lng, accuracy, updatedAt } to the Worker API every N seconds.
  * Runs via the browser Geolocation API — works on mobile Chrome/Safari.
  */
 export function useGpsTracking({ uid, intervalMs = 30_000, enabled = true }: GpsOptions) {
@@ -22,7 +23,13 @@ export function useGpsTracking({ uid, intervalMs = 30_000, enabled = true }: Gps
   const writeLocation = useCallback(async (lat: number, lng: number, accuracy: number) => {
     if (!uid) return;
     try {
-      await locationsApi.upsert(uid, lat, lng, accuracy);
+      await techLocationsApi.upsert({
+        uid,
+        lat,
+        lng,
+        accuracy,
+        updatedAt: new Date().toISOString(),
+      });
     } catch (err) {
       console.warn('[GPS] Failed to write location:', err);
     }
@@ -58,7 +65,7 @@ export function useGpsTracking({ uid, intervalMs = 30_000, enabled = true }: Gps
       { enableHighAccuracy: true, maximumAge: 15000 }
     );
 
-    // Write to D1 on interval (not every GPS tick — saves writes)
+    // Write to API on interval (not every GPS tick — saves bandwidth)
     intervalId.current = setInterval(() => {
       if (lastPos.current) {
         writeLocation(lastPos.current.lat, lastPos.current.lng, lastPos.current.accuracy);

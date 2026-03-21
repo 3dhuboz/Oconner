@@ -1,59 +1,42 @@
-name = "wirez-r-us"
-compatibility_date = "2024-09-23"
-compatibility_flags = ["nodejs_compat"]
+name = "wirez-r-us-api"
+main = "worker/index.ts"
+compatibility_date = "2024-12-01"
 
-# Static assets served by Cloudflare Pages
-pages_build_output_dir = "dist"
+[vars]
+ENVIRONMENT = "production"
 
-# NOTE: Cloudflare Pages does not support [triggers] crons.
-# To poll Gmail every 5 minutes, use one of:
-#   a) A separate Cloudflare Worker (wrangler deploy) with a cron trigger calling POST /api/email/poll-inbox
-#   b) An external service like cron-job.org hitting: https://wirezrus.pages.dev/api/email/poll-inbox
-#      with Authorization: Bearer <CRON_SECRET>
-
-# Cloudflare D1 database
+# D1 Database
 [[d1_databases]]
 binding = "DB"
 database_name = "wirez-r-us-db"
-database_id = ""   # set after: wrangler d1 create wirez-r-us-db
+database_id = "4e54dda5-f1e0-417e-b0ce-145fddadc15c"
 
-# Cloudflare R2 bucket
+# R2 Bucket for photos/files
 [[r2_buckets]]
-binding = "R2"
+binding = "STORAGE"
 bucket_name = "wirez-r-us-uploads"
 
-# Environment variables (non-secret — secrets go in Cloudflare dashboard)
-[vars]
-APP_URL = "https://wirezrus.pages.dev"
-GMAIL_ADDRESS = "steve061278@gmail.com"
-COMPANY_PHONE = "1300 WIREZ US"
-R2_PUBLIC_URL = ""   # set after enabling public access on the R2 bucket: https://pub-<hash>.r2.dev
+# Cron triggers (replaces Vercel cron)
+[triggers]
+crons = ["*/5 * * * *"]  # email polling every 5 minutes
 
-# ── How to deploy ────────────────────────────────────────────────────────────
-# 1. Install Wrangler:  npm install -g wrangler
-# 2. Login:             wrangler login
-# 3. Build:             npm run build
-# 4. Deploy:            wrangler pages deploy dist
-#
-# ── Build-time env vars (set in Cloudflare Pages dashboard > Settings > Environment variables) ──
-# VITE_* vars are embedded by Vite at BUILD time — must be Pages build env vars, NOT runtime secrets:
-#   VITE_CLERK_PUBLISHABLE_KEY   (from Clerk dashboard > API Keys)
-#   VITE_STRIPE_PUBLISHABLE_KEY  (from Stripe dashboard)
-#   VITE_GOOGLE_MAPS_API_KEY     (from Google Cloud Console)
-#
-# ── Runtime secrets (set via Cloudflare dashboard or CLI) ────────────────────
-# wrangler secret put CLERK_SECRET_KEY
-# wrangler secret put GMAIL_CLIENT_ID
-# wrangler secret put GMAIL_CLIENT_SECRET
-# wrangler secret put GMAIL_REFRESH_TOKEN
-# wrangler secret put RESEND_API_KEY
-# wrangler secret put RESEND_FROM_EMAIL
-# wrangler secret put OPENROUTER_API_KEY
-# wrangler secret put TWILIO_ACCOUNT_SID
-# wrangler secret put TWILIO_AUTH_TOKEN
-# wrangler secret put TWILIO_PHONE_NUMBER
-# wrangler secret put STRIPE_SECRET_KEY
-# wrangler secret put STRIPE_WEBHOOK_SECRET
-# wrangler secret put XERO_CLIENT_ID
-# wrangler secret put XERO_CLIENT_SECRET
-# wrangler secret put CRON_SECRET
+# Environment-specific secrets (set via `wrangler secret put`)
+# CLERK_SECRET_KEY
+# CLERK_PUBLISHABLE_KEY
+# STRIPE_SECRET_KEY
+# STRIPE_WEBHOOK_SECRET
+# STRIPE_SETUP_FEE_PRICE_ID
+# STRIPE_BASE_SUBSCRIPTION_PRICE_ID
+# STRIPE_ADDITIONAL_TECH_PRICE_ID
+# TWILIO_ACCOUNT_SID
+# TWILIO_AUTH_TOKEN
+# TWILIO_PHONE_NUMBER
+# XERO_CLIENT_ID
+# XERO_CLIENT_SECRET
+# OPENROUTER_API_KEY
+# RESEND_API_KEY
+# GMAIL_ADDRESS
+# GMAIL_CLIENT_ID
+# GMAIL_CLIENT_SECRET
+# GMAIL_REFRESH_TOKEN
+# GOOGLE_MAPS_API_KEY

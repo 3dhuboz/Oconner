@@ -1,35 +1,33 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { ClerkProvider } from '@clerk/react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { Login } from './pages/Login';
+import { DevLogin } from './pages/DevLogin';
 import { Layout } from './components/Layout';
-const Login          = React.lazy(() => import('./pages/Login').then(m => ({ default: m.Login })));
-const DevLogin       = React.lazy(() => import('./pages/DevLogin').then(m => ({ default: m.DevLogin })));
-const Dashboard      = React.lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })));
-const JobBoard       = React.lazy(() => import('./pages/JobBoard').then(m => ({ default: m.JobBoard })));
-const JobDetail      = React.lazy(() => import('./pages/JobDetail').then(m => ({ default: m.JobDetail })));
-const Integrations   = React.lazy(() => import('./pages/Integrations').then(m => ({ default: m.Integrations })));
-const Calendar       = React.lazy(() => import('./pages/Calendar').then(m => ({ default: m.Calendar })));
-const Team           = React.lazy(() => import('./pages/Team').then(m => ({ default: m.Team })));
-const FieldPortal    = React.lazy(() => import('./pages/FieldPortal').then(m => ({ default: m.FieldPortal })));
-const SuperAdmin     = React.lazy(() => import('./pages/SuperAdmin').then(m => ({ default: m.SuperAdmin })));
-const Billing        = React.lazy(() => import('./pages/Billing').then(m => ({ default: m.Billing })));
-const PromoFlyer     = React.lazy(() => import('./pages/PromoFlyer').then(m => ({ default: m.PromoFlyer })));
-const Purchase       = React.lazy(() => import('./pages/Purchase').then(m => ({ default: m.Purchase })));
-const DashboardWidget = React.lazy(() => import('./pages/DashboardWidget').then(m => ({ default: m.DashboardWidget })));
-const LiveMap        = React.lazy(() => import('./pages/LiveMap').then(m => ({ default: m.LiveMap })));
-const TechDashboard  = React.lazy(() => import('./pages/TechDashboard').then(m => ({ default: m.TechDashboard })));
-const TechToday      = React.lazy(() => import('./pages/TechToday').then(m => ({ default: m.TechToday })));
-const TechProfile    = React.lazy(() => import('./pages/TechProfile').then(m => ({ default: m.TechProfile })));
-const PartsCatalog   = React.lazy(() => import('./pages/PartsCatalog').then(m => ({ default: m.PartsCatalog })));
-const Stocktake      = React.lazy(() => import('./pages/Stocktake').then(m => ({ default: m.Stocktake })));
-const NewJob         = React.lazy(() => import('./pages/NewJob').then(m => ({ default: m.NewJob })));
-const PropertyHistory = React.lazy(() => import('./pages/PropertyHistory').then(m => ({ default: m.PropertyHistory })));
-const Pricing        = React.lazy(() => import('./pages/Pricing').then(m => ({ default: m.Pricing })));
-
+import { Dashboard } from './pages/Dashboard';
+import { JobBoard } from './pages/JobBoard';
+import { JobDetail } from './pages/JobDetail';
+import { Integrations } from './pages/Integrations';
+import { Calendar } from './pages/Calendar';
+import { Team } from './pages/Team';
+import { FieldPortal } from './pages/FieldPortal';
+import { SuperAdmin } from './pages/SuperAdmin';
+import { Billing } from './pages/Billing';
+import { PromoFlyer } from './pages/PromoFlyer';
+import { Purchase } from './pages/Purchase';
+import { DashboardWidget } from './pages/DashboardWidget';
+import { LiveMap } from './pages/LiveMap';
+import { TechDashboard } from './pages/TechDashboard';
+import { TechToday } from './pages/TechToday';
+import { TechProfile } from './pages/TechProfile';
+import { PartsCatalog } from './pages/PartsCatalog';
+import { Stocktake } from './pages/Stocktake';
+import { NewJob } from './pages/NewJob';
+import { PropertyHistory } from './pages/PropertyHistory';
+import { Pricing } from './pages/Pricing';
 
 import { Job, Electrician, CatalogPart } from './types';
-import { jobsApi, electriciansApi, partsApi } from './services/api';
+import { jobsApi, electriciansApi, partsCatalogApi } from './services/api';
 import { Toaster } from 'react-hot-toast';
 import toast from 'react-hot-toast';
 
@@ -40,12 +38,13 @@ import { startSyncCron, stopSyncCron } from './services/syncService';
 import { useSyncStatus } from './hooks/useOfflineSync';
 import { NetworkStatusBar } from './components/NetworkStatusBar';
 
+const POLL_INTERVAL = 5000; // 5 seconds
+
 function AppContent() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [electricians, setElectricians] = useState<Electrician[]>([]);
   const [partsCatalog, setPartsCatalog] = useState<CatalogPart[]>([]);
   const { user } = useAuth();
-  const navigate = useNavigate();
   const syncStatus = useSyncStatus();
 
   // Start background sync cron on mount
@@ -65,139 +64,185 @@ function AppContent() {
     });
   }, [user]);
 
-  // ── Polling: jobs (30s interval) ─────────────────────────────────────────
+  // Poll Worker API for jobs (replaces Firestore onSnapshot)
   const knownJobIds = React.useRef<Set<string>>(new Set());
   const isFirstLoad = React.useRef(true);
 
-  const fetchJobs = React.useCallback(async () => {
+  useEffect(() => {
     if (!user) return;
-    try {
-      const jobsData = (await jobsApi.list()) as Job[];
-      setJobs(jobsData);
-      offlineJobs.putAll(jobsData);
 
-      if (isFirstLoad.current) {
-        jobsData.forEach(j => knownJobIds.current.add(j.id));
-        isFirstLoad.current = false;
-        return;
-      }
+    const isAdmin = user.role === 'admin' || user.role === 'dev';
 
-      if (user.role === 'admin' || user.role === 'dev') {
-        for (const job of jobsData) {
-          if (knownJobIds.current.has(job.id)) continue;
-          knownJobIds.current.add(job.id);
-          const isUrgent = /urgent|emergency/i.test(`${job.urgency} ${job.title}`);
-          if (isUrgent) {
-            toast.custom(
-              (t) => (
-                <div
-                  className={`${t.visible ? 'animate-enter' : 'animate-leave'} max-w-sm w-full bg-red-600 text-white shadow-2xl rounded-2xl pointer-events-auto flex ring-2 ring-red-400 cursor-pointer`}
-                  onClick={() => { navigate(`/jobs/${job.id}`); toast.dismiss(t.id); }}
-                >
-                  <div className="flex-1 p-4">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-lg">🚨</span>
-                      <span className="font-black uppercase tracking-wide text-sm">Urgent Job Received</span>
-                    </div>
-                    <p className="font-semibold text-sm truncate">{job.title}</p>
-                    <p className="text-red-200 text-xs truncate">{job.propertyAddress}</p>
-                  </div>
-                  <div className="flex items-center pr-4"><span className="text-red-200 text-xs font-bold">View →</span></div>
-                </div>
-              ),
-              { duration: 12000, position: 'top-right' }
+    async function fetchJobs() {
+      try {
+        const jobsData = await jobsApi.list();
+        setJobs(jobsData);
+        offlineJobs.putAll(jobsData);
+
+        // Detect genuinely new jobs (skip initial load)
+        if (isFirstLoad.current) {
+          jobsData.forEach((j: Job) => knownJobIds.current.add(j.id));
+          isFirstLoad.current = false;
+          return;
+        }
+
+        if (isAdmin) {
+          for (const job of jobsData) {
+            if (knownJobIds.current.has(job.id)) continue;
+            knownJobIds.current.add(job.id);
+
+            const isUrgent = ['urgent', 'emergency'].some(
+              u => (job.urgency || '').toLowerCase().includes(u) ||
+                   (job.title || '').toLowerCase().includes(u)
             );
-            if (Notification.permission === 'granted') {
-              new Notification('🚨 Urgent Job Received', { body: `${job.title} — ${job.propertyAddress}`, icon: '/favicon.ico' });
+
+            if (isUrgent) {
+              toast.custom(
+                (t) => (
+                  <div
+                    className={`${t.visible ? 'animate-enter' : 'animate-leave'} max-w-sm w-full bg-red-600 text-white shadow-2xl rounded-2xl pointer-events-auto flex ring-2 ring-red-400 cursor-pointer`}
+                    onClick={() => { window.location.href = `/jobs/${job.id}`; toast.dismiss(t.id); }}
+                  >
+                    <div className="flex-1 p-4">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-lg">🚨</span>
+                        <span className="font-black uppercase tracking-wide text-sm">Urgent Job Received</span>
+                      </div>
+                      <p className="font-semibold text-sm truncate">{job.title}</p>
+                      <p className="text-red-200 text-xs truncate">{job.propertyAddress}</p>
+                    </div>
+                    <div className="flex items-center pr-4">
+                      <span className="text-red-200 text-xs font-bold">View →</span>
+                    </div>
+                  </div>
+                ),
+                { duration: 12000, position: 'top-right' }
+              );
+              if (Notification.permission === 'granted') {
+                new Notification('🚨 Urgent Job Received', {
+                  body: `${job.title} — ${job.propertyAddress}`,
+                  icon: '/favicon.ico',
+                });
+              }
+            } else {
+              toast.custom(
+                (t) => (
+                  <div
+                    className={`${t.visible ? 'animate-enter' : 'animate-leave'} max-w-sm w-full bg-slate-900 text-white shadow-xl rounded-2xl pointer-events-auto flex cursor-pointer`}
+                    onClick={() => { window.location.href = `/jobs/${job.id}`; toast.dismiss(t.id); }}
+                  >
+                    <div className="flex-1 p-4">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-base">📋</span>
+                        <span className="font-bold text-sm">New Job</span>
+                      </div>
+                      <p className="text-slate-200 text-xs truncate">{job.title}</p>
+                      <p className="text-slate-400 text-xs truncate">{job.propertyAddress}</p>
+                    </div>
+                    <div className="flex items-center pr-4">
+                      <span className="text-slate-400 text-xs font-bold">View →</span>
+                    </div>
+                  </div>
+                ),
+                { duration: 6000, position: 'top-right' }
+              );
             }
-          } else {
-            toast.custom(
-              (t) => (
-                <div
-                  className={`${t.visible ? 'animate-enter' : 'animate-leave'} max-w-sm w-full bg-slate-900 text-white shadow-xl rounded-2xl pointer-events-auto flex cursor-pointer`}
-                  onClick={() => { navigate(`/jobs/${job.id}`); toast.dismiss(t.id); }}
-                >
-                  <div className="flex-1 p-4">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-base">📋</span>
-                      <span className="font-bold text-sm">New Job</span>
-                    </div>
-                    <p className="text-slate-200 text-xs truncate">{job.title}</p>
-                    <p className="text-slate-400 text-xs truncate">{job.propertyAddress}</p>
-                  </div>
-                  <div className="flex items-center pr-4"><span className="text-slate-400 text-xs font-bold">View →</span></div>
-                </div>
-              ),
-              { duration: 6000, position: 'top-right' }
-            );
           }
         }
+      } catch (error: any) {
+        console.warn('[Poll] Jobs fetch error, using cached data:', error.message);
       }
-    } catch (err) {
-      console.warn('[Poll] Jobs fetch failed, using cached data');
     }
+
+    fetchJobs();
+    const interval = setInterval(fetchJobs, POLL_INTERVAL);
+    return () => clearInterval(interval);
   }, [user]);
 
-  useEffect(() => {
-    fetchJobs();
-    const id = setInterval(fetchJobs, 30_000);
-    return () => clearInterval(id);
-  }, [fetchJobs]);
-
-  // ── Polling: parts catalog (60s interval) ────────────────────────────────
+  // Poll for parts catalog
   useEffect(() => {
     if (!user) return;
-    const fetchParts = async () => {
-      try { setPartsCatalog((await partsApi.list()) as CatalogPart[]); } catch {}
-    };
+
+    async function fetchParts() {
+      try {
+        const data = await partsCatalogApi.list();
+        setPartsCatalog(data);
+      } catch (error: any) {
+        console.warn('[Poll] Parts catalog fetch error:', error.message);
+      }
+    }
+
     fetchParts();
-    const id = setInterval(fetchParts, 60_000);
-    return () => clearInterval(id);
+    const interval = setInterval(fetchParts, POLL_INTERVAL * 2);
+    return () => clearInterval(interval);
   }, [user]);
 
-  // Persist parts catalog changes via REST API
+  // Persist parts catalog changes to Worker API
   const setPartsCatalogWithSync = ((updater: React.SetStateAction<CatalogPart[]>) => {
     setPartsCatalog(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
+      // Sync to Worker API
       for (const part of next) {
         const old = prev.find(p => p.id === part.id);
-        if (!old || JSON.stringify(old) !== JSON.stringify(part)) partsApi.upsert(part).catch(() => {});
+        if (!old || JSON.stringify(old) !== JSON.stringify(part)) {
+          partsCatalogApi.upsert(part).catch(() => {});
+        }
       }
       for (const old of prev) {
-        if (!next.find(p => p.id === old.id)) partsApi.delete(old.id).catch(() => {});
+        if (!next.find(p => p.id === old.id)) {
+          partsCatalogApi.delete(old.id).catch(() => {});
+        }
       }
       return next;
     });
   }) as React.Dispatch<React.SetStateAction<CatalogPart[]>>;
 
-  // ── Polling: electricians (60s interval) ─────────────────────────────────
+  // Poll for electricians
   useEffect(() => {
     if (!user) return;
-    const fetchElectricians = async () => {
+
+    async function fetchElectricians() {
       try {
-        const data = (await electriciansApi.list()) as Electrician[];
+        const data = await electriciansApi.list();
         setElectricians(data);
         offlineElectricians.putAll(data);
-      } catch { console.warn('[Poll] Electricians fetch failed, using cached data'); }
-    };
+      } catch (error: any) {
+        console.warn('[Poll] Electricians fetch error, using cached data:', error.message);
+      }
+    }
+
     fetchElectricians();
-    const id = setInterval(fetchElectricians, 60_000);
-    return () => clearInterval(id);
+    const interval = setInterval(fetchElectricians, POLL_INTERVAL * 2);
+    return () => clearInterval(interval);
   }, [user]);
 
   // Offline-aware job update
   const updateJob = async (id: string, updates: Partial<Job>) => {
+    // Optimistic local update
     setJobs(prev => prev.map(j => j.id === id ? { ...j, ...updates } : j));
     const allJobs = await offlineJobs.getAll();
     const existing = allJobs.find((j: any) => j.id === id);
-    if (existing) await offlineJobs.put({ ...existing, ...updates });
-
-    if (navigator.onLine) {
-      try { await jobsApi.update(id, updates); return; }
-      catch (error: any) { console.warn('[Offline] API update failed, queuing:', error.message); }
+    if (existing) {
+      await offlineJobs.put({ ...existing, ...updates });
     }
 
-    await syncQueue.add({ collection: 'jobs', docId: id, operation: 'update', data: updates });
+    // Try Worker API, queue if offline
+    if (navigator.onLine) {
+      try {
+        await jobsApi.update(id, updates);
+        return;
+      } catch (error: any) {
+        console.warn('[Offline] API update failed, queuing:', error.message);
+      }
+    }
+
+    // Queue for background sync
+    await syncQueue.add({
+      collection: 'jobs',
+      docId: id,
+      operation: 'update',
+      data: updates,
+    });
     toast('Saved offline — will sync when connection returns', { icon: '📡' });
   };
 
@@ -205,24 +250,24 @@ function AppContent() {
   const deleteJob = async (id: string) => {
     setJobs(prev => prev.filter(j => j.id !== id));
     await offlineJobs.delete(id);
+
     if (navigator.onLine) {
-      try { await jobsApi.delete(id); }
-      catch (error: any) { console.error('[Delete] API delete failed:', error.message); toast.error('Failed to delete from server'); }
+      try {
+        await jobsApi.delete(id);
+      } catch (error: any) {
+        console.error('[Delete] API delete failed:', error.message);
+        toast.error('Failed to delete from server');
+      }
     }
   };
 
   return (
-    <React.Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    }>
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/dev/login" element={<DevLogin />} />
       <Route path="/purchase" element={<Purchase />} />
       <Route path="/promo" element={<PromoFlyer />} />
-      
+
       {/* Dev Only Route */}
       <Route path="/admin" element={
         <DevRoute>
@@ -262,7 +307,7 @@ function AppContent() {
         </AdminRoute>
       } />
 
-      {/* Technician-specific routes (user role gets TechLayout) */}
+      {/* Technician-specific routes */}
       <Route path="/today" element={
         <TechRoute>
           <TechToday jobs={jobs} electricians={electricians} />
@@ -274,7 +319,7 @@ function AppContent() {
         </TechRoute>
       } />
 
-      {/* General Protected Routes — user role auto-gets TechLayout */}
+      {/* General Protected Routes */}
       <Route path="/" element={
         <ProtectedRoute>
           {user?.role === 'user'
@@ -307,7 +352,7 @@ function AppContent() {
           <FieldPortal jobs={jobs} updateJob={updateJob} partsCatalog={partsCatalog} />
         </TechRoute>
       } />
-      
+
       <Route path="/widget" element={
         <ProtectedRoute>
           <DashboardWidget jobs={jobs} electricians={electricians} />
@@ -323,24 +368,20 @@ function AppContent() {
           <Pricing />
         </AdminRoute>
       } />
-      
+
       <Route path="*" element={<div className="p-8 text-slate-500">Page not found or under construction.</div>} />
     </Routes>
-    </React.Suspense>
   );
 }
 function App() {
-  const clerkKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
   return (
-    <ClerkProvider publishableKey={clerkKey || ''}>
-      <Router>
-        <AuthProvider>
-          <AppContentWrapper />
-          <NetworkStatusBar />
-          <Toaster position="bottom-right" />
-        </AuthProvider>
-      </Router>
-    </ClerkProvider>
+    <Router>
+      <AuthProvider>
+        <AppContentWrapper />
+        <NetworkStatusBar />
+        <Toaster position="bottom-right" />
+      </AuthProvider>
+    </Router>
   );
 }
 
