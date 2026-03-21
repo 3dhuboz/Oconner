@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/d1';
 import { eq } from 'drizzle-orm';
-import { orders, customers, stockMovements, products, notifications, subscriptions } from '@butcher/db';
+import { orders, customers, stockMovements, products, notifications } from '@butcher/db';
 import { sendEmail, buildOrderEmail, getSubject } from '../lib/email';
 import type { Env, AuthUser } from '../types';
 
@@ -156,55 +156,6 @@ app.post('/webhook', async (c) => {
     const orderId = (obj.metadata as Record<string, string> | undefined)?.orderId;
     if (orderId) {
       await db.update(orders).set({ paymentStatus: 'failed', status: 'cancelled', updatedAt: Date.now() }).where(eq(orders.id, orderId));
-    }
-  }
-
-  // ── Subscription checkout completed — auto-activate subscription ──
-  if (event.type === 'checkout.session.completed') {
-    const metadata = obj.metadata as Record<string, string> | undefined;
-    if (metadata?.type === 'subscription') {
-      const now = Date.now();
-      const subId = crypto.randomUUID();
-      await db.insert(subscriptions).values({
-        id: subId,
-        customerId: null,
-        email: metadata.customerEmail ?? (obj.customer_email as string) ?? '',
-        boxId: metadata.boxId,
-        boxName: metadata.boxName,
-        alternateBoxId: metadata.alternateBoxId ?? null,
-        alternateBoxName: metadata.alternateBoxName ?? null,
-        nextIsAlternate: false,
-        frequency: metadata.frequency,
-        status: 'active',
-        createdAt: now,
-        updatedAt: now,
-      });
-
-      // Link to existing customer if found
-      const email = metadata.customerEmail ?? (obj.customer_email as string) ?? '';
-      if (email) {
-        const [existing] = await db.select().from(customers).where(eq(customers.email, email)).limit(1);
-        if (existing) {
-          await db.update(subscriptions).set({ customerId: existing.id }).where(eq(subscriptions.id, subId));
-        } else {
-          // Create customer record
-          const custId = crypto.randomUUID();
-          await db.insert(customers).values({
-            id: custId,
-            email,
-            name: metadata.customerName ?? '',
-            phone: metadata.customerPhone ?? '',
-            accountType: 'registered',
-            orderCount: 0,
-            totalSpent: 0,
-            blacklisted: false,
-            notes: metadata.notes ? `Delivery notes: ${metadata.notes}` : '',
-            createdAt: now,
-            updatedAt: now,
-          });
-          await db.update(subscriptions).set({ customerId: custId }).where(eq(subscriptions.id, subId));
-        }
-      }
     }
   }
 

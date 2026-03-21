@@ -177,10 +177,9 @@ app.post('/api/subscriptions', async (c) => {
   return c.json({ id }, 201);
 });
 
-// Public subscription checkout (no auth)
+// Public subscription checkout (no auth — uses Square)
 app.post('/api/subscriptions/checkout', async (c) => {
   const { default: subsRouter } = await import('./routes/subscriptions');
-  // Forward to the checkout handler in subscriptions router
   const url = new URL(c.req.url);
   url.pathname = '/checkout';
   const newReq = new Request(url.toString(), { method: 'POST', headers: c.req.raw.headers, body: c.req.raw.body });
