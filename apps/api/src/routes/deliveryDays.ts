@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { notifyCustomer } from './push';
 import { drizzle } from 'drizzle-orm/d1';
 import { eq, asc, gte, and } from 'drizzle-orm';
-import { deliveryDays, orders, stops, notifications, subscriptions, customers } from '@butcher/db';
+import { deliveryDays, orders, stops, notifications, subscriptions, customers, users, deliveryRuns } from '@butcher/db';
 import { deductStock } from '../lib/stock';
 import { sendEmail, buildOrderEmail, getSubject } from '../lib/email';
 import type { Env, AuthUser } from '../types';
@@ -199,6 +199,63 @@ app.post('/:id/generate-stops', async (c) => {
     });
     created++;
     if (created < dayOrders.length) await new Promise((r) => setTimeout(r, 1100));
+  }
+
+  // ── Auto-create delivery runs from driver zone assignments ──
+  const existingRuns = await db.select().from(deliveryRuns).where(eq(deliveryRuns.deliveryDayId, dayId));
+  if (existingRuns.length === 0) {
+    // Only auto-create if no runs exist yet for this day
+    const activeDrivers = await db.select().from(users)
+      .where(and(eq(users.role, 'driver'), eq(users.active, true)));
+
+    const RUN_COLORS = ['#1B3A2E', '#4E7732', '#2563EB', '#7C3AED', '#DC2626', '#EA580C', '#0891B2', '#BE185D'];
+    let runSeq = 0;
+
+    // Get all stops for this day to assign
+    const allDayStops = await db.select().from(stops).where(eq(stops.deliveryDayId, dayId));
+
+    for (const driver of activeDrivers) {
+      const driverZones: string[] = (() => {
+        try { return JSON.parse(driver.zones ?? '[]') as string[]; } catch { return []; }
+      })();
+      if (driverZones.length === 0) continue;
+
+      // Find stops matching this driver's zones
+      const matchingStopIds: string[] = [];
+      for (const stop of allDayStops) {
+        if (stop.runId) continue; // already assigned
+        try {
+          const addr = JSON.parse(stop.address) as { postcode?: string };
+          if (addr.postcode && driverZones.some((z) => addr.postcode!.startsWith(z))) {
+            matchingStopIds.push(stop.id);
+          }
+        } catch {}
+      }
+
+      if (matchingStopIds.length === 0) continue;
+
+      // Create a run for this driver
+      const runId = crypto.randomUUID();
+      await db.insert(deliveryRuns).values({
+        id: runId,
+        deliveryDayId: dayId,
+        name: driver.name || driver.email,
+        zone: driverZones.join(', '),
+        color: RUN_COLORS[runSeq % RUN_COLORS.length],
+        driverUid: driver.id,
+        status: 'pending',
+        sequence: runSeq++,
+        createdAt: Date.now(),
+      });
+
+      // Assign matching stops to this run
+      for (const stopId of matchingStopIds) {
+        await db.update(stops).set({ runId }).where(eq(stops.id, stopId));
+        // Mark as assigned in allDayStops so other drivers don't claim them
+        const idx = allDayStops.findIndex((s) => s.id === stopId);
+        if (idx >= 0) allDayStops[idx] = { ...allDayStops[idx], runId };
+      }
+    }
   }
 
   return c.json({ created, total: dayOrders.length });

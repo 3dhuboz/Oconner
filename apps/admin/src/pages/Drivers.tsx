@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react';
 import { api } from '@butcher/shared';
-import { Plus, X, Truck, User, ToggleLeft, ToggleRight, Mail, Send, Map, Pencil, Trash2 } from 'lucide-react';
+import { Plus, X, Truck, User, ToggleLeft, ToggleRight, Mail, Send, Map, Pencil, Trash2, Phone, MapPin, Car, Shield, Heart } from 'lucide-react';
 import { toast } from '../lib/toast';
 import MapPage from './Map';
 
 const EMPTY_FORM = { name: '', email: '', sendInvite: true };
-const EMPTY_EDIT = { name: '', email: '' };
+const EMPTY_EDIT = {
+  name: '', email: '', phone: '', address: '',
+  vehicleInfo: '', registrationNumber: '', licenseNumber: '',
+  nextOfKinName: '', nextOfKinPhone: '', zones: '',
+};
 
 interface DriverUser {
   id: string;
@@ -13,7 +17,24 @@ interface DriverUser {
   email: string;
   role: string;
   active?: boolean;
+  phone?: string | null;
+  address?: string | null;
+  vehicleInfo?: string | null;
+  registrationNumber?: string | null;
+  licenseNumber?: string | null;
+  nextOfKin?: string | null;
+  zones?: string | null;
   createdAt?: any;
+}
+
+function parseZones(zones?: string | null): string[] {
+  if (!zones) return [];
+  try { return JSON.parse(zones) as string[]; } catch { return []; }
+}
+
+function parseNextOfKin(nok?: string | null): { name: string; phone: string } {
+  if (!nok) return { name: '', phone: '' };
+  try { return JSON.parse(nok) as { name: string; phone: string }; } catch { return { name: '', phone: '' }; }
 }
 
 export default function DriversPage() {
@@ -96,16 +117,35 @@ export default function DriversPage() {
   };
 
   const openEdit = (driver: DriverUser) => {
+    const nok = parseNextOfKin(driver.nextOfKin);
     setEditingDriver(driver);
-    setEditForm({ name: driver.name ?? '', email: driver.email });
+    setEditForm({
+      name: driver.name ?? '', email: driver.email,
+      phone: driver.phone ?? '', address: driver.address ?? '',
+      vehicleInfo: driver.vehicleInfo ?? '', registrationNumber: driver.registrationNumber ?? '',
+      licenseNumber: driver.licenseNumber ?? '',
+      nextOfKinName: nok.name, nextOfKinPhone: nok.phone,
+      zones: parseZones(driver.zones).join(', '),
+    });
   };
 
   const handleEdit = async () => {
     if (!editingDriver) return;
     setEditSaving(true);
+    const zonesArr = editForm.zones.split(',').map((z) => z.trim()).filter(Boolean);
+    const nextOfKin = editForm.nextOfKinName || editForm.nextOfKinPhone
+      ? JSON.stringify({ name: editForm.nextOfKinName, phone: editForm.nextOfKinPhone })
+      : null;
+    const update = {
+      name: editForm.name, email: editForm.email,
+      phone: editForm.phone || null, address: editForm.address || null,
+      vehicleInfo: editForm.vehicleInfo || null, registrationNumber: editForm.registrationNumber || null,
+      licenseNumber: editForm.licenseNumber || null,
+      nextOfKin, zones: JSON.stringify(zonesArr),
+    };
     try {
-      await api.users.update(editingDriver.id, { name: editForm.name, email: editForm.email });
-      setDrivers((prev) => prev.map((d) => d.id === editingDriver.id ? { ...d, name: editForm.name, email: editForm.email } : d));
+      await api.users.update(editingDriver.id, update);
+      setDrivers((prev) => prev.map((d) => d.id === editingDriver.id ? { ...d, ...update } : d));
       setEditingDriver(null);
       toast('Driver updated');
     } catch {
@@ -166,24 +206,44 @@ export default function DriversPage() {
             <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
               <tr>
                 <th className="px-4 py-3 text-left">Driver</th>
-                <th className="px-4 py-3 text-left">Email</th>
+                <th className="px-4 py-3 text-left">Contact</th>
+                <th className="px-4 py-3 text-left">Zones</th>
                 <th className="px-4 py-3 text-center">Active</th>
                 <th className="px-4 py-3 text-center">Invite</th>
                 <th className="px-4 py-3 text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y">
-              {drivers.map((d) => (
+              {drivers.map((d) => {
+                const zones = parseZones(d.zones);
+                return (
                 <tr key={d.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 bg-brand/10 rounded-full flex items-center justify-center">
                         <User className="h-4 w-4 text-brand" />
                       </div>
-                      <span className="font-medium">{d.name ?? '—'}</span>
+                      <div>
+                        <span className="font-medium block">{d.name ?? '—'}</span>
+                        {d.vehicleInfo && <span className="text-xs text-gray-400">{d.vehicleInfo}{d.registrationNumber ? ` · ${d.registrationNumber}` : ''}</span>}
+                      </div>
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-gray-500">{d.email}</td>
+                  <td className="px-4 py-3">
+                    <span className="text-gray-500 text-sm block">{d.email}</span>
+                    {d.phone && <span className="text-xs text-gray-400">{d.phone}</span>}
+                  </td>
+                  <td className="px-4 py-3">
+                    {zones.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {zones.map((z) => (
+                          <span key={z} className="bg-brand/10 text-brand text-xs px-2 py-0.5 rounded-full font-medium">{z}</span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-gray-300">No zones</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-center">
                     <button onClick={() => toggleActive(d)}>
                       {d.active !== false
@@ -215,7 +275,8 @@ export default function DriversPage() {
                     </div>
                   </td>
                 </tr>
-              ))}
+              );
+              })}
             </tbody>
           </table>
         )}
@@ -278,34 +339,87 @@ export default function DriversPage() {
       )}
       {/* Edit Driver Modal */}
       {editingDriver && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-sm p-6">
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl w-full max-w-lg p-6 my-8">
             <div className="flex items-center justify-between mb-5">
               <h2 className="font-semibold text-lg flex items-center gap-2">
                 <Pencil className="h-5 w-5 text-brand" /> Edit Driver
               </h2>
               <button onClick={() => setEditingDriver(null)}><X className="h-5 w-5 text-gray-400" /></button>
             </div>
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs text-gray-500 mb-1 block">Full Name</label>
-                <input
-                  value={editForm.name}
-                  onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
-                />
+            <div className="space-y-4">
+              {/* Personal */}
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Personal</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Full Name *</label>
+                  <input value={editForm.name} onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
+                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Email *</label>
+                  <input type="email" value={editForm.email} onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))}
+                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                </div>
               </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block flex items-center gap-1"><Phone className="h-3 w-3" /> Phone</label>
+                  <input value={editForm.phone} onChange={(e) => setEditForm((f) => ({ ...f, phone: e.target.value }))}
+                    placeholder="04xx xxx xxx" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block flex items-center gap-1"><MapPin className="h-3 w-3" /> Address</label>
+                  <input value={editForm.address} onChange={(e) => setEditForm((f) => ({ ...f, address: e.target.value }))}
+                    placeholder="Home address" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                </div>
+              </div>
+
+              {/* Vehicle */}
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider pt-2">Vehicle</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block flex items-center gap-1"><Car className="h-3 w-3" /> Vehicle</label>
+                  <input value={editForm.vehicleInfo} onChange={(e) => setEditForm((f) => ({ ...f, vehicleInfo: e.target.value }))}
+                    placeholder="e.g. Toyota HiLux 2022" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Registration</label>
+                  <input value={editForm.registrationNumber} onChange={(e) => setEditForm((f) => ({ ...f, registrationNumber: e.target.value }))}
+                    placeholder="ABC 123" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                </div>
+              </div>
+
+              {/* License & Emergency */}
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider pt-2">License & Emergency</p>
               <div>
-                <label className="text-xs text-gray-500 mb-1 block">Email</label>
-                <input
-                  type="email"
-                  value={editForm.email}
-                  onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
-                />
+                <label className="text-xs text-gray-500 mb-1 block flex items-center gap-1"><Shield className="h-3 w-3" /> Store / Driver License</label>
+                <input value={editForm.licenseNumber} onChange={(e) => setEditForm((f) => ({ ...f, licenseNumber: e.target.value }))}
+                  placeholder="License number" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block flex items-center gap-1"><Heart className="h-3 w-3" /> Next of Kin Name</label>
+                  <input value={editForm.nextOfKinName} onChange={(e) => setEditForm((f) => ({ ...f, nextOfKinName: e.target.value }))}
+                    placeholder="Emergency contact" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Next of Kin Phone</label>
+                  <input value={editForm.nextOfKinPhone} onChange={(e) => setEditForm((f) => ({ ...f, nextOfKinPhone: e.target.value }))}
+                    placeholder="04xx xxx xxx" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                </div>
+              </div>
+
+              {/* Delivery Zones */}
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider pt-2">Delivery Zones</p>
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block flex items-center gap-1"><MapPin className="h-3 w-3" /> Assigned Postcodes</label>
+                <input value={editForm.zones} onChange={(e) => setEditForm((f) => ({ ...f, zones: e.target.value }))}
+                  placeholder="e.g. 4700, 4701, 4702" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                <p className="text-xs text-gray-400 mt-1">Comma-separated postcodes. Stops in these zones will be auto-assigned to this driver.</p>
               </div>
             </div>
-            <div className="flex gap-3 mt-5">
+            <div className="flex gap-3 mt-6">
               <button onClick={() => setEditingDriver(null)} className="flex-1 border py-2 rounded-lg text-sm">Cancel</button>
               <button onClick={handleEdit} disabled={editSaving} className="flex-1 bg-brand text-white py-2 rounded-lg text-sm font-medium disabled:opacity-50">
                 {editSaving ? 'Saving…' : 'Save Changes'}
