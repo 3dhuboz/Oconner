@@ -128,7 +128,7 @@ export default function CheckoutPage() {
                     const date = new Date(day.date);
                     return (
                       <option key={day.id} value={day.id}>
-                        {date.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })} — {(day.maxOrders ?? 0) - (day.orderCount ?? 0)} spots left
+                        {date.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })} — {(day.maxOrders ?? 0) - (day.orderCount ?? 0)} spots left{(day as any).zones ? ` · ${(day as any).zones}` : ''}
                       </option>
                     );
                   })}

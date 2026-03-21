@@ -91,6 +91,7 @@ export const deliveryDays = sqliteTable('delivery_days', {
   routeGeneratedAt: integer('route_generated_at'),
   deliveryWindowStart: text('delivery_window_start').default('09:00'), // HH:MM 24-hr
   driverUid: text('driver_uid').references(() => users.id),
+  zones: text('zones').default(''),            // comma-separated area names e.g. "Rockhampton, Yeppoon, Biloela"
   runStartedAt: integer('run_started_at'),
   runCompletedAt: integer('run_completed_at'),
   createdAt: integer('created_at').notNull(),
