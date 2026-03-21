@@ -1,11 +1,72 @@
 import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/d1';
 import { eq } from 'drizzle-orm';
-import { orders, customers, stockMovements, notifications } from '@butcher/db';
+import { orders, customers, stockMovements, products, notifications } from '@butcher/db';
 import { sendEmail, buildOrderEmail, getSubject } from '../lib/email';
 import type { Env, AuthUser } from '../types';
 
+interface OrderItem {
+  productId: string;
+  productName: string;
+  isMeatPack: boolean;
+  weight?: number;   // grams
+  quantity?: number;  // units (for packs)
+  lineTotal: number;
+}
+
 const app = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function deductStock(db: any, items: OrderItem[], orderId: string, now: number) {
+  for (const item of items) {
+    const [product] = await db.select().from(products).where(eq(products.id, item.productId)).limit(1);
+    if (!product) continue;
+
+    // Packs: deduct by quantity (units). Loose cuts: deduct by weight (grams → kg).
+    const delta = item.isMeatPack ? -(item.quantity ?? 1) : -((item.weight ?? 0) / 1000);
+    const newStock = Math.max(0, product.stockOnHand + delta);
+
+    await db.update(products).set({ stockOnHand: newStock, updatedAt: now }).where(eq(products.id, item.productId));
+    await db.insert(stockMovements).values({
+      id: crypto.randomUUID(),
+      productId: item.productId,
+      productName: item.productName,
+      type: 'sale',
+      qty: delta,
+      unit: item.isMeatPack ? 'units' : 'kg',
+      reason: `Online order ${orderId}`,
+      orderId,
+      createdBy: 'system',
+      createdAt: now,
+    });
+  }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function restoreStock(db: any, items: OrderItem[], orderId: string, now: number) {
+  for (const item of items) {
+    const [product] = await db.select().from(products).where(eq(products.id, item.productId)).limit(1);
+    if (!product) continue;
+
+    // Reverse the deduction: positive delta to add stock back
+    const delta = item.isMeatPack ? (item.quantity ?? 1) : (item.weight ?? 0) / 1000;
+    const newStock = product.stockOnHand + delta;
+
+    await db.update(products).set({ stockOnHand: newStock, updatedAt: now }).where(eq(products.id, item.productId));
+    await db.insert(stockMovements).values({
+      id: crypto.randomUUID(),
+      productId: item.productId,
+      productName: item.productName,
+      type: 'refund',
+      qty: delta,
+      unit: item.isMeatPack ? 'units' : 'kg',
+      reason: `Refund for order ${orderId}`,
+      orderId,
+      createdBy: 'system',
+      createdAt: now,
+    });
+  }
+}
 
 async function verifyStripeSignature(
   payload: string,
@@ -52,12 +113,16 @@ app.post('/webhook', async (c) => {
       const [order] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
       await db.update(orders).set({ paymentStatus: 'paid', status: 'confirmed', updatedAt: now }).where(eq(orders.id, orderId));
       if (order) {
+        // ── Deduct stock for each item in the order ──
+        const items = JSON.parse(order.items) as OrderItem[];
+        await deductStock(db, items, orderId, now);
+
         const addrParsed = JSON.parse(order.deliveryAddress) as Record<string, string>;
         const addr = `${addrParsed.line1 ?? ''}${addrParsed.line2 ? ', ' + addrParsed.line2 : ''}, ${addrParsed.suburb ?? ''} ${addrParsed.state ?? ''} ${addrParsed.postcode ?? ''}`;
         const emailData = {
           customerName: order.customerName,
           orderId,
-          orderItems: JSON.parse(order.items) as Array<{ productName: string; lineTotal: number }>,
+          orderItems: items,
           subtotal: order.subtotal,
           deliveryFee: order.deliveryFee,
           gst: order.gst,
@@ -97,7 +162,13 @@ app.post('/webhook', async (c) => {
   if (event.type === 'charge.refunded') {
     const orderId = (obj.metadata as Record<string, string>)?.orderId;
     if (orderId) {
-      await db.update(orders).set({ paymentStatus: 'refunded', status: 'refunded', updatedAt: Date.now() }).where(eq(orders.id, orderId));
+      const now = Date.now();
+      const [order] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+      await db.update(orders).set({ paymentStatus: 'refunded', status: 'refunded', updatedAt: now }).where(eq(orders.id, orderId));
+      if (order) {
+        const items = JSON.parse(order.items) as OrderItem[];
+        await restoreStock(db, items, orderId, now);
+      }
     }
   }
 

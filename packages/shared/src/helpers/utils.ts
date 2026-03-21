@@ -36,7 +36,7 @@ export function distanceMetres(
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-/** Generate a short display ID from a UUID */
+/** Generate a short display ID from an ID string */
 export function shortId(id: string): string {
   return id.slice(-8).toUpperCase();
 }

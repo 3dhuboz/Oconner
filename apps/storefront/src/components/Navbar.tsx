@@ -7,9 +7,9 @@ import { useUser, useAuth } from '@clerk/nextjs';
 import { useCart } from '@/lib/cart';
 import { cn } from '@butcher/ui';
 
-const ADMIN_URL = process.env.NEXT_PUBLIC_ADMIN_URL ?? 'https://butcher-admin.pages.dev';
+import { API_URL } from '@butcher/shared';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'https://oconner-api.steve-700.workers.dev';
+const ADMIN_URL = process.env.NEXT_PUBLIC_ADMIN_URL ?? 'https://butcher-admin.pages.dev';
 
 export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -26,7 +26,7 @@ export default function Navbar() {
     getToken()
       .then(t => t ? fetch(`${API_URL}/api/users/me`, { headers: { Authorization: `Bearer ${t}` } }) : null)
       .then(r => (r?.ok ? r.json() : null))
-      .then((u: any) => setIsAdmin(u?.role === 'admin'))
+      .then((u: { role?: string } | null) => setIsAdmin(u?.role === 'admin'))
       .catch(() => setIsAdmin(false));
   }, [isSignedIn]);
   const itemCount = useCart((s) => s.itemCount());

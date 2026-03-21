@@ -378,7 +378,7 @@ Output ONLY the post text, nothing else. No commentary, no "Here is your post:",
       max_tokens: 500,
     }) as { response?: string };
     return c.json({ post: result.response ?? '' });
-  } catch (e: any) {
+  } catch {
     return c.json({ error: 'AI generation failed. Workers AI may not be available.' }, 500);
   }
 });
@@ -430,8 +430,9 @@ app.post('/api/images/generate', requireAuth, async (c) => {
     await c.env.IMAGES.put(key, imageBytes, { httpMetadata: { contentType: 'image/png' } });
     const baseUrl = new URL(c.req.url).origin;
     return c.json({ url: `${baseUrl}/images/${key}` });
-  } catch (e: any) {
-    return c.json({ error: e?.message ?? 'Image generation failed' }, 500);
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'Image generation failed';
+    return c.json({ error: message }, 500);
   }
 });
 

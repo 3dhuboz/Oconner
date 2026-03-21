@@ -26,6 +26,13 @@ app.get('/', async (c) => {
   return c.json(rows.map((s) => ({ ...s, address: JSON.parse(s.address), items: JSON.parse(s.items) })));
 });
 
+app.get('/:id', async (c) => {
+  const db = drizzle(c.env.DB);
+  const [stop] = await db.select().from(stops).where(eq(stops.id, c.req.param('id'))).limit(1);
+  if (!stop) return c.json({ error: 'Not found' }, 404);
+  return c.json({ ...stop, address: JSON.parse(stop.address), items: JSON.parse(stop.items) });
+});
+
 app.post('/', async (c) => {
   const db = drizzle(c.env.DB);
   const body = await c.req.json<typeof stops.$inferInsert & { address: object; items: object[] }>();

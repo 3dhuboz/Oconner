@@ -1,5 +1,5 @@
 declare const process: { env: Record<string, string | undefined> } | undefined;
-const API_URL = typeof process !== 'undefined'
+export const API_URL = typeof process !== 'undefined'
   ? (process.env.NEXT_PUBLIC_API_URL ?? process.env.VITE_API_URL ?? 'https://oconner-api.steve-700.workers.dev')
   : 'https://oconner-api.steve-700.workers.dev';
 
@@ -57,6 +57,8 @@ export const api = {
     create: (data: unknown) => api.post('/api/orders', data),
     updateStatus: (id: string, status: string, extra?: { packedBy?: string; internalNotes?: string }) =>
       api.patch(`/api/orders/${id}/status`, { status, ...extra }),
+    update: (id: string, data: unknown) => api.patch(`/api/orders/${id}`, data),
+    remove: (id: string) => api.delete(`/api/orders/${id}`),
   },
 
   deliveryDays: {

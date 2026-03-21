@@ -3,8 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@clerk/nextjs';
 import { Bell, Smartphone, X } from 'lucide-react';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'https://oconner-api.steve-700.workers.dev';
+import { API_URL } from '@butcher/shared';
 const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? '';
 
 function db64u(s: string): ArrayBuffer {
@@ -13,7 +12,7 @@ function db64u(s: string): ArrayBuffer {
 
 export default function InstallPrompt() {
   const { isSignedIn, getToken } = useAuth();
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showInstall, setShowInstall] = useState(false);
   const [showNotif, setShowNotif] = useState(false);
 
@@ -32,7 +31,7 @@ export default function InstallPrompt() {
 
     const handler = (e: Event) => {
       e.preventDefault();
-      setDeferredPrompt(e);
+      setDeferredPrompt(e as BeforeInstallPromptEvent);
       if (isSignedIn) setShowInstall(true);
     };
     window.addEventListener('beforeinstallprompt', handler as EventListener);
