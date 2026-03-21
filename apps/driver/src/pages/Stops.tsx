@@ -53,7 +53,7 @@ export default function StopsPage() {
       });
   }, [deliveryDay?.id]);
 
-  const handleStartDay = async () => {
+  const handleBeginRoute = async () => {
     if (!deliveryDay?.id || !user) return;
     const session = await api.drivers.startSession({
       deliveryDayId: deliveryDay.id,
@@ -61,6 +61,12 @@ export default function StopsPage() {
     }) as { id: string };
     setSessionId(session.id);
     setTrackingEnabled(true);
+    // Navigate to first pending stop
+    const sorted = [...stops].sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
+    const firstPending = sorted.find((s) => s.status !== 'delivered' && s.status !== 'failed');
+    if (firstPending) {
+      navigate(`/stop/${firstPending.id}`);
+    }
   };
 
   const handleEndDay = async () => {
@@ -111,9 +117,9 @@ export default function StopsPage() {
             </div>
 
             {!trackingEnabled ? (
-              <button onClick={handleStartDay} className="w-full bg-white text-brand font-bold py-2.5 rounded-xl flex items-center justify-center gap-2">
-                <Navigation className="h-4 w-4" />
-                Start Delivery Day
+              <button onClick={handleBeginRoute} disabled={stops.length === 0} className="w-full bg-white text-brand font-bold py-3 rounded-xl flex items-center justify-center gap-2 text-lg disabled:opacity-50">
+                <Navigation className="h-5 w-5" />
+                Begin Route
               </button>
             ) : (
               <div className="flex gap-2">
