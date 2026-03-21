@@ -492,7 +492,9 @@ export const scheduled: ExportedHandlerScheduledHandler<Env> = async (event, env
       for (const sub of activeSubs) {
         const interval = FREQ_MS[sub.frequency] ?? FREQ_MS.fortnightly;
         const lastGenerated = sub.lastOrderGeneratedAt ?? sub.createdAt;
-        if (now - lastGenerated < interval * 0.8) continue;
+        const nextDueDate = lastGenerated + interval;
+        // Skip if not yet due (with 20% grace period)
+        if (now < nextDueDate - interval * 0.2) continue;
 
         let customerId = sub.customerId;
         if (!customerId) {

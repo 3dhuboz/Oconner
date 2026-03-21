@@ -95,13 +95,27 @@ app.post('/:id/generate-stops', async (c) => {
     monthly: 30 * 24 * 60 * 60 * 1000,
   };
 
+  // Get this delivery day's date to check if subs are due BY this date
+  const [thisDay] = await db.select().from(deliveryDays).where(eq(deliveryDays.id, dayId)).limit(1);
+  const deliveryDate = thisDay?.date ?? now;
+
   const activeSubs = await db.select().from(subscriptions)
     .where(eq(subscriptions.status, 'active'));
+
+  // Check which customers already have subscription orders on this delivery day
+  const existingOrders = await db.select({ customerId: orders.customerId, notes: orders.notes })
+    .from(orders).where(eq(orders.deliveryDayId, dayId));
+  const subsWithOrders = new Set(
+    existingOrders.filter(o => o.notes && o.notes.startsWith('Subscription:')).map(o => o.customerId)
+  );
 
   for (const sub of activeSubs) {
     const interval = FREQ_MS[sub.frequency] ?? FREQ_MS.fortnightly;
     const lastGenerated = sub.lastOrderGeneratedAt ?? sub.createdAt;
-    if (now - lastGenerated < interval * 0.8) continue;
+    const nextDueDate = lastGenerated + interval;
+
+    // Create order if delivery day date is on or after the sub's next due date (with 20% grace)
+    if (deliveryDate < nextDueDate - interval * 0.2) continue;
 
     let customerId = sub.customerId;
     if (!customerId) {
@@ -109,6 +123,10 @@ app.post('/:id/generate-stops', async (c) => {
       if (!cust) continue;
       customerId = cust.id;
     }
+
+    // Skip if this customer already has a subscription order on this delivery day
+    if (subsWithOrders.has(customerId)) continue;
+
     const [customer] = await db.select().from(customers).where(eq(customers.id, customerId)).limit(1);
     if (!customer) continue;
 
