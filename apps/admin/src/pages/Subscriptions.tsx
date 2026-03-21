@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { api } from '@butcher/shared';
 import type { Product } from '@butcher/shared';
-import { RefreshCcw, Check, X, Phone, Mail, Plus, Upload, Image, Save, ArrowLeftRight, PackageCheck, ShoppingCart } from 'lucide-react';
+import { RefreshCcw, Check, X, Phone, Mail, Plus, Upload, Image, Save, ArrowLeftRight, PackageCheck, ShoppingCart, Calendar, Package, User, Clock } from 'lucide-react';
 import { toast } from '../lib/toast';
 
 interface Subscription {
@@ -17,7 +17,8 @@ interface Subscription {
   email: string;
   notes?: string;
   status: 'pending' | 'active' | 'cancelled';
-  createdAt?: any;
+  createdAt?: number;
+  lastOrderGeneratedAt?: number | null;
 }
 
 const STATUS_STYLE: Record<string, string> = {
@@ -125,6 +126,7 @@ export default function SubscriptionsPage() {
   };
 
   const [generatingOrder, setGeneratingOrder] = useState<string | null>(null);
+  const [viewingSub, setViewingSub] = useState<Subscription | null>(null);
 
   const generateOrder = async (sub: Subscription) => {
     setGeneratingOrder(sub.id);
@@ -213,7 +215,9 @@ export default function SubscriptionsPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-3 mb-1">
                       <div>
-                        <p className="font-semibold">{s.customerName || s.email}</p>
+                        <button onClick={() => setViewingSub(s)} className="font-semibold text-left hover:text-brand transition-colors">
+                          {s.customerName || s.email}
+                        </button>
                         {s.alternateBoxId ? (
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <p className="text-sm text-brand font-medium flex items-center gap-1">
@@ -303,6 +307,110 @@ export default function SubscriptionsPage() {
           </div>
         </div>
       )}
+
+      {/* ── Subscription Detail Modal ── */}
+      {viewingSub && (() => {
+        const s = viewingSub;
+        const boxImg = boxProducts.find((p) => p.id === s.boxId)?.imageUrl;
+        const altBoxImg = s.alternateBoxId ? boxProducts.find((p) => p.id === s.alternateBoxId)?.imageUrl : null;
+        const createdDate = s.createdAt ? new Date(s.createdAt) : null;
+        const lastOrderDate = s.lastOrderGeneratedAt ? new Date(s.lastOrderGeneratedAt) : null;
+
+        // Calculate next delivery estimate
+        const FREQ_DAYS: Record<string, number> = { weekly: 7, fortnightly: 14, monthly: 30 };
+        const freqDays = FREQ_DAYS[s.frequency] ?? 14;
+        const baseDate = s.lastOrderGeneratedAt ?? s.createdAt ?? Date.now();
+        const nextDue = new Date(baseDate + freqDays * 24 * 60 * 60 * 1000);
+
+        const fmt = (d: Date) => d.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+
+        return (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setViewingSub(null)}>
+            <div className="bg-white rounded-2xl w-full max-w-lg p-6" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-5">
+                <h2 className="font-semibold text-lg">Subscription Details</h2>
+                <button onClick={() => setViewingSub(null)}><X className="h-5 w-5 text-gray-400" /></button>
+              </div>
+
+              {/* Customer info */}
+              <div className="flex items-center gap-3 mb-5">
+                {boxImg ? (
+                  <img src={boxImg} alt={s.boxName} className="w-16 h-16 rounded-xl object-cover" />
+                ) : (
+                  <div className="w-16 h-16 rounded-xl bg-gray-100 flex items-center justify-center">
+                    <Package className="h-6 w-6 text-gray-300" />
+                  </div>
+                )}
+                <div>
+                  <p className="font-semibold text-lg">{s.customerName || s.email}</p>
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_STYLE[s.status] ?? STATUS_STYLE.pending}`}>
+                    {s.status}
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-3 text-sm">
+                {/* Contact */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-gray-50 rounded-lg p-3">
+                    <p className="text-xs text-gray-500 mb-1 flex items-center gap-1"><Mail className="h-3 w-3" /> Email</p>
+                    <p className="font-medium">{s.email}</p>
+                  </div>
+                  {s.customerPhone && (
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <p className="text-xs text-gray-500 mb-1 flex items-center gap-1"><Phone className="h-3 w-3" /> Phone</p>
+                      <p className="font-medium">{s.customerPhone}</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Box details */}
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <p className="text-xs text-gray-500 mb-1 flex items-center gap-1"><Package className="h-3 w-3" /> Subscription Box</p>
+                  <p className="font-medium">{s.boxName}</p>
+                  {s.alternateBoxId && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Alternates with: <span className="font-medium text-gray-700">{s.alternateBoxName}</span>
+                      {' '}— Next delivery: <span className="font-medium text-brand">{s.nextIsAlternate ? s.alternateBoxName : s.boxName}</span>
+                    </p>
+                  )}
+                </div>
+
+                {/* Frequency */}
+                <div className="bg-gray-50 rounded-lg p-3">
+                  <p className="text-xs text-gray-500 mb-1 flex items-center gap-1"><RefreshCcw className="h-3 w-3" /> Frequency</p>
+                  <p className="font-medium capitalize">{s.frequency}</p>
+                </div>
+
+                {/* Dates */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-gray-50 rounded-lg p-3">
+                    <p className="text-xs text-gray-500 mb-1 flex items-center gap-1"><Calendar className="h-3 w-3" /> Started</p>
+                    <p className="font-medium">{createdDate ? fmt(createdDate) : '—'}</p>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg p-3">
+                    <p className="text-xs text-gray-500 mb-1 flex items-center gap-1"><Clock className="h-3 w-3" /> Last Order</p>
+                    <p className="font-medium">{lastOrderDate ? fmt(lastOrderDate) : 'None yet'}</p>
+                  </div>
+                </div>
+
+                {s.status === 'active' && (
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                    <p className="text-xs text-green-600 mb-1 flex items-center gap-1"><Calendar className="h-3 w-3" /> Next Order Due</p>
+                    <p className="font-medium text-green-700">{fmt(nextDue)}</p>
+                    <p className="text-xs text-green-500 mt-1">Orders are auto-generated when delivery stops are created</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-6">
+                <button onClick={() => setViewingSub(null)}
+                  className="w-full border py-2 rounded-lg text-sm font-medium hover:bg-gray-50">Close</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {showForm && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
