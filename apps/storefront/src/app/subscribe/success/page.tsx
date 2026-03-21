@@ -1,5 +1,7 @@
 'use client';
 
+export const runtime = 'edge';
+
 import { CheckCircle } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
