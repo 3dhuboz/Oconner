@@ -19,21 +19,20 @@ export default function DashboardPage() {
   useEffect(() => {
     const load = async () => {
       try {
-        const [todayOrders, recent] = await Promise.all([
-          api.orders.today() as Promise<Order[]>,
-          api.orders.list() as Promise<Order[]>,
-        ]);
-        const pending = recent.filter((o) => ['confirmed', 'preparing', 'packed'].includes(o.status));
-        const outForDelivery = recent.filter((o) => o.status === 'out_for_delivery');
+        const allOrders = await api.orders.list() as Order[];
+        // Use local AEST midnight for "today" filtering
         const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
-        const todayFiltered = todayOrders.filter((o) => o.createdAt >= todayStart.getTime());
+        const todayMs = todayStart.getTime();
+        const todayFiltered = allOrders.filter((o) => o.createdAt >= todayMs);
+        const pending = allOrders.filter((o) => ['confirmed', 'preparing', 'packed'].includes(o.status));
+        const outForDelivery = allOrders.filter((o) => o.status === 'out_for_delivery');
         setStats({
           todayOrders: todayFiltered.length,
           todayRevenue: todayFiltered.reduce((s, o) => s + (o.total ?? 0), 0),
           pendingOrders: pending.length,
           outForDelivery: outForDelivery.length,
         });
-        setRecentOrders(recent.slice(0, 10));
+        setRecentOrders(allOrders.slice(0, 10));
       } catch (e) {
         console.error('Dashboard load failed:', e);
       } finally {

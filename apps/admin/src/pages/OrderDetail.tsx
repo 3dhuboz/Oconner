@@ -114,9 +114,11 @@ export default function OrderDetailPage() {
                       )}
                     </td>
                     <td className="py-2 text-right text-gray-500">
-                      {item.isMeatPack
-                        ? (item.quantity ? `x${item.quantity}` : 'x1')
-                        : (item.weight ? `${item.weight >= 1000 ? `${(item.weight / 1000).toFixed(1)}kg` : `${item.weight}g`}` : '—')}
+                      {(item.isMeatPack || item.quantity)
+                        ? `x${item.quantity ?? 1}`
+                        : (item.weightKg ? `${item.weightKg}kg`
+                          : item.weight ? `${item.weight >= 1000 ? `${(item.weight / 1000).toFixed(1)}kg` : `${item.weight}g`}`
+                          : '—')}
                     </td>
                     <td className="py-2 text-right font-medium">{formatCurrency(item.lineTotal)}</td>
                   </tr>

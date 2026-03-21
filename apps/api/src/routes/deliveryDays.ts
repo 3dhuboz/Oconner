@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { notifyCustomer } from './push';
 import { drizzle } from 'drizzle-orm/d1';
 import { eq, asc, gte, and } from 'drizzle-orm';
-import { deliveryDays, orders, stops, notifications, subscriptions, customers, users, deliveryRuns } from '@butcher/db';
+import { deliveryDays, orders, stops, notifications, subscriptions, customers, users, deliveryRuns, products } from '@butcher/db';
 import { deductStock } from '../lib/stock';
 import { sendEmail, buildOrderEmail, getSubject } from '../lib/email';
 import type { Env, AuthUser } from '../types';
@@ -94,9 +94,6 @@ app.post('/:id/generate-stops', async (c) => {
     fortnightly: 14 * 24 * 60 * 60 * 1000,
     monthly: 30 * 24 * 60 * 60 * 1000,
   };
-  const BOX_PRICES: Record<string, number> = {
-    bbq: 29000, family: 29000, double: 55000, value: 22000,
-  };
 
   const activeSubs = await db.select().from(subscriptions)
     .where(eq(subscriptions.status, 'active'));
@@ -122,11 +119,13 @@ app.post('/:id/generate-stops', async (c) => {
     } catch {}
     if (!address.line1) continue;
 
-    const price = BOX_PRICES[sub.boxId];
-    if (!price) continue;
-
     const boxId = sub.nextIsAlternate && sub.alternateBoxId ? sub.alternateBoxId : sub.boxId;
     const boxName = sub.nextIsAlternate && sub.alternateBoxName ? sub.alternateBoxName : sub.boxName;
+
+    // Look up actual product price from DB (fixedPrice is in cents)
+    const [boxProduct] = await db.select().from(products).where(eq(products.id, boxId)).limit(1);
+    const price = boxProduct?.fixedPrice ?? 0;
+    if (!price) continue;
 
     const orderId = crypto.randomUUID();
     const gst = Math.round(price / 11);
