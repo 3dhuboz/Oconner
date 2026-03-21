@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { api } from '@butcher/shared';
-import { Plus, X, Truck, User, ToggleLeft, ToggleRight, Mail, Send, Map } from 'lucide-react';
+import { Plus, X, Truck, User, ToggleLeft, ToggleRight, Mail, Send, Map, Pencil, Trash2 } from 'lucide-react';
 import { toast } from '../lib/toast';
 import MapPage from './Map';
 
 const EMPTY_FORM = { name: '', email: '', sendInvite: true };
+const EMPTY_EDIT = { name: '', email: '' };
 
 interface DriverUser {
   id: string;
@@ -22,6 +23,10 @@ export default function DriversPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [inviting, setInviting] = useState<string | null>(null);
+  const [editingDriver, setEditingDriver] = useState<DriverUser | null>(null);
+  const [editForm, setEditForm] = useState(EMPTY_EDIT);
+  const [editSaving, setEditSaving] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<DriverUser | null>(null);
 
   useEffect(() => {
     api.users.drivers()
@@ -90,6 +95,38 @@ export default function DriversPage() {
     }
   };
 
+  const openEdit = (driver: DriverUser) => {
+    setEditingDriver(driver);
+    setEditForm({ name: driver.name ?? '', email: driver.email });
+  };
+
+  const handleEdit = async () => {
+    if (!editingDriver) return;
+    setEditSaving(true);
+    try {
+      await api.users.update(editingDriver.id, { name: editForm.name, email: editForm.email });
+      setDrivers((prev) => prev.map((d) => d.id === editingDriver.id ? { ...d, name: editForm.name, email: editForm.email } : d));
+      setEditingDriver(null);
+      toast('Driver updated');
+    } catch {
+      toast('Failed to update driver', 'error');
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteConfirm) return;
+    try {
+      await api.users.update(deleteConfirm.id, { active: false });
+      setDrivers((prev) => prev.filter((d) => d.id !== deleteConfirm.id));
+      setDeleteConfirm(null);
+      toast('Driver removed');
+    } catch {
+      toast('Failed to remove driver', 'error');
+    }
+  };
+
   const [tab, setTab] = useState<'list' | 'map'>('list');
 
   return (
@@ -132,6 +169,7 @@ export default function DriversPage() {
                 <th className="px-4 py-3 text-left">Email</th>
                 <th className="px-4 py-3 text-center">Active</th>
                 <th className="px-4 py-3 text-center">Invite</th>
+                <th className="px-4 py-3 text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -165,6 +203,16 @@ export default function DriversPage() {
                         : <Send className="h-3 w-3" />}
                       Send Invite
                     </button>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <div className="flex items-center justify-center gap-1">
+                      <button onClick={() => openEdit(d)} className="p-1.5 text-gray-400 hover:text-brand rounded-lg hover:bg-brand/5" title="Edit">
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                      <button onClick={() => setDeleteConfirm(d)} className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50" title="Remove">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -224,6 +272,63 @@ export default function DriversPage() {
               <button onClick={handleAdd} disabled={saving} className="flex-1 bg-brand text-white py-2 rounded-lg text-sm font-medium disabled:opacity-50 flex items-center justify-center gap-2">
                 {saving ? 'Creating…' : form.sendInvite ? <><Mail className="h-4 w-4" /> Create & Send Invite</> : 'Create Driver'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Edit Driver Modal */}
+      {editingDriver && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="font-semibold text-lg flex items-center gap-2">
+                <Pencil className="h-5 w-5 text-brand" /> Edit Driver
+              </h2>
+              <button onClick={() => setEditingDriver(null)}><X className="h-5 w-5 text-gray-400" /></button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Full Name</label>
+                <input
+                  value={editForm.name}
+                  onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Email</label>
+                <input
+                  type="email"
+                  value={editForm.email}
+                  onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))}
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-5">
+              <button onClick={() => setEditingDriver(null)} className="flex-1 border py-2 rounded-lg text-sm">Cancel</button>
+              <button onClick={handleEdit} disabled={editSaving} className="flex-1 bg-brand text-white py-2 rounded-lg text-sm font-medium disabled:opacity-50">
+                {editSaving ? 'Saving…' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirm Modal */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6 text-center">
+            <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Trash2 className="h-6 w-6 text-red-500" />
+            </div>
+            <h2 className="font-semibold text-lg mb-2">Remove Driver?</h2>
+            <p className="text-sm text-gray-500 mb-5">
+              Remove <strong>{deleteConfirm.name ?? deleteConfirm.email}</strong> from the driver list? They won't be able to access the driver app.
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setDeleteConfirm(null)} className="flex-1 border py-2 rounded-lg text-sm">Cancel</button>
+              <button onClick={handleDelete} className="flex-1 bg-red-500 text-white py-2 rounded-lg text-sm font-medium">Remove</button>
             </div>
           </div>
         </div>
