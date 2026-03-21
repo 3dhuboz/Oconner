@@ -58,7 +58,7 @@ function optimizeWithConstraints(
   stops: Stop[], departureMs: number,
 ): { stops: Stop[]; reasons: Record<string, string> } {
   const AVG = 8 * 60 * 1000;
-  let sorted = nearestNeighborRoute([...stops]);
+  let sorted = furthestToClosestRoute([...stops]);
   const geoPos: Record<string, number> = {};
   sorted.forEach((s, i) => { geoPos[s.id!] = i; });
   let withEta = sorted.map((s, i) => ({ ...s, estimatedArrival: departureMs + i * AVG }));
@@ -94,7 +94,8 @@ function optimizeWithConstraints(
         : w.latest ? `before ${minsToTime(w.latest)}` : `after ${minsToTime(w.earliest!)}`;
       reasons[s.id!] = `Time request (${constraint}) met at current geographic position`;
     } else {
-      reasons[s.id!] = `Geographic cluster — nearest neighbour from ${s.address.suburb} (${s.address.postcode})`;
+      const dist = (s.lat && s.lng) ? haversineKm(DEPOT_LAT, DEPOT_LNG, s.lat, s.lng).toFixed(1) : '?';
+      reasons[s.id!] = `${dist}km from depot — ${s.address.suburb} (${s.address.postcode})`;
     }
   });
   return { stops: withEta, reasons };
@@ -118,23 +119,27 @@ function departureTimestamp(day: DeliveryDayData | null): number {
   return base.getTime();
 }
 
-function nearestNeighborRoute(stops: Stop[]): Stop[] {
-  if (stops.length <= 1) return stops;
-  const unvisited = [...stops];
-  const route: Stop[] = [];
-  route.push(unvisited.splice(0, 1)[0]);
-  while (unvisited.length > 0) {
-    const last = route[route.length - 1];
-    let nearest = 0;
-    let minDist = Infinity;
-    unvisited.forEach((s, i) => {
-      const dist = Math.abs(s.address.postcode.charCodeAt(0) - last.address.postcode.charCodeAt(0)) +
-        (s.address.suburb > last.address.suburb ? 1 : -1);
-      if (dist < minDist) { minDist = dist; nearest = i; }
-    });
-    route.push(unvisited.splice(nearest, 1)[0]);
-  }
-  return route;
+// O'Connor Agriculture depot — Rockhampton, QLD
+const DEPOT_LAT = -23.3791;
+const DEPOT_LNG = 150.5100;
+
+/** Haversine distance in km between two lat/lng points */
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/** Sort stops from furthest to closest relative to depot */
+function furthestToClosestRoute(stops: Stop[]): Stop[] {
+  return [...stops].sort((a, b) => {
+    const distA = (a.lat && a.lng) ? haversineKm(DEPOT_LAT, DEPOT_LNG, a.lat, a.lng) : 0;
+    const distB = (b.lat && b.lng) ? haversineKm(DEPOT_LAT, DEPOT_LNG, b.lat, b.lng) : 0;
+    return distB - distA; // furthest first
+  });
 }
 
 const STATUS_CONFIG: Record<string, { label: string; icon: any; cls: string }> = {
@@ -431,8 +436,8 @@ export default function DeliveryManifestPage() {
               {showExplainer && (
                 <div className="px-5 pb-4 space-y-2">
                   <div className="bg-indigo-50 rounded-lg p-3 text-xs text-indigo-800 leading-relaxed">
-                    <p className="font-semibold mb-1">Step 1 — Geographic clustering</p>
-                    <p>Stops are sorted using a nearest-neighbour algorithm based on suburb and postcode. Starting from the first stop, each subsequent stop is the geographically closest unvisited one, minimising total travel distance.</p>
+                    <p className="font-semibold mb-1">Step 1 — Furthest to closest</p>
+                    <p>Stops are sorted by distance from the depot, starting with the furthest delivery and working back towards base. This ensures the driver covers the longest distance first and finishes close to home.</p>
                   </div>
                   <div className="bg-indigo-50 rounded-lg p-3 text-xs text-indigo-800 leading-relaxed">
                     <p className="font-semibold mb-1">Step 2 — Customer time window constraints</p>
