@@ -37,9 +37,18 @@ interface OrderItem {
 const STATUSES: OrderStatus[] = ['pending_payment', 'confirmed', 'preparing', 'packed', 'out_for_delivery', 'delivered', 'cancelled', 'refunded'];
 const AU_STATES = ['QLD', 'NSW', 'VIC', 'SA', 'WA', 'TAS', 'NT', 'ACT'];
 
+const PAYMENT_STATUSES = [
+  { value: 'paid', label: 'Paid' },
+  { value: 'pending', label: 'Pending' },
+  { value: 'unpaid', label: 'Unpaid' },
+  { value: 'cash', label: 'Cash on Delivery' },
+  { value: 'invoice', label: 'Invoice' },
+];
+
 const EMPTY_FORM = {
   customerName: '', customerEmail: '', customerPhone: '',
   deliveryDayId: '', status: 'confirmed' as OrderStatus,
+  paymentStatus: 'paid',
   internalNotes: '', deliveryFee: 0,
   address: { line1: '', line2: '', suburb: '', state: 'QLD', postcode: '' },
 };
@@ -147,6 +156,7 @@ export default function OrdersPage() {
         gst: 0,
         total,
         status: form.status,
+        paymentStatus: form.paymentStatus,
         internalNotes: form.internalNotes || undefined,
       }) as { id: string };
       const updated = await api.orders.list(statusFilter === 'all' ? undefined : statusFilter) as Order[];
@@ -222,6 +232,7 @@ export default function OrdersPage() {
       customerPhone: order.customerPhone ?? '',
       deliveryDayId: order.deliveryDayId ?? '',
       status: order.status as OrderStatus,
+      paymentStatus: (order as any).paymentStatus ?? 'paid',
       internalNotes: order.internalNotes ?? '',
       deliveryFee: order.deliveryFee ?? 0,
       address: {
@@ -539,11 +550,17 @@ export default function OrdersPage() {
 
                 <div>
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Summary</p>
-                  <div className="grid grid-cols-2 gap-3 mb-3">
+                  <div className="grid grid-cols-3 gap-3 mb-3">
                     <div>
                       <label className="text-xs text-gray-500 mb-1 block">Order Status</label>
                       <select value={editForm.status} onChange={(e) => setEditForm((f) => ({ ...f, status: e.target.value as OrderStatus }))} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
                         {STATUSES.map((s) => <option key={s} value={s}>{ORDER_STATUS_LABELS[s] ?? s}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500 mb-1 block">Payment Status</label>
+                      <select value={editForm.paymentStatus} onChange={(e) => setEditForm((f) => ({ ...f, paymentStatus: e.target.value }))} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
+                        {PAYMENT_STATUSES.map((ps) => <option key={ps.value} value={ps.value}>{ps.label}</option>)}
                       </select>
                     </div>
                     <div>
@@ -681,11 +698,17 @@ export default function OrdersPage() {
 
                 <div>
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Summary</p>
-                  <div className="grid grid-cols-2 gap-3 mb-3">
+                  <div className="grid grid-cols-3 gap-3 mb-3">
                     <div>
                       <label className="text-xs text-gray-500 mb-1 block">Order Status</label>
                       <select value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as OrderStatus }))} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
                         {STATUSES.map((s) => <option key={s} value={s}>{ORDER_STATUS_LABELS[s] ?? s}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500 mb-1 block">Payment Status</label>
+                      <select value={form.paymentStatus} onChange={(e) => setForm((f) => ({ ...f, paymentStatus: e.target.value }))} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
+                        {PAYMENT_STATUSES.map((ps) => <option key={ps.value} value={ps.value}>{ps.label}</option>)}
                       </select>
                     </div>
                     <div>
