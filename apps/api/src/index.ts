@@ -168,13 +168,12 @@ app.post('/api/orders', async (c) => {
   return c.json({ id: orderId }, 201);
 });
 
+// Forward to subscriptions router so order creation logic is centralized
 app.post('/api/subscriptions', async (c) => {
-  const db = drizzle(c.env.DB);
-  const body = await c.req.json<{ email: string; boxId: string; boxName: string; frequency: string; status?: string }>();
-  const now = Date.now();
-  const id = crypto.randomUUID();
-  await db.insert(subscriptionsTable).values({ id, customerId: null, email: body.email, boxId: body.boxId, boxName: body.boxName, frequency: body.frequency, status: body.status ?? 'pending', createdAt: now, updatedAt: now });
-  return c.json({ id }, 201);
+  const url = new URL(c.req.url);
+  url.pathname = '/';
+  const newReq = new Request(url.toString(), { method: 'POST', headers: c.req.raw.headers, body: c.req.raw.body });
+  return subscriptionsRouter.fetch(newReq, c.env);
 });
 
 // Public subscription checkout (no auth — uses Square)
