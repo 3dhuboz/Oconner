@@ -218,6 +218,15 @@ export default function SettingsPage() {
   const [pushResult, setPushResult] = useState<{ sent: number; total: number } | null>(null);
   const [pushMode, setPushMode] = useState<'test' | 'broadcast'>('test');
 
+  const [rewards, setRewards] = useState({
+    enabled: false,
+    stampsRequired: 10,
+    prize: '',
+    programName: "O'Connor Rewards",
+  });
+
+  const [subscriptionFrequencies, setSubscriptionFrequencies] = useState(['fortnightly', 'monthly']);
+
   const [about, setAbout] = useState({
     heroTagline: 'Locally Raised · Grass Fed · Naturally Healthy',
     heroTitle: "About O'Connor Agriculture",
@@ -256,6 +265,8 @@ export default function SettingsPage() {
         if (data?.email) setEmail({ ...EMAIL_DEFAULTS, ...data.email });
         if (data?.ticker) setTicker({ enabled: true, items: [], facebookPageUrl: 'https://www.facebook.com/profile.php?id=61574996320860', ...data.ticker });
         if (data?.about) setAbout((prev) => ({ ...prev, ...data.about }));
+        if (data?.rewards) setRewards((prev) => ({ ...prev, ...data.rewards }));
+        if (data?.subscriptionFrequencies) setSubscriptionFrequencies(data.subscriptionFrequencies);
       })
       .catch((e: unknown) => console.error('Failed to load settings:', e))
       .finally(() => setLoading(false));
@@ -309,7 +320,7 @@ export default function SettingsPage() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await api.config.update({ storefront: config, payment, email, ticker, about });
+      await api.config.update({ storefront: config, payment, email, ticker, about, rewards, subscriptionFrequencies });
       toast('Settings saved — storefront updated immediately');
     } catch (e) {
       console.error('Save failed:', e);
@@ -512,6 +523,82 @@ export default function SettingsPage() {
             ⚠ You are in <strong>live mode</strong>. Real customer cards will be charged.
           </div>
         )}
+      </Section>
+
+      <Section title="Rewards Program" icon={Users}>
+        <Field label="Enable Rewards Program">
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={rewards.enabled}
+              onChange={() => setRewards((r) => ({ ...r, enabled: !r.enabled }))}
+              className="accent-brand w-5 h-5"
+            />
+            <span className="text-sm">Customers earn stamps with each order</span>
+          </label>
+        </Field>
+        {rewards.enabled && (
+          <>
+            <Field label="Stamps required for reward" hint="How many orders/stamps before the customer earns a free reward">
+              <input
+                type="number"
+                className={inputCls}
+                min={1}
+                max={50}
+                value={rewards.stampsRequired}
+                onChange={(e) => setRewards((r) => ({ ...r, stampsRequired: Number(e.target.value) || 10 }))}
+              />
+            </Field>
+            <Field label="Reward description" hint="What the customer receives when they collect enough stamps">
+              <input
+                className={inputCls}
+                value={rewards.prize}
+                onChange={(e) => setRewards((r) => ({ ...r, prize: e.target.value }))}
+                placeholder="e.g. Free BBQ Box, Free 2kg Mince, $50 credit"
+              />
+            </Field>
+            <Field label="Program name" hint="Displayed to customers on the storefront">
+              <input
+                className={inputCls}
+                value={rewards.programName}
+                onChange={(e) => setRewards((r) => ({ ...r, programName: e.target.value }))}
+                placeholder="O'Connor Rewards"
+              />
+            </Field>
+          </>
+        )}
+      </Section>
+
+      <Section title="Subscription Settings" icon={RefreshCw}>
+        <Field label="Available Delivery Frequencies" hint="Toggle which frequencies customers can choose when subscribing. At least one must be enabled.">
+          <div className="space-y-2">
+            {[
+              { id: 'weekly', label: 'Weekly', desc: 'Every week (52 deliveries/year)' },
+              { id: 'fortnightly', label: 'Fortnightly', desc: 'Every 2 weeks (26 deliveries/year)' },
+              { id: 'monthly', label: 'Monthly', desc: 'Once a month (12 deliveries/year)' },
+            ].map((freq) => {
+              const isEnabled = subscriptionFrequencies.includes(freq.id);
+              return (
+                <label key={freq.id} className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${isEnabled ? 'border-brand bg-brand/5' : 'border-gray-200 hover:border-gray-300'}`}>
+                  <input
+                    type="checkbox"
+                    checked={isEnabled}
+                    onChange={() => {
+                      const updated = isEnabled ? subscriptionFrequencies.filter((f) => f !== freq.id) : [...subscriptionFrequencies, freq.id];
+                      if (updated.length === 0) return;
+                      setSubscriptionFrequencies(updated);
+                    }}
+                    className="accent-brand w-4 h-4"
+                  />
+                  <div>
+                    <p className="text-sm font-medium">{freq.label}</p>
+                    <p className="text-xs text-gray-400">{freq.desc}</p>
+                  </div>
+                </label>
+              );
+            })}
+          </div>
+        </Field>
       </Section>
 
       <Section title="Email Routing" icon={Mail}>

@@ -8,7 +8,7 @@ import { ZoneAutocomplete } from '../components/ZoneAutocomplete';
 
 const EMPTY_FORM = { name: '', email: '', sendInvite: true };
 const EMPTY_EDIT = {
-  name: '', email: '', phone: '', address: '',
+  name: '', email: '', phone: '', address: '', startAddress: '',
   vehicleInfo: '', registrationNumber: '', licenseNumber: '',
   nextOfKinName: '', nextOfKinPhone: '', zones: '',
 };
@@ -124,6 +124,7 @@ export default function DriversPage() {
     setEditForm({
       name: driver.name ?? '', email: driver.email,
       phone: driver.phone ?? '', address: driver.address ?? '',
+      startAddress: (driver as any).startAddress ?? '',
       vehicleInfo: driver.vehicleInfo ?? '', registrationNumber: driver.registrationNumber ?? '',
       licenseNumber: driver.licenseNumber ?? '',
       nextOfKinName: nok.name, nextOfKinPhone: nok.phone,
@@ -141,6 +142,7 @@ export default function DriversPage() {
     const update = {
       name: editForm.name, email: editForm.email,
       phone: editForm.phone || null, address: editForm.address || null,
+      startAddress: editForm.startAddress || null,
       vehicleInfo: editForm.vehicleInfo || null, registrationNumber: editForm.registrationNumber || null,
       licenseNumber: editForm.licenseNumber || null,
       nextOfKin, zones: JSON.stringify(zonesArr),
@@ -375,6 +377,13 @@ export default function DriversPage() {
                   <input value={editForm.address} onChange={(e) => setEditForm((f) => ({ ...f, address: e.target.value }))}
                     placeholder="Home address" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
                 </div>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block flex items-center gap-1"><MapPin className="h-3 w-3" /> Route Start Point</label>
+                <input value={editForm.startAddress} onChange={(e) => setEditForm((f) => ({ ...f, startAddress: e.target.value }))}
+                  placeholder="e.g. 123 Main St, Rockhampton QLD 4700 (where driver starts their route)"
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                <p className="text-xs text-gray-400 mt-1">Used as the starting point for route optimisation calculations</p>
               </div>
 
               {/* Vehicle */}
