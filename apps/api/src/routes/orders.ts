@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/d1';
 import { eq, desc, inArray, gte } from 'drizzle-orm';
-import { orders, customers, deliveryDays, stops, stockMovements, notifications, auditLog, deliveryDayStock } from '@butcher/db';
+import { orders, customers, deliveryDays, stops, stockMovements, notifications, auditLog, deliveryDayStock, promoCodes } from '@butcher/db';
 import type { Env, AuthUser } from '../types';
 import { sendEmail, buildOrderEmail, getSubject } from '../lib/email';
 import { deductStock } from '../lib/stock';
@@ -80,11 +80,29 @@ app.post('/', async (c) => {
     }
   }
 
-  // ── Server-side pricing: recalculate delivery fee & GST ──
+  // ── Server-side pricing: recalculate delivery fee, discount & GST ──
   const subtotal = body.subtotal ?? 0;
-  const deliveryFee = (body.fulfillmentType === 'pickup') ? 0 : (subtotal >= 10000 ? 0 : 1000); // free over $100, $10 under
+  let discount = 0;
+  const promoId = (body as any).promoId;
+
+  // Validate and apply promo code
+  if (promoId) {
+    const [promo] = await db.select().from(promoCodes).where(eq(promoCodes.id, promoId)).limit(1);
+    if (promo && promo.active) {
+      if (promo.type === 'percentage') {
+        discount = Math.round(subtotal * (promo.value / 100));
+      } else {
+        discount = Math.min(promo.value, subtotal);
+      }
+      // Increment usage
+      await db.update(promoCodes).set({ usedCount: promo.usedCount + 1 }).where(eq(promoCodes.id, promo.id));
+    }
+  }
+
+  const discountedSubtotal = Math.max(0, subtotal - discount);
+  const deliveryFee = (body.fulfillmentType === 'pickup') ? 0 : (discountedSubtotal >= 10000 ? 0 : 1000);
   const gst = 0; // no GST on goods
-  const total = subtotal + deliveryFee;
+  const total = discountedSubtotal + deliveryFee;
 
   // ── Day-specific stock validation ──
   const dayAllocations = await db.select().from(deliveryDayStock)

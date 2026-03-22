@@ -28,13 +28,19 @@ export default function CheckoutPage() {
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [promoInput, setPromoInput] = useState('');
+  const [promoApplied, setPromoApplied] = useState<{ promoId: string; code: string; discount: number; label: string } | null>(null);
+  const [promoError, setPromoError] = useState('');
+  const [promoLoading, setPromoLoading] = useState(false);
 
   const selectedDay = deliveryDays.find((d) => d.id === selectedDayId);
   const isPickup = (selectedDay as any)?.type === 'pickup';
   const subtotal = total();
-  const deliveryFee = isPickup ? 0 : (subtotal >= FREE_DELIVERY_THRESHOLD ? 0 : DELIVERY_FEE_AMOUNT);
-  const gst = 0; // no GST on goods
-  const grandTotal = subtotal + deliveryFee;
+  const promoDiscount = promoApplied?.discount ?? 0;
+  const discountedSubtotal = Math.max(0, subtotal - promoDiscount);
+  const deliveryFee = isPickup ? 0 : (discountedSubtotal >= FREE_DELIVERY_THRESHOLD ? 0 : DELIVERY_FEE_AMOUNT);
+  const gst = 0;
+  const grandTotal = discountedSubtotal + deliveryFee;
 
   useEffect(() => {
     api.deliveryDays.list(true)
@@ -82,6 +88,9 @@ export default function CheckoutPage() {
         deliveryFee: deliveryFee,
         gst,
         total: grandTotal,
+        promoId: promoApplied?.promoId ?? undefined,
+        promoCode: promoApplied?.code ?? undefined,
+        promoDiscount,
         notes: form.notes,
       }) as { id: string };
 
@@ -152,6 +161,50 @@ export default function CheckoutPage() {
             </section>
 
             <textarea placeholder="Delivery notes (optional)" value={form.notes} onChange={f('notes')} rows={3} className="w-full border rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand text-sm resize-none" />
+
+            {/* Promo Code */}
+            <section>
+              <h2 className="text-lg font-semibold mb-3">Promo Code</h2>
+              {promoApplied ? (
+                <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg px-4 py-3">
+                  <div>
+                    <p className="text-sm font-medium text-green-800">{promoApplied.code} — {promoApplied.label}</p>
+                    <p className="text-xs text-green-600">Saving {formatCurrency(promoApplied.discount)}</p>
+                  </div>
+                  <button onClick={() => { setPromoApplied(null); setPromoInput(''); }} className="text-xs text-red-500 hover:underline">Remove</button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <input
+                    placeholder="Enter code"
+                    value={promoInput}
+                    onChange={(e) => { setPromoInput(e.target.value.toUpperCase()); setPromoError(''); }}
+                    className="flex-1 border rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand text-sm uppercase"
+                  />
+                  <button
+                    type="button"
+                    disabled={!promoInput.trim() || promoLoading}
+                    onClick={async () => {
+                      setPromoLoading(true);
+                      setPromoError('');
+                      try {
+                        const res = await api.post<any>('/api/promo-codes/validate', { code: promoInput, subtotal });
+                        if (res.valid) {
+                          setPromoApplied({ promoId: res.promoId, code: res.code, discount: res.discount, label: res.label });
+                        } else {
+                          setPromoError(res.error ?? 'Invalid code');
+                        }
+                      } catch { setPromoError('Failed to validate code'); }
+                      finally { setPromoLoading(false); }
+                    }}
+                    className="bg-brand text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-brand-mid disabled:opacity-50"
+                  >
+                    {promoLoading ? '...' : 'Apply'}
+                  </button>
+                </div>
+              )}
+              {promoError && <p className="text-xs text-red-500 mt-1">{promoError}</p>}
+            </section>
           </div>
 
           <div>
@@ -168,6 +221,12 @@ export default function CheckoutPage() {
               <hr className="mb-3" />
               <div className="space-y-1.5 text-sm">
                 <div className="flex justify-between"><span>Subtotal</span><span>{formatCurrency(subtotal)}</span></div>
+                {promoDiscount > 0 && (
+                  <div className="flex justify-between text-green-600">
+                    <span>Discount ({promoApplied?.label})</span>
+                    <span>-{formatCurrency(promoDiscount)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span>{isPickup ? 'Pickup' : 'Delivery'}</span>
                   <span className={deliveryFee === 0 ? 'text-green-600 font-medium' : ''}>

@@ -112,6 +112,8 @@ export const orders = sqliteTable('orders', {
   deliveryFee: integer('delivery_fee').notNull(), // cents
   gst: integer('gst').notNull(),                  // cents
   total: integer('total').notNull(),              // cents
+  promoCode: text('promo_code'),
+  promoDiscount: integer('promo_discount').notNull().default(0), // cents
   status: text('status').notNull().default('pending_payment'),
   deliveryDayId: text('delivery_day_id').notNull().references(() => deliveryDays.id),
   deliveryAddress: text('delivery_address').notNull(), // JSON: Address
@@ -226,6 +228,20 @@ export const stocktakeSessions = sqliteTable('stocktake_sessions', {
   approvedBy: text('approved_by'),
   approvedAt: integer('approved_at'),
   createdBy: text('created_by').notNull(),
+  createdAt: integer('created_at').notNull(),
+});
+
+// ── Promo Codes ──────────────────────────────────────────────────────────────
+export const promoCodes = sqliteTable('promo_codes', {
+  id: text('id').primaryKey(),
+  code: text('code').notNull(),              // e.g. 'WELCOME10'
+  type: text('type').notNull().default('percentage'),  // 'percentage' | 'fixed'
+  value: integer('value').notNull(),          // percentage (10 = 10%) or cents (1000 = $10)
+  minOrder: integer('min_order').default(0),  // minimum order subtotal in cents
+  maxUses: integer('max_uses'),              // null = unlimited
+  usedCount: integer('used_count').notNull().default(0),
+  expiresAt: integer('expires_at'),          // unix ms, null = never
+  active: integer('active', { mode: 'boolean' }).notNull().default(true),
   createdAt: integer('created_at').notNull(),
 });
 

@@ -20,6 +20,7 @@ import subscriptionsRouter from './routes/subscriptions';
 import pushRouter from './routes/push';
 import reportsRouter from './routes/reports';
 import { reels as reelsRouter } from './routes/reels';
+import promoCodesRouter from './routes/promoCodes';
 
 const app = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
 
@@ -191,6 +192,42 @@ app.post('/api/subscriptions/checkout', async (c) => {
 app.route('/api/push', pushRouter);
 app.route('/api/reels', reelsRouter);
 
+// ── Public promo code validation (no auth) ───────────────────────────────────
+app.post('/api/promo-codes/validate', async (c) => {
+  const { promoCodes: promoCodesTable } = await import('@butcher/db');
+  const db = drizzle(c.env.DB);
+  const { code, subtotal } = await c.req.json<{ code: string; subtotal: number }>();
+  const codeUpper = code.toUpperCase().trim();
+
+  const [promo] = await db.select().from(promoCodesTable).where(eq(promoCodesTable.code, codeUpper)).limit(1);
+
+  if (!promo) return c.json({ valid: false, error: 'Invalid promo code' });
+  if (!promo.active) return c.json({ valid: false, error: 'This code is no longer active' });
+  if (promo.expiresAt && Date.now() > promo.expiresAt) return c.json({ valid: false, error: 'This code has expired' });
+  if (promo.maxUses && promo.usedCount >= promo.maxUses) return c.json({ valid: false, error: 'This code has been fully redeemed' });
+  if (promo.minOrder && subtotal < promo.minOrder) {
+    const min = (promo.minOrder / 100).toFixed(2);
+    return c.json({ valid: false, error: `Minimum order of $${min} required for this code` });
+  }
+
+  let discount = 0;
+  if (promo.type === 'percentage') {
+    discount = Math.round(subtotal * (promo.value / 100));
+  } else {
+    discount = Math.min(promo.value, subtotal);
+  }
+
+  return c.json({
+    valid: true,
+    promoId: promo.id,
+    code: promo.code,
+    type: promo.type,
+    value: promo.value,
+    discount,
+    label: promo.type === 'percentage' ? `${promo.value}% off` : `$${(promo.value / 100).toFixed(2)} off`,
+  });
+});
+
 // ── Public contact form ───────────────────────────────────────────────────────
 app.post('/api/contact', async (c) => {
   const { name, email, subject, message } = await c.req.json<{ name: string; email: string; subject?: string; message: string }>();
@@ -231,6 +268,7 @@ app.route('/api/delivery-runs', deliveryRunsRouter);
 app.route('/api/stock', stockRouter);
 app.route('/api/subscriptions', subscriptionsRouter);
 app.route('/api/reports', reportsRouter);
+app.route('/api/promo-codes', promoCodesRouter);
 
 app.route('/webhook', stripeRouter);
 
