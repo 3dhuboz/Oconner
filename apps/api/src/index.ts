@@ -305,7 +305,7 @@ app.post('/api/staff/invite', requireAuth, requireRole('admin'), async (c) => {
     html,
   });
 
-  if (!result.ok) return c.json({ error: 'Failed to send email' }, 500);
+  if (!result) return c.json({ error: 'Failed to send email' }, 500);
   return c.json({ ok: true });
 });
 
