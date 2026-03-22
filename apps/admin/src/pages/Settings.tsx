@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '@butcher/shared';
-import { Save, RefreshCw, Image, Type, Phone, Layout, ChevronDown, ChevronUp, CreditCard, Mail, Bell, Send, Users, Radio, Plus, X } from 'lucide-react';
+import { Save, RefreshCw, Image, Type, Phone, Layout, ChevronDown, ChevronUp, CreditCard, Mail, Bell, Send, Users, Radio, Plus, X, BookOpen } from 'lucide-react';
 import { toast } from '../lib/toast';
 
 interface Feature {
@@ -159,6 +159,36 @@ export default function SettingsPage() {
   const [pushResult, setPushResult] = useState<{ sent: number; total: number } | null>(null);
   const [pushMode, setPushMode] = useState<'test' | 'broadcast'>('test');
 
+  const [about, setAbout] = useState({
+    heroTagline: 'Locally Raised · Grass Fed · Naturally Healthy',
+    heroTitle: "About O'Connor Agriculture",
+    heroBody: "First generation family farmers from Calliope and the Boyne Valley, QLD — raising grass fed beef the right way, delivering it straight to your door.",
+    heroImage: '/649363139_122169276728833210_2969468506503855850_n.jpg',
+    storyTitle: 'Good for the land. Good for the community. Good for you.',
+    storyP1: "We're a first generation farming family from the Boyne Valley, Queensland. Like many farmers, we started with a simple idea: raise cattle the right way — on grass, on open land, without shortcuts.",
+    storyP2: 'What began as a passion for regenerative agriculture grew into something we\'re incredibly proud of. Our cattle roam freely across the Calliope region, grazing on natural pastures the way nature intended. No feedlots. No unnecessary additives. Just honest, hard work and healthy animals.',
+    storyP3: 'We cut out the middleman so you get farm-fresh, grass fed beef at a fair price — delivered straight to your door in temperature-controlled comfort.',
+    storyImage: '/649363139_122169276728833210_2969468506503855850_n.jpg',
+    cattleTitle: 'Raised on grass. Born on country.',
+    cattleBody: "Our cattle are raised entirely on natural pasture in the Boyne Valley region — some of the most fertile and beautiful grazing country in Queensland.\n\nWe use regenerative grazing management to look after the land while producing premium quality beef. Healthy soil grows healthy grass, which grows healthy cattle — and that shows in the flavour.",
+    cattleImage1: '/648756608_122169276602833210_2007100768441221733_n.jpg',
+    cattleImage2: '/605527026_122159273378833210_2192412403070503185_n.jpg',
+    teamTitle: 'Faces behind your delivery',
+    teamBody: 'From paddock to your front door — our small, dedicated team handles every step with the care and pride of true family farmers.',
+    teamImage1: '/649233392_122169276668833210_2761320253198269250_n.jpg',
+    teamImage2: '/627050601_122164946600833210_6379541527443613506_n.jpg',
+    teamImage3: '/637918980_122167024448833210_227926334031877108_n.jpg',
+    processTitle: 'Expertly butchered, carefully packed',
+    processBody: "Every animal is processed at a local, licensed abattoir and butchered by experienced tradespeople who take pride in every cut.\n\nBulk orders are carefully packed in freezer bags and boxed, ready for your freezer. Individual cuts and sausages are vacuum-sealed for maximum freshness.\n\nDelivered in a refrigerated vehicle straight to your door — so your beef arrives in perfect condition, every time.",
+    processImage: '/633837159_122166552518833210_2828990505487028501_n.jpg',
+    value1: 'Regenerative Farming',
+    value1Body: 'We focus on soil health and animal welfare. Healthy land grows healthy cattle, and healthy cattle produces better beef.',
+    value2: 'Community First',
+    value2Body: "Supporting local jobs, local land, and local families. When you buy from us, you're investing in the Boyne Valley community.",
+    value3: 'Farm to Door',
+    value3Body: 'No supermarket markups. No middlemen. Just farm-fresh beef delivered directly to your home at honest prices.',
+  });
+
   useEffect(() => {
     api.config.get()
       .then((data: any) => {
@@ -166,6 +196,7 @@ export default function SettingsPage() {
         if (data?.payment) setPayment({ ...PAYMENT_DEFAULTS, ...data.payment });
         if (data?.email) setEmail({ ...EMAIL_DEFAULTS, ...data.email });
         if (data?.ticker) setTicker({ enabled: true, items: [], facebookPageUrl: 'https://www.facebook.com/profile.php?id=61574996320860', ...data.ticker });
+        if (data?.about) setAbout((prev) => ({ ...prev, ...data.about }));
       })
       .catch((e: unknown) => console.error('Failed to load settings:', e))
       .finally(() => setLoading(false));
@@ -219,7 +250,7 @@ export default function SettingsPage() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await api.config.update({ storefront: config, payment, email, ticker });
+      await api.config.update({ storefront: config, payment, email, ticker, about });
       toast('Settings saved — storefront updated immediately');
     } catch (e) {
       console.error('Save failed:', e);
@@ -614,6 +645,103 @@ export default function SettingsPage() {
             </button>
           </div>
         </Field>
+      </Section>
+
+      <Section title="About Page" icon={BookOpen}>
+        <p className="text-xs text-gray-400 mb-3">Edit the content and images on the About Us page.</p>
+        <div className="space-y-4">
+          <Field label="Hero Tagline">
+            <input className={inputCls} value={about.heroTagline} onChange={(e) => setAbout({ ...about, heroTagline: e.target.value })} />
+          </Field>
+          <Field label="Hero Title">
+            <input className={inputCls} value={about.heroTitle} onChange={(e) => setAbout({ ...about, heroTitle: e.target.value })} />
+          </Field>
+          <Field label="Hero Body">
+            <textarea className={textareaCls} rows={2} value={about.heroBody} onChange={(e) => setAbout({ ...about, heroBody: e.target.value })} />
+          </Field>
+          <Field label="Hero Background Image URL">
+            <input className={inputCls} value={about.heroImage} onChange={(e) => setAbout({ ...about, heroImage: e.target.value })} />
+          </Field>
+          <hr className="my-2" />
+          <p className="text-xs font-semibold text-gray-500 uppercase">Our Story</p>
+          <Field label="Story Headline">
+            <input className={inputCls} value={about.storyTitle} onChange={(e) => setAbout({ ...about, storyTitle: e.target.value })} />
+          </Field>
+          <Field label="Story Paragraph 1">
+            <textarea className={textareaCls} rows={3} value={about.storyP1} onChange={(e) => setAbout({ ...about, storyP1: e.target.value })} />
+          </Field>
+          <Field label="Story Paragraph 2">
+            <textarea className={textareaCls} rows={3} value={about.storyP2} onChange={(e) => setAbout({ ...about, storyP2: e.target.value })} />
+          </Field>
+          <Field label="Story Paragraph 3">
+            <textarea className={textareaCls} rows={3} value={about.storyP3} onChange={(e) => setAbout({ ...about, storyP3: e.target.value })} />
+          </Field>
+          <Field label="Story Image URL">
+            <input className={inputCls} value={about.storyImage} onChange={(e) => setAbout({ ...about, storyImage: e.target.value })} />
+          </Field>
+          <hr className="my-2" />
+          <p className="text-xs font-semibold text-gray-500 uppercase">Our Cattle</p>
+          <Field label="Cattle Headline">
+            <input className={inputCls} value={about.cattleTitle} onChange={(e) => setAbout({ ...about, cattleTitle: e.target.value })} />
+          </Field>
+          <Field label="Cattle Body">
+            <textarea className={textareaCls} rows={4} value={about.cattleBody} onChange={(e) => setAbout({ ...about, cattleBody: e.target.value })} />
+          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Cattle Image 1 URL">
+              <input className={inputCls} value={about.cattleImage1} onChange={(e) => setAbout({ ...about, cattleImage1: e.target.value })} />
+            </Field>
+            <Field label="Cattle Image 2 URL">
+              <input className={inputCls} value={about.cattleImage2} onChange={(e) => setAbout({ ...about, cattleImage2: e.target.value })} />
+            </Field>
+          </div>
+          <hr className="my-2" />
+          <p className="text-xs font-semibold text-gray-500 uppercase">The Team</p>
+          <Field label="Team Headline">
+            <input className={inputCls} value={about.teamTitle} onChange={(e) => setAbout({ ...about, teamTitle: e.target.value })} />
+          </Field>
+          <Field label="Team Body">
+            <textarea className={textareaCls} rows={2} value={about.teamBody} onChange={(e) => setAbout({ ...about, teamBody: e.target.value })} />
+          </Field>
+          <div className="grid grid-cols-3 gap-3">
+            <Field label="Team Image 1">
+              <input className={inputCls} value={about.teamImage1} onChange={(e) => setAbout({ ...about, teamImage1: e.target.value })} />
+            </Field>
+            <Field label="Team Image 2">
+              <input className={inputCls} value={about.teamImage2} onChange={(e) => setAbout({ ...about, teamImage2: e.target.value })} />
+            </Field>
+            <Field label="Team Image 3">
+              <input className={inputCls} value={about.teamImage3} onChange={(e) => setAbout({ ...about, teamImage3: e.target.value })} />
+            </Field>
+          </div>
+          <hr className="my-2" />
+          <p className="text-xs font-semibold text-gray-500 uppercase">Our Process</p>
+          <Field label="Process Headline">
+            <input className={inputCls} value={about.processTitle} onChange={(e) => setAbout({ ...about, processTitle: e.target.value })} />
+          </Field>
+          <Field label="Process Body">
+            <textarea className={textareaCls} rows={4} value={about.processBody} onChange={(e) => setAbout({ ...about, processBody: e.target.value })} />
+          </Field>
+          <Field label="Process Image URL">
+            <input className={inputCls} value={about.processImage} onChange={(e) => setAbout({ ...about, processImage: e.target.value })} />
+          </Field>
+          <hr className="my-2" />
+          <p className="text-xs font-semibold text-gray-500 uppercase">Values</p>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="space-y-2">
+              <Field label="Value 1 Title"><input className={inputCls} value={about.value1} onChange={(e) => setAbout({ ...about, value1: e.target.value })} /></Field>
+              <Field label="Value 1 Body"><textarea className={textareaCls} rows={2} value={about.value1Body} onChange={(e) => setAbout({ ...about, value1Body: e.target.value })} /></Field>
+            </div>
+            <div className="space-y-2">
+              <Field label="Value 2 Title"><input className={inputCls} value={about.value2} onChange={(e) => setAbout({ ...about, value2: e.target.value })} /></Field>
+              <Field label="Value 2 Body"><textarea className={textareaCls} rows={2} value={about.value2Body} onChange={(e) => setAbout({ ...about, value2Body: e.target.value })} /></Field>
+            </div>
+            <div className="space-y-2">
+              <Field label="Value 3 Title"><input className={inputCls} value={about.value3} onChange={(e) => setAbout({ ...about, value3: e.target.value })} /></Field>
+              <Field label="Value 3 Body"><textarea className={textareaCls} rows={2} value={about.value3Body} onChange={(e) => setAbout({ ...about, value3Body: e.target.value })} /></Field>
+            </div>
+          </div>
+        </div>
       </Section>
 
       <Section title="Contact Details" icon={Phone}>
