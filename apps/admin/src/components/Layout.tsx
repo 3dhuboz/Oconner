@@ -4,7 +4,7 @@ import {
   LayoutDashboard, ShoppingBag, Package, CalendarDays,
   BarChart2, Users, FileText, LogOut, Menu, Settings, Sparkles,
   ExternalLink, Store, Truck, UserCog, RefreshCcw, ShieldCheck,
-  DollarSign,
+  DollarSign, Tag,
 } from 'lucide-react';
 import { useState } from 'react';
 import Toaster from './Toaster';
@@ -40,6 +40,7 @@ const NAV_SECTIONS = [
       { to: '/customers', icon: Users, label: 'Customers' },
       { to: '/staff', icon: ShieldCheck, label: 'Staff & Admins' },
       { to: '/reports', icon: DollarSign, label: 'Revenue' },
+      { to: '/promo-codes', icon: Tag, label: 'Promo Codes' },
       { to: '/audit', icon: FileText, label: 'Audit Log' },
     ],
   },
