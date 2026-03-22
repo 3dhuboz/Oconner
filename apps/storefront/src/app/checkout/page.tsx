@@ -28,9 +28,12 @@ export default function CheckoutPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
+  const selectedDay = deliveryDays.find((d) => d.id === selectedDayId);
+  const isPickup = (selectedDay as any)?.type === 'pickup';
+  const deliveryFee = isPickup ? 0 : DELIVERY_FEE;
   const subtotal = total();
   const gst = Math.round(subtotal * GST_RATE);
-  const grandTotal = subtotal + DELIVERY_FEE;
+  const grandTotal = subtotal + deliveryFee;
 
   useEffect(() => {
     api.deliveryDays.list(true)
@@ -69,10 +72,13 @@ export default function CheckoutPage() {
         customerPhone: form.phone,
         clerkId: user?.id ?? undefined,
         deliveryDayId: selectedDayId,
-        deliveryAddress: { line1: form.line1, line2: form.line2, suburb: form.suburb, state: form.state, postcode: form.postcode },
+        fulfillmentType: isPickup ? 'pickup' : 'delivery',
+        deliveryAddress: isPickup
+          ? { line1: (selectedDay as any)?.marketLocation ?? 'Market Pickup', suburb: '', state: 'QLD', postcode: '' }
+          : { line1: form.line1, line2: form.line2, suburb: form.suburb, state: form.state, postcode: form.postcode },
         items,
         subtotal,
-        deliveryFee: DELIVERY_FEE,
+        deliveryFee: deliveryFee,
         gst,
         total: grandTotal,
         notes: form.notes,
@@ -106,17 +112,27 @@ export default function CheckoutPage() {
               </div>
             </section>
 
-            <section>
-              <h2 className="text-lg font-semibold mb-4">Delivery Address</h2>
-              <div className="space-y-3">
-                <input required placeholder="Street Address" value={form.line1} onChange={f('line1')} className="w-full border rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand text-sm" />
-                <input placeholder="Apt / Unit (optional)" value={form.line2} onChange={f('line2')} className="w-full border rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand text-sm" />
-                <div className="grid grid-cols-2 gap-3">
-                  <input required placeholder="Suburb" value={form.suburb} onChange={f('suburb')} className="w-full border rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand text-sm" />
-                  <input required placeholder="Postcode" value={form.postcode} onChange={f('postcode')} className="w-full border rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand text-sm" />
+            {isPickup ? (
+              <section>
+                <h2 className="text-lg font-semibold mb-4">📍 Market Day Pickup</h2>
+                <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
+                  <p className="font-medium text-orange-800">{(selectedDay as any)?.marketLocation || (selectedDay as any)?.zones || 'Market Location'}</p>
+                  <p className="text-sm text-orange-600 mt-1">Your order will be ready for collection. No delivery fee!</p>
                 </div>
-              </div>
-            </section>
+              </section>
+            ) : (
+              <section>
+                <h2 className="text-lg font-semibold mb-4">Delivery Address</h2>
+                <div className="space-y-3">
+                  <input required placeholder="Street Address" value={form.line1} onChange={f('line1')} className="w-full border rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand text-sm" />
+                  <input placeholder="Apt / Unit (optional)" value={form.line2} onChange={f('line2')} className="w-full border rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand text-sm" />
+                  <div className="grid grid-cols-2 gap-3">
+                    <input required placeholder="Suburb" value={form.suburb} onChange={f('suburb')} className="w-full border rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand text-sm" />
+                    <input required placeholder="Postcode" value={form.postcode} onChange={f('postcode')} className="w-full border rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand text-sm" />
+                  </div>
+                </div>
+              </section>
+            )}
 
             <section>
               <h2 className="text-lg font-semibold mb-4">Delivery Day</h2>
@@ -128,7 +144,9 @@ export default function CheckoutPage() {
                     const date = new Date(day.date);
                     return (
                       <option key={day.id} value={day.id}>
-                        {date.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })} — {(day.maxOrders ?? 0) - (day.orderCount ?? 0)} spots left{(day as any).zones ? ` · ${(day as any).zones}` : ''}
+                        {(day as any).type === 'pickup' ? '🏪 ' : '🚚 '}
+                        {date.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })} — {(day.maxOrders ?? 0) - (day.orderCount ?? 0)} spots left
+                        {(day as any).type === 'pickup' ? ` · Pickup: ${(day as any).marketLocation || (day as any).zones || 'Market'}` : (day as any).zones ? ` · ${(day as any).zones}` : ''}
                       </option>
                     );
                   })}
@@ -153,7 +171,7 @@ export default function CheckoutPage() {
               <hr className="mb-3" />
               <div className="space-y-1.5 text-sm">
                 <div className="flex justify-between"><span>Subtotal</span><span>{formatCurrency(subtotal)}</span></div>
-                <div className="flex justify-between"><span>Delivery</span><span>{formatCurrency(DELIVERY_FEE)}</span></div>
+                <div className="flex justify-between"><span>{isPickup ? 'Pickup' : 'Delivery'}</span><span>{isPickup ? 'FREE' : formatCurrency(DELIVERY_FEE)}</span></div>
                 <div className="flex justify-between text-gray-500"><span>GST (inc.)</span><span>{formatCurrency(gst)}</span></div>
                 <hr className="my-2" />
                 <div className="flex justify-between font-bold text-base"><span>Total</span><span className="text-brand">{formatCurrency(grandTotal)}</span></div>
