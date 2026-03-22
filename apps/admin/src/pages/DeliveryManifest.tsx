@@ -7,7 +7,7 @@ import DeliveryRunsTab from './DeliveryRunsTab';
 import {
   ArrowLeft, Route, Printer, Bell, Package, FileText,
   CheckCircle, Clock, Navigation, AlertTriangle, User, Camera,
-  Eye, MapPin, Timer, TrendingUp, ChevronUp, ChevronDown, Info, Send, Layers, BarChart3, Save, Copy,
+  Eye, MapPin, Timer, TrendingUp, ChevronUp, ChevronDown, Info, Send, Layers, BarChart3, Save, Copy, Sparkles, X, ClipboardCopy, Download,
 } from 'lucide-react';
 
 const DRIVER_URL = import.meta.env.VITE_DRIVER_URL ?? 'https://butcher-driver.pages.dev';
@@ -213,6 +213,19 @@ export default function DeliveryManifestPage() {
     finally { setStockSaving(false); }
   };
 
+  const generateSocialPost = async () => {
+    if (!dayId) return;
+    setGeneratingPost(true);
+    try {
+      const result = await api.deliveryDays.generatePost(dayId) as typeof socialPost;
+      setSocialPost(result);
+    } catch {
+      toast('Failed to generate post', 'error');
+    } finally {
+      setGeneratingPost(false);
+    }
+  };
+
   const generateStops = async () => {
     if (!dayId) return;
     setGenerating(true);
@@ -300,6 +313,8 @@ export default function DeliveryManifestPage() {
   const [stockSaving, setStockSaving] = useState(false);
   const [stockLoaded, setStockLoaded] = useState(false);
   const [previousDays, setPreviousDays] = useState<{ id: string; date: number }[]>([]);
+  const [generatingPost, setGeneratingPost] = useState(false);
+  const [socialPost, setSocialPost] = useState<{ postText: string; dateStr: string; zones: string; isPickup: boolean; marketLocation: string; products: { name: string; available: number }[]; spotsLeft: number; orderUrl: string } | null>(null);
 
   return (
     <div>
@@ -321,6 +336,13 @@ export default function DeliveryManifestPage() {
         </button>
         <button onClick={() => window.print()} className="flex items-center gap-2 border px-3 py-2 rounded-lg text-sm hover:bg-gray-50">
           <Printer className="h-4 w-4" /> Print
+        </button>
+        <button
+          onClick={generateSocialPost}
+          disabled={generatingPost}
+          className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-pink-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:from-purple-700 hover:to-pink-600 disabled:opacity-50"
+        >
+          <Sparkles className="h-4 w-4" /> {generatingPost ? 'Generating…' : 'Generate Post'}
         </button>
       </div>
 
@@ -754,6 +776,92 @@ export default function DeliveryManifestPage() {
         )}
       </div>
       </>)}
+
+      {/* ── Social Post Modal ── */}
+      {socialPost && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setSocialPost(null)}>
+          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b flex items-center justify-between">
+              <h2 className="font-bold text-lg flex items-center gap-2"><Sparkles className="h-5 w-5 text-purple-500" /> Generated Social Post</h2>
+              <button onClick={() => setSocialPost(null)}><X className="h-5 w-5 text-gray-400" /></button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Post Text */}
+              <div>
+                <label className="text-xs text-gray-500 uppercase font-medium mb-2 block">Post Copy</label>
+                <div className="bg-gray-50 rounded-xl p-4 relative">
+                  <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">{socialPost.postText}</p>
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(socialPost.postText); toast('Copied to clipboard!'); }}
+                    className="absolute top-2 right-2 bg-white border rounded-lg px-2 py-1 text-xs text-gray-500 hover:text-brand flex items-center gap-1"
+                  >
+                    <ClipboardCopy className="h-3 w-3" /> Copy
+                  </button>
+                </div>
+              </div>
+
+              {/* Poster Preview */}
+              <div>
+                <label className="text-xs text-gray-500 uppercase font-medium mb-2 block">Poster Preview</label>
+                <div id="social-poster" className="bg-[#365220] text-white rounded-xl overflow-hidden" style={{ aspectRatio: '1/1', maxWidth: 480 }}>
+                  <div className="p-8 flex flex-col h-full">
+                    <div className="flex items-start justify-between mb-6">
+                      <div>
+                        <h3 className="text-3xl font-black uppercase tracking-tight leading-none">
+                          {new Date(day?.date ?? 0).toLocaleDateString('en-AU', { month: 'long' }).toUpperCase()}
+                        </h3>
+                        <p className="text-4xl font-black text-[#E8F2DC] leading-none mt-1">DELIVERY</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-2xl font-black">OC.</p>
+                        <p className="text-[10px] tracking-[0.2em] uppercase">O'Connor</p>
+                      </div>
+                    </div>
+
+                    <div className="flex-1 space-y-3 text-sm">
+                      <p className="text-lg font-bold text-[#E8F2DC]">{socialPost.dateStr}</p>
+                      <p className="text-base font-semibold">
+                        {socialPost.isPickup ? `📍 ${socialPost.marketLocation}` : `🚚 ${socialPost.zones}`}
+                      </p>
+                      {socialPost.products.length > 0 && (
+                        <div className="grid grid-cols-2 gap-1 mt-3">
+                          {socialPost.products.slice(0, 8).map((p, i) => (
+                            <p key={i} className="text-xs text-[#E8F2DC]/80">• {p.name}</p>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="mt-auto pt-4 border-t border-white/20">
+                      <p className="text-xs text-[#E8F2DC]/70 uppercase tracking-wide">
+                        All prices include delivery to locations listed. Free over $100.
+                      </p>
+                      <p className="text-xs mt-1 font-medium">Order: oconnoragriculture.com.au</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => { navigator.clipboard.writeText(socialPost.postText); toast('Post text copied!'); }}
+                  className="flex-1 flex items-center justify-center gap-2 bg-brand text-white py-2.5 rounded-lg text-sm font-medium hover:bg-brand-mid"
+                >
+                  <ClipboardCopy className="h-4 w-4" /> Copy Post Text
+                </button>
+                <button
+                  onClick={generateSocialPost}
+                  disabled={generatingPost}
+                  className="flex items-center gap-2 border px-4 py-2.5 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-50"
+                >
+                  <Sparkles className="h-4 w-4" /> {generatingPost ? 'Regenerating…' : 'Regenerate'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -430,4 +430,93 @@ app.post('/:id/stock/copy-from/:sourceId', async (c) => {
   return c.json({ copied: values.length });
 });
 
+// ── Generate Social Post ─────────────────────────────────────────────────────
+
+app.post('/:id/generate-post', async (c) => {
+  const db = drizzle(c.env.DB);
+  const dayId = c.req.param('id');
+
+  const [day] = await db.select().from(deliveryDays).where(eq(deliveryDays.id, dayId)).limit(1);
+  if (!day) return c.json({ error: 'Day not found' }, 404);
+
+  // Get stock allocations for this day
+  const allocs = await db.select().from(deliveryDayStock).where(eq(deliveryDayStock.deliveryDayId, dayId));
+
+  // Get orders for product info if no allocations
+  const dayOrders = await db.select().from(orders).where(eq(orders.deliveryDayId, dayId));
+
+  const date = new Date(day.date);
+  const dateStr = date.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const zones = (day as any).zones || '';
+  const isPickup = (day as any).type === 'pickup';
+  const marketLocation = (day as any).marketLocation || '';
+
+  // Build product list from allocations
+  const productList = allocs.length > 0
+    ? allocs.filter(a => a.allocated > 0).map(a => `${a.productName} (${a.allocated - a.sold} available)`).join(', ')
+    : 'All premium grass fed beef products';
+
+  const spotsLeft = (day.maxOrders ?? 40) - (day.orderCount ?? 0);
+  const orderUrl = 'https://oconnoragriculture.com.au/shop';
+
+  const prompt = `You are the social media manager for O'Connor Agriculture, a grass fed beef farm in Central Queensland, Australia. Write an engaging Facebook post for an upcoming ${isPickup ? 'market day' : 'delivery day'}.
+
+Details:
+- Date: ${dateStr}
+- ${isPickup ? `Market Location: ${marketLocation}` : `Delivery Areas: ${zones}`}
+- Products available: ${productList}
+- ${spotsLeft} spots remaining
+- Order link: ${orderUrl}
+- All beef is grass fed and finished with no inputs
+- Free delivery on orders over $100
+
+Write a short, punchy Facebook post (max 150 words) that:
+1. Creates urgency (limited spots)
+2. Mentions the date and areas
+3. Highlights 2-3 key products
+4. Includes a call to action with the order link
+5. Uses a friendly, rural Australian tone
+6. Include 2-3 relevant emojis but don't overdo it
+
+Do NOT use hashtags. Just the post text.`;
+
+  try {
+    const ai = c.env.AI;
+    const response = await ai.run('@cf/meta/llama-3.1-8b-instruct', {
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 300,
+    });
+
+    const postText = (response as any).response ?? '';
+
+    return c.json({
+      postText,
+      dateStr,
+      zones,
+      isPickup,
+      marketLocation,
+      products: allocs.filter(a => a.allocated > 0).map(a => ({ name: a.productName, available: a.allocated - a.sold })),
+      spotsLeft,
+      orderUrl,
+    });
+  } catch (err) {
+    console.error('AI post generation error:', err);
+    // Fallback: return template without AI
+    const fallback = isPickup
+      ? `🥩 Market Day this ${dateStr}!\n\nCome see us at ${marketLocation}. Fresh grass fed beef — ${productList}.\n\n${spotsLeft} spots left. Order ahead: ${orderUrl}`
+      : `🚚 Delivery day coming up — ${dateStr}!\n\nWe're delivering to ${zones}. Fresh grass fed beef — ${productList}.\n\n${spotsLeft} spots remaining. Free delivery over $100!\n\nOrder now: ${orderUrl}`;
+
+    return c.json({
+      postText: fallback,
+      dateStr,
+      zones,
+      isPickup,
+      marketLocation,
+      products: allocs.filter(a => a.allocated > 0).map(a => ({ name: a.productName, available: a.allocated - a.sold })),
+      spotsLeft,
+      orderUrl,
+    });
+  }
+});
+
 export default app;
