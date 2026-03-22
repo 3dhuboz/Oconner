@@ -251,6 +251,7 @@ export default function OrdersPage() {
       paymentStatus: (order as any).paymentStatus ?? 'paid',
       internalNotes: order.internalNotes ?? '',
       deliveryFee: order.deliveryFee ?? 0,
+      sendInvoice: false,
       address: {
         line1: addr.line1 ?? '', line2: addr.line2 ?? '',
         suburb: addr.suburb ?? '', state: addr.state ?? 'QLD', postcode: addr.postcode ?? '',
