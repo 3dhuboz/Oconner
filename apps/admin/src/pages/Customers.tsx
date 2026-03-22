@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, formatCurrency } from '@butcher/shared';
 import type { Customer, Address } from '@butcher/shared';
-import { Search, Plus, X, Save, UserX, MapPin } from 'lucide-react';
+import { Search, Plus, X, Save, UserX, MapPin, Trash2 } from 'lucide-react';
 import { toast } from '../lib/toast';
 
 const BLANK_ADDR: Address = { line1: '', suburb: '', state: 'QLD', postcode: '', country: 'AU' };
@@ -31,6 +31,7 @@ export default function CustomersPage() {
   const [isNew, setIsNew] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [deleteConfirm, setDeleteConfirm] = useState<Customer | null>(null);
 
   const load = () => {
     setLoading(true);
@@ -50,6 +51,17 @@ export default function CustomersPage() {
   const openNew = () => { setEditing({ ...BLANK, address: { ...BLANK_ADDR } }); setIsNew(true); setError(''); };
   const openEdit = (c: Customer) => { setEditing({ ...c, address: c.addresses?.[0] ?? { ...BLANK_ADDR } }); setIsNew(false); setError(''); };
   const close = () => { setEditing(null); setIsNew(false); setError(''); };
+
+  const handleDelete = async (c: Customer) => {
+    try {
+      await api.delete(`/api/customers/${c.id}`);
+      setCustomers((prev) => prev.filter((x) => x.id !== c.id));
+      setDeleteConfirm(null);
+      toast('Customer deleted');
+    } catch {
+      toast('Failed to delete customer', 'error');
+    }
+  };
 
   const handleSave = async () => {
     if (!editing?.name || !editing?.email) { setError('Name and email are required.'); return; }
@@ -102,13 +114,14 @@ export default function CustomersPage() {
               <th className="px-4 py-3 text-right">Orders</th>
               <th className="px-4 py-3 text-right">Spent</th>
               <th className="px-4 py-3 text-right">Status</th>
+              <th className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y">
             {loading ? (
               <tr><td colSpan={6} className="text-center py-10 text-gray-400">Loading…</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={6} className="text-center py-10 text-gray-400">No customers found</td></tr>
+              <tr><td colSpan={7} className="text-center py-10 text-gray-400">No customers found</td></tr>
             ) : filtered.map((c) => (
               <tr key={c.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => openEdit(c)}>
                 <td className="px-4 py-3">
@@ -125,6 +138,15 @@ export default function CustomersPage() {
                   {c.blacklisted
                     ? <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">Blacklisted</span>
                     : <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Active</span>}
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setDeleteConfirm(c); }}
+                    className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50"
+                    title="Delete customer"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
                 </td>
               </tr>
             ))}
@@ -181,6 +203,26 @@ export default function CustomersPage() {
             <button onClick={handleSave} disabled={saving}
               className="flex items-center gap-2 px-4 py-2 text-sm bg-brand text-white rounded-lg hover:bg-brand-mid disabled:opacity-60">
               <Save className="h-3.5 w-3.5" />{saving ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {deleteConfirm && (
+        <Modal title="Delete Customer" onClose={() => setDeleteConfirm(null)}>
+          <p className="text-sm text-gray-600 mb-4">
+            Are you sure you want to delete <strong>{deleteConfirm.name}</strong> ({deleteConfirm.email})? This action cannot be undone.
+          </p>
+          {(deleteConfirm.orderCount ?? 0) > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-700 mb-4">
+              ⚠ This customer has {deleteConfirm.orderCount} order{deleteConfirm.orderCount !== 1 ? 's' : ''} on record. Deleting them will not remove their orders.
+            </div>
+          )}
+          <div className="flex justify-end gap-2">
+            <button onClick={() => setDeleteConfirm(null)} className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50">Cancel</button>
+            <button onClick={() => handleDelete(deleteConfirm)}
+              className="flex items-center gap-2 px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700">
+              <Trash2 className="h-3.5 w-3.5" /> Delete
             </button>
           </div>
         </Modal>

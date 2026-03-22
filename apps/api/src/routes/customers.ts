@@ -51,4 +51,11 @@ app.patch('/:id', async (c) => {
   return c.json({ ok: true });
 });
 
+// Delete customer
+app.delete('/:id', async (c) => {
+  const db = drizzle(c.env.DB);
+  await db.delete(customers).where(eq(customers.id, c.req.param('id')));
+  return c.json({ ok: true });
+});
+
 export default app;
