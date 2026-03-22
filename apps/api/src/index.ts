@@ -636,5 +636,99 @@ export const scheduled: ExportedHandlerScheduledHandler<Env> = async (event, env
         await db.insert(notifications).values({ id: crypto.randomUUID(), orderId: order.id, customerId: order.customerId, type: 'day_before', status: result ? 'sent' : 'failed', recipientEmail: order.customerEmail, resendId: result?.id ?? null, sentAt: Date.now() });
       }
     }
+
+    // ── 3. Thursday meat audit email ──
+    const today = new Date();
+    if (today.getDay() === 4) { // Thursday
+      try {
+        const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+        const weekOrders = await db.select().from(orders)
+          .where(and(gte(orders.createdAt, weekAgo), eq(orders.status, 'confirmed')));
+
+        const salesByProduct: Record<string, { name: string; qty: number; weightKg: number; revenue: number }> = {};
+
+        for (const order of weekOrders) {
+          const items = JSON.parse(order.items) as Array<{ productName: string; quantity?: number; weightKg?: number; weight?: number; lineTotal: number }>;
+          for (const item of items) {
+            const key = item.productName;
+            if (!salesByProduct[key]) salesByProduct[key] = { name: item.productName, qty: 0, weightKg: 0, revenue: 0 };
+            salesByProduct[key].qty += item.quantity ?? 1;
+            salesByProduct[key].weightKg += item.weightKg ?? item.weight ?? 0;
+            salesByProduct[key].revenue += item.lineTotal ?? 0;
+          }
+        }
+
+        const sorted = Object.values(salesByProduct).sort((a, b) => b.revenue - a.revenue);
+        const totalRevenue = sorted.reduce((sum, p) => sum + p.revenue, 0);
+        const totalOrders = weekOrders.length;
+
+        const weekStart = new Date(weekAgo).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
+        const weekEnd = today.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
+
+        const rows = sorted.map((p) =>
+          `<tr>
+            <td style="padding:8px 12px;border-bottom:1px solid #eee;font-weight:500">${p.name}</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:center">${p.qty}</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:center">${p.weightKg ? p.weightKg.toFixed(1) + ' kg' : '—'}</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:right">$${(p.revenue / 100).toFixed(2)}</td>
+          </tr>`
+        ).join('');
+
+        const html = `
+          <div style="font-family:Arial,sans-serif;max-width:700px;margin:0 auto">
+            <div style="background:#4E7732;padding:20px 24px;border-radius:8px 8px 0 0">
+              <h1 style="color:white;margin:0;font-size:20px">🥩 Weekly Meat Audit</h1>
+              <p style="color:#E8F2DC;margin:4px 0 0;font-size:14px">${weekStart} — ${weekEnd}</p>
+            </div>
+            <div style="padding:20px 24px;background:#f9fafb;border:1px solid #eee;border-top:none">
+              <div style="display:flex;gap:20px;margin-bottom:20px">
+                <div style="flex:1;background:white;padding:16px;border-radius:8px;border:1px solid #eee;text-align:center">
+                  <p style="color:#888;font-size:12px;margin:0">Total Orders</p>
+                  <p style="font-size:24px;font-weight:bold;margin:4px 0 0;color:#4E7732">${totalOrders}</p>
+                </div>
+                <div style="flex:1;background:white;padding:16px;border-radius:8px;border:1px solid #eee;text-align:center">
+                  <p style="color:#888;font-size:12px;margin:0">Total Revenue</p>
+                  <p style="font-size:24px;font-weight:bold;margin:4px 0 0;color:#4E7732">$${(totalRevenue / 100).toFixed(2)}</p>
+                </div>
+                <div style="flex:1;background:white;padding:16px;border-radius:8px;border:1px solid #eee;text-align:center">
+                  <p style="color:#888;font-size:12px;margin:0">Products Sold</p>
+                  <p style="font-size:24px;font-weight:bold;margin:4px 0 0;color:#4E7732">${sorted.length}</p>
+                </div>
+              </div>
+              <table style="width:100%;border-collapse:collapse;background:white;border-radius:8px;overflow:hidden;border:1px solid #eee">
+                <thead>
+                  <tr style="background:#4E7732;color:white">
+                    <th style="padding:10px 12px;text-align:left;font-size:13px">Product</th>
+                    <th style="padding:10px 12px;text-align:center;font-size:13px">Qty</th>
+                    <th style="padding:10px 12px;text-align:center;font-size:13px">Weight</th>
+                    <th style="padding:10px 12px;text-align:right;font-size:13px">Revenue</th>
+                  </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+                <tfoot>
+                  <tr style="background:#f0f0f0;font-weight:bold">
+                    <td style="padding:10px 12px" colspan="3">Total</td>
+                    <td style="padding:10px 12px;text-align:right">$${(totalRevenue / 100).toFixed(2)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+              <p style="color:#999;font-size:11px;margin-top:16px;text-align:center">
+                Automated weekly audit from O'Connor Agriculture
+              </p>
+            </div>
+          </div>`;
+
+        await sendEmail({
+          apiKey: env.RESEND_API_KEY,
+          from: env.FROM_EMAIL,
+          to: 'oconnoragriculture@gmail.com',
+          subject: `🥩 Weekly Meat Audit — ${weekStart} to ${weekEnd}`,
+          html,
+        });
+        console.log('Thursday meat audit email sent');
+      } catch (e) {
+        console.error('Thursday audit email failed:', e);
+      }
+    }
   }
 };
