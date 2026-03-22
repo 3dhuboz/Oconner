@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { api } from '@butcher/shared';
-import { Save, RefreshCw, Image, Type, Phone, Layout, ChevronDown, ChevronUp, CreditCard, Mail, Bell, Send, Users, Radio, Plus, X, BookOpen } from 'lucide-react';
+import { Save, RefreshCw, Image, Type, Phone, Layout, ChevronDown, ChevronUp, CreditCard, Mail, Bell, Send, Users, Radio, Plus, X, BookOpen, Upload } from 'lucide-react';
 import { toast } from '../lib/toast';
 
 interface Feature {
@@ -137,6 +137,65 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
       <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
       {hint && <p className="text-xs text-gray-400 mb-1.5">{hint}</p>}
       {children}
+    </div>
+  );
+}
+
+function ImageField({ label, value, onChange }: { label: string; value: string; onChange: (url: string) => void }) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const handleUpload = async (file: File) => {
+    setUploading(true);
+    try {
+      const url = await api.images.upload(file, 'about');
+      onChange(url);
+      toast('Image uploaded');
+    } catch {
+      toast('Upload failed', 'error');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+      <div className="flex gap-3 items-start">
+        <div className="flex-1">
+          <div className="flex gap-2">
+            <input
+              className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand transition-colors"
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+              placeholder="Image URL or upload"
+            />
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              disabled={uploading}
+              className="flex items-center gap-1.5 border border-gray-200 px-3 py-2 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-50"
+            >
+              <Upload className="h-3.5 w-3.5" /> {uploading ? '...' : 'Upload'}
+            </button>
+          </div>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f); }}
+          />
+        </div>
+        {value && (
+          <img
+            src={value}
+            alt="Preview"
+            className="w-16 h-16 rounded-lg object-cover border flex-shrink-0"
+            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+          />
+        )}
+      </div>
     </div>
   );
 }
@@ -659,9 +718,7 @@ export default function SettingsPage() {
           <Field label="Hero Body">
             <textarea className={textareaCls} rows={2} value={about.heroBody} onChange={(e) => setAbout({ ...about, heroBody: e.target.value })} />
           </Field>
-          <Field label="Hero Background Image URL">
-            <input className={inputCls} value={about.heroImage} onChange={(e) => setAbout({ ...about, heroImage: e.target.value })} />
-          </Field>
+          <ImageField label="Hero Background Image" value={about.heroImage} onChange={(url) => setAbout({ ...about, heroImage: url })} />
           <hr className="my-2" />
           <p className="text-xs font-semibold text-gray-500 uppercase">Our Story</p>
           <Field label="Story Headline">
@@ -676,9 +733,7 @@ export default function SettingsPage() {
           <Field label="Story Paragraph 3">
             <textarea className={textareaCls} rows={3} value={about.storyP3} onChange={(e) => setAbout({ ...about, storyP3: e.target.value })} />
           </Field>
-          <Field label="Story Image URL">
-            <input className={inputCls} value={about.storyImage} onChange={(e) => setAbout({ ...about, storyImage: e.target.value })} />
-          </Field>
+          <ImageField label="Story Image" value={about.storyImage} onChange={(url) => setAbout({ ...about, storyImage: url })} />
           <hr className="my-2" />
           <p className="text-xs font-semibold text-gray-500 uppercase">Our Cattle</p>
           <Field label="Cattle Headline">
@@ -688,12 +743,8 @@ export default function SettingsPage() {
             <textarea className={textareaCls} rows={4} value={about.cattleBody} onChange={(e) => setAbout({ ...about, cattleBody: e.target.value })} />
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Cattle Image 1 URL">
-              <input className={inputCls} value={about.cattleImage1} onChange={(e) => setAbout({ ...about, cattleImage1: e.target.value })} />
-            </Field>
-            <Field label="Cattle Image 2 URL">
-              <input className={inputCls} value={about.cattleImage2} onChange={(e) => setAbout({ ...about, cattleImage2: e.target.value })} />
-            </Field>
+            <ImageField label="Cattle Image 1" value={about.cattleImage1} onChange={(url) => setAbout({ ...about, cattleImage1: url })} />
+            <ImageField label="Cattle Image 2" value={about.cattleImage2} onChange={(url) => setAbout({ ...about, cattleImage2: url })} />
           </div>
           <hr className="my-2" />
           <p className="text-xs font-semibold text-gray-500 uppercase">The Team</p>
@@ -704,15 +755,9 @@ export default function SettingsPage() {
             <textarea className={textareaCls} rows={2} value={about.teamBody} onChange={(e) => setAbout({ ...about, teamBody: e.target.value })} />
           </Field>
           <div className="grid grid-cols-3 gap-3">
-            <Field label="Team Image 1">
-              <input className={inputCls} value={about.teamImage1} onChange={(e) => setAbout({ ...about, teamImage1: e.target.value })} />
-            </Field>
-            <Field label="Team Image 2">
-              <input className={inputCls} value={about.teamImage2} onChange={(e) => setAbout({ ...about, teamImage2: e.target.value })} />
-            </Field>
-            <Field label="Team Image 3">
-              <input className={inputCls} value={about.teamImage3} onChange={(e) => setAbout({ ...about, teamImage3: e.target.value })} />
-            </Field>
+            <ImageField label="Team Image 1" value={about.teamImage1} onChange={(url) => setAbout({ ...about, teamImage1: url })} />
+            <ImageField label="Team Image 2" value={about.teamImage2} onChange={(url) => setAbout({ ...about, teamImage2: url })} />
+            <ImageField label="Team Image 3" value={about.teamImage3} onChange={(url) => setAbout({ ...about, teamImage3: url })} />
           </div>
           <hr className="my-2" />
           <p className="text-xs font-semibold text-gray-500 uppercase">Our Process</p>
@@ -722,9 +767,7 @@ export default function SettingsPage() {
           <Field label="Process Body">
             <textarea className={textareaCls} rows={4} value={about.processBody} onChange={(e) => setAbout({ ...about, processBody: e.target.value })} />
           </Field>
-          <Field label="Process Image URL">
-            <input className={inputCls} value={about.processImage} onChange={(e) => setAbout({ ...about, processImage: e.target.value })} />
-          </Field>
+          <ImageField label="Process Image" value={about.processImage} onChange={(url) => setAbout({ ...about, processImage: url })} />
           <hr className="my-2" />
           <p className="text-xs font-semibold text-gray-500 uppercase">Values</p>
           <div className="grid grid-cols-3 gap-3">
