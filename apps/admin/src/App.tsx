@@ -18,6 +18,7 @@ import SettingsPage from './pages/Settings';
 import SocialHubPage from './pages/SocialHub';
 import StaffPage from './pages/Staff';
 import ReportsPage from './pages/Reports';
+import PromoCodesPage from './pages/PromoCodes';
 
 function RequireAdmin({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -48,6 +49,7 @@ export default function App() {
         <Route path="social-hub" element={<SocialHubPage />} />
         <Route path="staff" element={<StaffPage />} />
         <Route path="reports" element={<ReportsPage />} />
+        <Route path="promo-codes" element={<PromoCodesPage />} />
       </Route>
     </Routes>
   );
