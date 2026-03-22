@@ -153,14 +153,15 @@ app.post('/checkout', async (c) => {
     },
     pre_populated_data: {
       buyer_email: body.email,
-      buyer_phone_number: body.phone,
+      ...(body.phone ? { buyer_phone_number: body.phone.replace(/^0/, '+61').replace(/\s/g, '') } : {}),
     },
     payment_note: `Subscription: ${body.boxName} (${body.frequency}). Customer: ${body.name}, ${body.address}, ${body.suburb} ${body.postcode}`,
   });
 
   const paymentLink = result.payment_link as { url?: string } | undefined;
   if (!paymentLink?.url) {
-    return c.json({ error: 'Failed to create checkout' }, 500);
+    console.error('Square checkout error:', JSON.stringify(result));
+    return c.json({ error: 'Failed to create checkout', details: result.errors ?? result }, 500);
   }
 
   // Create subscription in our DB as 'pending' — will be activated when payment succeeds
