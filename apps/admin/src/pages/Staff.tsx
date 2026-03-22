@@ -175,11 +175,11 @@ export default function StaffPage() {
                       onClick={() => sendInvite(u)}
                       disabled={inviting === u.id}
                       title="Send sign-up invite email"
-                      className="flex items-center gap-1 text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2 py-1 rounded-lg hover:bg-amber-100 disabled:opacity-50"
+                      className="flex items-center gap-1 text-sm bg-brand text-white px-3 py-1.5 rounded-lg hover:bg-brand-mid disabled:opacity-50 font-medium"
                     >
-                      <Send className="h-3 w-3" /> {inviting === u.id ? '…' : 'Invite'}
+                      <Send className="h-3.5 w-3.5" /> {inviting === u.id ? 'Sending…' : 'Send Invite'}
                     </button>
-                    <button onClick={() => openEdit(u)} className="text-xs text-brand hover:underline">Edit</button>
+                    <button onClick={() => openEdit(u)} className="text-sm text-brand font-medium hover:underline">Edit</button>
                     <button onClick={() => toggleActive(u)} title={u.active ? 'Deactivate' : 'Activate'} className="text-gray-400 hover:text-gray-700">
                       {u.active ? <ShieldOff className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
                     </button>
