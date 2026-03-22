@@ -272,6 +272,43 @@ app.route('/api/promo-codes', promoCodesRouter);
 
 app.route('/webhook', stripeRouter);
 
+// ── Staff invite email ───────────────────────────────────────────────────────
+app.post('/api/staff/invite', requireAuth, requireRole('admin'), async (c) => {
+  const body = await c.req.json<{ name: string; email: string; role: string }>();
+  if (!body.email || !body.name) return c.json({ error: 'Name and email required' }, 400);
+
+  const { sendEmail } = await import('./lib/email');
+  const adminUrl = c.env.STOREFRONT_URL?.replace('butcher-storefront', 'butcher-admin') || 'https://admin.oconnoragriculture.com.au';
+
+  const html = `
+    <div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:20px">
+      <h2 style="color:#4E7732">Welcome to O'Connor Agriculture</h2>
+      <p>Hi ${body.name},</p>
+      <p>You've been invited to join the <strong>O'Connor Agriculture</strong> team as <strong>${body.role}</strong>.</p>
+      <p>Click the button below to create your account and get access to the admin dashboard:</p>
+      <div style="text-align:center;margin:30px 0">
+        <a href="${adminUrl}" style="background:#4E7732;color:white;padding:12px 30px;text-decoration:none;border-radius:8px;font-weight:bold;display:inline-block">
+          Create Your Account
+        </a>
+      </div>
+      <p style="color:#666;font-size:13px">Use your email <strong>${body.email}</strong> when signing up so your account is linked automatically.</p>
+      <hr style="border:none;border-top:1px solid #eee;margin:20px 0">
+      <p style="color:#999;font-size:12px">O'Connor Agriculture — Paddock to plate</p>
+    </div>
+  `;
+
+  const result = await sendEmail({
+    apiKey: c.env.RESEND_API_KEY,
+    from: c.env.FROM_EMAIL || 'orders@oconnoragriculture.com.au',
+    to: body.email,
+    subject: `You're invited to join O'Connor Agriculture`,
+    html,
+  });
+
+  if (!result.ok) return c.json({ error: 'Failed to send email' }, 500);
+  return c.json({ ok: true });
+});
+
 app.get('/api/audit-log', requireAuth, requireRole('admin'), async (c) => {
   const { drizzle } = await import('drizzle-orm/d1');
   const { desc } = await import('drizzle-orm');
