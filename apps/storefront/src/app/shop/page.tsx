@@ -246,18 +246,29 @@ function ProductCard({
 }) {
   const isBulkShare = BULK_IDS.includes(product.id ?? '');
   const minKg = BULK_MIN_KG[product.id ?? ''];
+  const outOfStock = !isBulkShare && product.stockOnHand <= 0;
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow flex flex-col group">
+    <div className={`bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow flex flex-col group ${outOfStock ? 'opacity-75' : ''}`}>
       <button onClick={onOpen} className="relative overflow-hidden">
         {product.imageUrl ? (
-          <img src={product.imageUrl} alt={product.name} className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300" />
+          <img src={product.imageUrl} alt={product.name} className={`w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300 ${outOfStock ? 'grayscale-[40%]' : ''}`} />
         ) : (
-          <div className="w-full h-48 bg-brand-light flex items-center justify-center text-6xl group-hover:scale-105 transition-transform duration-300">🥩</div>
+          <div className={`w-full h-48 bg-brand-light flex items-center justify-center text-6xl group-hover:scale-105 transition-transform duration-300 ${outOfStock ? 'grayscale-[40%]' : ''}`}>🥩</div>
         )}
-        <div className="absolute inset-0 bg-brand/0 group-hover:bg-brand/10 transition-colors flex items-center justify-center">
-          <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 text-brand text-xs font-bold px-3 py-1.5 rounded-full shadow">View Details</span>
-        </div>
+        {outOfStock && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="bg-white/95 backdrop-blur-sm px-5 py-2.5 rounded-xl shadow-lg border border-gray-200 -rotate-6">
+              <p className="text-sm font-bold text-gray-700 tracking-wide">Sold Out</p>
+              <p className="text-[10px] text-gray-400 text-center">Check back soon</p>
+            </div>
+          </div>
+        )}
+        {!outOfStock && (
+          <div className="absolute inset-0 bg-brand/0 group-hover:bg-brand/10 transition-colors flex items-center justify-center">
+            <span className="opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 text-brand text-xs font-bold px-3 py-1.5 rounded-full shadow">View Details</span>
+          </div>
+        )}
       </button>
       <div className="p-4 flex flex-col flex-1">
         <div className="flex items-center gap-2 flex-wrap mb-2">
