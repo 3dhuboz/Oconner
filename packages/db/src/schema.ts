@@ -92,6 +92,8 @@ export const deliveryDays = sqliteTable('delivery_days', {
   deliveryWindowStart: text('delivery_window_start').default('09:00'), // HH:MM 24-hr
   driverUid: text('driver_uid').references(() => users.id),
   zones: text('zones').default(''),            // comma-separated area names e.g. "Rockhampton, Yeppoon, Biloela"
+  type: text('type').notNull().default('delivery'),  // 'delivery' | 'pickup'
+  marketLocation: text('market_location'),           // e.g. "Clinton Markets, 123 Main St"
   runStartedAt: integer('run_started_at'),
   runCompletedAt: integer('run_completed_at'),
   createdAt: integer('created_at').notNull(),
@@ -112,6 +114,7 @@ export const orders = sqliteTable('orders', {
   status: text('status').notNull().default('pending_payment'),
   deliveryDayId: text('delivery_day_id').notNull().references(() => deliveryDays.id),
   deliveryAddress: text('delivery_address').notNull(), // JSON: Address
+  fulfillmentType: text('fulfillment_type').notNull().default('delivery'), // 'delivery' | 'pickup'
   postcodeZone: text('postcode_zone').notNull().default(''),
   paymentIntentId: text('payment_intent_id').notNull().default(''),
   paymentProvider: text('payment_provider').notNull().default('stripe'),

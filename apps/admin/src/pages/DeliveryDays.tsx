@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '@butcher/shared';
 import type { DeliveryDay } from '@butcher/shared';
-import { Plus, X, CalendarDays, ClipboardList, RefreshCw, AlertTriangle, Pencil, MapPin, Save, Trash2 } from 'lucide-react';
+import { Plus, X, CalendarDays, ClipboardList, RefreshCw, AlertTriangle, Pencil, MapPin, Save, Trash2, Store } from 'lucide-react';
 import { toast } from '../lib/toast';
 import { useNavigate } from 'react-router-dom';
 
@@ -9,13 +9,13 @@ export default function DeliveryDaysPage() {
   const navigate = useNavigate();
   const [days, setDays] = useState<DeliveryDay[]>([]);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ date: '', maxOrders: 20, notes: '', deliveryWindowStart: '09:00', zones: '' });
+  const [form, setForm] = useState({ date: '', maxOrders: 20, notes: '', deliveryWindowStart: '09:00', zones: '', type: 'delivery' as string, marketLocation: '' });
   const [saving, setSaving] = useState(false);
   const [showBulk, setShowBulk] = useState(false);
-  const [bulkForm, setBulkForm] = useState({ dayOfWeek: 5, weeks: 12, maxOrders: 40, deliveryWindowStart: '09:00', zones: '' });
+  const [bulkForm, setBulkForm] = useState({ dayOfWeek: 5, weeks: 12, maxOrders: 40, deliveryWindowStart: '09:00', zones: '', type: 'delivery' as string, marketLocation: '' });
   const [bulkSaving, setBulkSaving] = useState(false);
   const [editing, setEditing] = useState<DeliveryDay | null>(null);
-  const [editForm, setEditForm] = useState({ maxOrders: 0, notes: '', deliveryWindowStart: '09:00', zones: '' });
+  const [editForm, setEditForm] = useState({ maxOrders: 0, notes: '', deliveryWindowStart: '09:00', zones: '', type: 'delivery' as string, marketLocation: '' });
   const [editSaving, setEditSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
@@ -118,6 +118,8 @@ export default function DeliveryDaysPage() {
       notes: (day as any).notes ?? '',
       deliveryWindowStart: (day as any).deliveryWindowStart ?? '09:00',
       zones: (day as any).zones ?? '',
+      type: (day as any).type ?? 'delivery',
+      marketLocation: (day as any).marketLocation ?? '',
     });
   };
 
@@ -180,8 +182,13 @@ export default function DeliveryDaysPage() {
             <div key={day.id} className={`bg-white rounded-xl border p-5 ${isPast ? 'opacity-60' : ''}`}>
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold">
+                  <p className="font-semibold flex items-center gap-2">
                     {date.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                    {(day as any).type === 'pickup' && (
+                      <span className="inline-flex items-center gap-1 text-xs font-medium bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">
+                        <Store className="h-3 w-3" /> Market Day
+                      </span>
+                    )}
                   </p>
                   <p className="text-sm text-gray-500 mt-0.5">
                     {day.orderCount ?? 0} / {day.maxOrders ?? 0} orders
@@ -233,14 +240,30 @@ export default function DeliveryDaysPage() {
             </p>
             <div className="space-y-3">
               <div>
-                <label className="text-xs text-gray-500 mb-1 block">Delivery Areas / Zones</label>
+                <label className="text-xs text-gray-500 mb-1 block">Type</label>
+                <select value={editForm.type} onChange={(e) => setEditForm({ ...editForm, type: e.target.value })}
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
+                  <option value="delivery">🚚 Home Delivery</option>
+                  <option value="pickup">🏪 Market Day Pickup</option>
+                </select>
+              </div>
+              {editForm.type === 'pickup' && (
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Market Location</label>
+                  <input value={editForm.marketLocation}
+                    onChange={(e) => setEditForm({ ...editForm, marketLocation: e.target.value })}
+                    placeholder="e.g. Clinton Markets, 7am"
+                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                </div>
+              )}
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">{editForm.type === 'pickup' ? 'Location / Area' : 'Delivery Areas / Zones'}</label>
                 <input
                   value={editForm.zones}
                   onChange={(e) => setEditForm({ ...editForm, zones: e.target.value })}
-                  placeholder="e.g. Rockhampton, Yeppoon, Biloela"
+                  placeholder={editForm.type === 'pickup' ? 'e.g. Clinton' : 'e.g. Rockhampton, Yeppoon, Biloela'}
                   className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
                 />
-                <p className="text-xs text-gray-400 mt-1">Comma-separated areas this day covers</p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -337,9 +360,25 @@ export default function DeliveryDaysPage() {
                 <input type="date" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
               </div>
               <div>
-                <label className="text-xs text-gray-500 mb-1 block">Delivery Areas / Zones</label>
+                <label className="text-xs text-gray-500 mb-1 block">Type</label>
+                <select value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
+                  <option value="delivery">🚚 Home Delivery</option>
+                  <option value="pickup">🏪 Market Day Pickup</option>
+                </select>
+              </div>
+              {form.type === 'pickup' && (
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Market Location</label>
+                  <input value={form.marketLocation} onChange={(e) => setForm((f) => ({ ...f, marketLocation: e.target.value }))}
+                    placeholder="e.g. Clinton Markets, 7am"
+                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                </div>
+              )}
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">{form.type === 'pickup' ? 'Location / Area' : 'Delivery Areas / Zones'}</label>
                 <input value={form.zones} onChange={(e) => setForm((f) => ({ ...f, zones: e.target.value }))}
-                  placeholder="e.g. Gladstone, Calliope, Boyne Island"
+                  placeholder={form.type === 'pickup' ? 'e.g. Clinton' : 'e.g. Gladstone, Calliope, Boyne Island'}
                   className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
               </div>
               <div className="grid grid-cols-2 gap-3">

@@ -56,6 +56,7 @@ const EMPTY_FORM = {
 export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [statusFilter, setStatusFilter] = useState<OrderStatus | 'all'>('all');
+  const [fulfillmentFilter, setFulfillmentFilter] = useState<'all' | 'delivery' | 'pickup'>('all');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -170,12 +171,15 @@ export default function OrdersPage() {
     }
   };
 
-  const filtered = search
-    ? orders.filter((o) =>
-        o.customerName?.toLowerCase().includes(search.toLowerCase()) ||
-        o.customerEmail?.toLowerCase().includes(search.toLowerCase()) ||
-        o.id?.toLowerCase().includes(search.toLowerCase()))
-    : orders;
+  const filtered = orders.filter((o) => {
+    if (search && !(
+      o.customerName?.toLowerCase().includes(search.toLowerCase()) ||
+      o.customerEmail?.toLowerCase().includes(search.toLowerCase()) ||
+      o.id?.toLowerCase().includes(search.toLowerCase())
+    )) return false;
+    if (fulfillmentFilter !== 'all' && (o as any).fulfillmentType !== fulfillmentFilter) return false;
+    return true;
+  });
 
   const handleStatusChange = async (orderId: string, status: OrderStatus) => {
     try {
@@ -337,6 +341,14 @@ export default function OrdersPage() {
           <option value="all">All Statuses</option>
           {STATUSES.map((s) => <option key={s} value={s}>{ORDER_STATUS_LABELS[s] ?? s}</option>)}
         </select>
+        <select
+          value={fulfillmentFilter} onChange={(e) => setFulfillmentFilter(e.target.value as 'all' | 'delivery' | 'pickup')}
+          className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
+        >
+          <option value="all">All Types</option>
+          <option value="delivery">🚚 Delivery</option>
+          <option value="pickup">🏪 Pickup</option>
+        </select>
       </div>
 
       {/* ── Mobile card layout ── */}
@@ -390,6 +402,9 @@ export default function OrdersPage() {
                   <Link to={`/orders/${order.id}`} className="font-mono font-medium text-brand hover:underline">
                     #{(order.id ?? '').slice(-8).toUpperCase()}
                   </Link>
+                  {(order as any).fulfillmentType === 'pickup' && (
+                    <span className="ml-1.5 text-[10px] font-medium bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full">Pickup</span>
+                  )}
                 </td>
                 <td className="px-4 py-3">
                   <p className="font-medium">{order.customerName}</p>
