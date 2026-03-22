@@ -75,6 +75,7 @@ export const api = {
     setStock: (id: string, allocations: { productId: string; productName: string; allocated: number }[]) =>
       api.put(`/api/delivery-days/${id}/stock`, { allocations }),
     copyStock: (id: string, sourceId: string) => api.post(`/api/delivery-days/${id}/stock/copy-from/${sourceId}`, {}),
+    generatePost: (id: string) => api.post(`/api/delivery-days/${id}/generate-post`, {}),
   },
 
   stops: {
