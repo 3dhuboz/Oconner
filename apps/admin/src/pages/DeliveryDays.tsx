@@ -48,7 +48,7 @@ export default function DeliveryDaysPage() {
       } as unknown as DeliveryDay;
       setDays((prev) => [...prev, newDay].sort((a, b) => a.date - b.date));
       setShowForm(false);
-      setForm({ date: '', maxOrders: 20, notes: '', deliveryWindowStart: '09:00', zones: '' });
+      setForm({ date: '', maxOrders: 20, notes: '', deliveryWindowStart: '09:00', zones: '', type: 'delivery', marketLocation: '' });
       toast('Delivery day created');
     } catch {
       toast('Failed to create delivery day', 'error');
