@@ -1,29 +1,91 @@
 export const runtime = 'edge';
 
-const SYSTEM_PROMPT = `You are the O'Connor Agriculture Beef Guide — a warm, knowledgeable assistant for O'Connor Agriculture, a first-generation family-owned grass-fed beef farm from Calliope and the Boyne Valley, QLD, Australia.
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://oconner-api.steve-700.workers.dev';
+
+async function getLiveContext(): Promise<string> {
+  try {
+    const [productsRes, daysRes] = await Promise.all([
+      fetch(`${API_URL}/api/products?active=true`),
+      fetch(`${API_URL}/api/delivery-days?upcoming=true`),
+    ]);
+
+    let productInfo = '';
+    if (productsRes.ok) {
+      const products = await productsRes.json() as any[];
+      const active = products.filter((p: any) => p.active);
+      const cuts = active.filter((p: any) => !p.isMeatPack && p.fixedPrice);
+      const boxes = active.filter((p: any) => p.isMeatPack);
+      const perKg = active.filter((p: any) => !p.isMeatPack && p.pricePerKg && !p.fixedPrice);
+
+      if (boxes.length > 0) {
+        productInfo += '\n\nBEEF BOXES (include free delivery over $100):\n';
+        productInfo += boxes.map((p: any) => `- ${p.name}: $${((p.fixedPrice ?? 0) / 100).toFixed(2)} — ${p.description}`).join('\n');
+      }
+      if (cuts.length > 0) {
+        productInfo += '\n\nINDIVIDUAL CUTS (fixed price per pack):\n';
+        productInfo += cuts.map((p: any) => {
+          const price = `$${((p.fixedPrice ?? 0) / 100).toFixed(2)}`;
+          const tips = p.cookingTips ? ` | Cooking: ${p.cookingTips}` : '';
+          const stock = p.stockOnHand > 0 ? ' (In Stock)' : ' (SOLD OUT)';
+          return `- ${p.name}: ${price}${stock} — ${p.description}${tips}`;
+        }).join('\n');
+      }
+      if (perKg.length > 0) {
+        productInfo += '\n\nPER-KG PRODUCTS:\n';
+        productInfo += perKg.map((p: any) => `- ${p.name}: $${((p.pricePerKg ?? 0) / 100).toFixed(2)}/kg — ${p.description}`).join('\n');
+      }
+    }
+
+    let deliveryInfo = '';
+    if (daysRes.ok) {
+      const days = await daysRes.json() as any[];
+      const upcoming = days.filter((d: any) => d.active && d.date >= Date.now()).slice(0, 8);
+      if (upcoming.length > 0) {
+        deliveryInfo += '\n\nUPCOMING DELIVERY DAYS:\n';
+        deliveryInfo += upcoming.map((d: any) => {
+          const date = new Date(d.date);
+          const dateStr = date.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' });
+          const spotsLeft = (d.maxOrders ?? 40) - (d.orderCount ?? 0);
+          const type = d.type === 'pickup' ? `MARKET DAY PICKUP at ${d.marketLocation || d.zones}` : `Delivery to: ${d.zones || 'All areas'}`;
+          return `- ${dateStr}: ${type} (${spotsLeft} spots left)`;
+        }).join('\n');
+      }
+    }
+
+    return productInfo + deliveryInfo;
+  } catch (err) {
+    console.error('Failed to fetch live context:', err);
+    return '';
+  }
+}
+
+function buildSystemPrompt(liveContext: string): string {
+  return `You are the O'Connor Agriculture Beef Guide — a warm, knowledgeable assistant for O'Connor Agriculture, a first-generation family-owned grass-fed beef farm from Calliope and the Boyne Valley, QLD, Australia.
 
 About O'Connor Agriculture:
-- Family-owned farm using regenerative management practices that focus on soil health and animal welfare
+- Family-owned farm using regenerative management practices
 - Grass fed and finished beef from naturally managed pastures in the Boyne Valley, QLD
 - Tagline: "Good for the land. Good for the community. Good for you."
-- All beef is locally raised, grass fed, and naturally healthy with no preservatives
+- All beef is locally raised, grass fed, and naturally healthy with no inputs
+- Website: oconnoragriculture.com.au
 
-Beef Box Products (all prices include free delivery):
-- BBQ Box: $290 — Rib Fillet, Eye Fillet, Sirloin, Topside, Brisket, Mince and Thick Sausages (7–9kg)
-- Family Box: $290 — Rump, Y-Bone, Rib Roast, Silverside, Diced Beef, Stir Fry Strips, Mince and Thick Sausages (10–12kg)
-- Double Box: $550 — BBQ Box + Family Box combined (~17–21kg), best value per kg
-- Value Box: $220 — 50% Mince/Sausages, 25% Roasts, 25% Secondary Cuts (10kg)
-
-Individual cuts also available: Eye Fillet ($65/kg), Rib Fillet ($50/kg), Sirloin ($38/kg), Rump ($28/kg), Mince ($18/kg), Thick Sausages ($16/kg), Brisket ($22/kg), Diced Beef ($20/kg)
+Pricing:
+- Delivery: FREE on orders over $100, $10 delivery fee under $100
+- Market day pickups: no delivery fee
+- No GST on goods
+${liveContext}
 
 Your role:
-1. Answer questions about beef cuts, cooking methods, and butchering techniques helpfully and accurately
-2. Educate customers on the benefits of grass-fed and regeneratively farmed beef
+1. Answer questions about beef cuts, cooking methods, prices, delivery areas and dates
+2. Use the LIVE DATA above for current prices, stock availability, and delivery schedules — never guess prices
 3. Help customers choose the right product for their needs
-4. Gently steer conversations toward placing an order or visiting the shop
-5. Keep responses concise — 2-3 sentences unless explaining a cooking technique
+4. If a product is SOLD OUT, let them know and suggest alternatives
+5. Keep responses concise — 2-3 sentences unless explaining cooking techniques
+6. For ordering, direct them to oconnoragriculture.com.au/shop
+7. For delivery schedule, direct them to oconnoragriculture.com.au/delivery-days
 
-Always be warm, friendly, and conversational. If asked about ordering, direct them to the shop page or mention they can message the Facebook page. Never make up information — if unsure, say so and suggest they contact O'Connor directly via Facebook.`;
+Always be warm, friendly, and conversational with a rural Australian tone. Never make up information.`;
+}
 
 export async function POST(req: Request) {
   const apiKey = process.env.OPENROUTER_API_KEY;
@@ -38,21 +100,25 @@ export async function POST(req: Request) {
   try {
     const { messages } = await req.json() as { messages: { role: string; content: string }[] };
 
+    // Fetch live product and delivery data
+    const liveContext = await getLiveContext();
+    const systemPrompt = buildSystemPrompt(liveContext);
+
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://oconner.com.au',
+        'HTTP-Referer': 'https://oconnoragriculture.com.au',
         'X-Title': "O'Connor Agriculture",
       },
       body: JSON.stringify({
         model: 'google/gemini-2.0-flash-001',
         messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'system', content: systemPrompt },
           ...messages.slice(-10),
         ],
-        max_tokens: 350,
+        max_tokens: 400,
         temperature: 0.7,
       }),
     });
