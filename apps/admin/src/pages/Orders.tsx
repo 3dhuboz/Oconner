@@ -50,6 +50,7 @@ const EMPTY_FORM = {
   deliveryDayId: '', status: 'confirmed' as OrderStatus,
   paymentStatus: 'paid',
   internalNotes: '', deliveryFee: 0,
+  sendInvoice: false,
   address: { line1: '', line2: '', suburb: '', state: 'QLD', postcode: '' },
 };
 
@@ -161,10 +162,20 @@ export default function OrdersPage() {
         paymentStatus: form.paymentStatus,
         internalNotes: form.internalNotes || undefined,
       }) as { id: string };
+      // Send Square invoice if requested
+      if (form.sendInvoice && result.id) {
+        try {
+          await api.post(`/api/orders/${result.id}/invoice`, {});
+          toast(`Order created & invoice sent to ${form.customerEmail}`);
+        } catch {
+          toast(`Order created but invoice failed — send manually from order view`, 'error');
+        }
+      } else {
+        toast(`Order #${result.id.slice(-8).toUpperCase()} created`);
+      }
       const updated = await api.orders.list(statusFilter === 'all' ? undefined : statusFilter) as Order[];
       setOrders(updated);
       setShowCreate(false);
-      toast(`Order #${result.id.slice(-8).toUpperCase()} created`);
     } catch (e: any) {
       toast(e?.message ?? 'Failed to create order', 'error');
     } finally {
@@ -739,6 +750,13 @@ export default function OrdersPage() {
                       <input type="number" value={form.deliveryFee} onChange={(e) => setForm((f) => ({ ...f, deliveryFee: parseFloat(e.target.value) || 0 }))} step="0.01" min="0" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
                     </div>
                   </div>
+                  <label className="flex items-center gap-2.5 mb-3 p-3 rounded-lg border border-amber-200 bg-amber-50 cursor-pointer hover:bg-amber-100 transition-colors">
+                    <input type="checkbox" className="accent-brand w-4 h-4" checked={form.sendInvoice} onChange={(e) => setForm((f) => ({ ...f, sendInvoice: e.target.checked, paymentStatus: e.target.checked ? 'invoice' : f.paymentStatus }))} />
+                    <div>
+                      <span className="text-sm font-medium text-gray-800">📧 Send Square Invoice to customer</span>
+                      <p className="text-xs text-gray-500">Customer will receive an email with a payment link</p>
+                    </div>
+                  </label>
                   <div className="mb-3">
                     <label className="text-xs text-gray-500 mb-1 block">Internal Notes</label>
                     <textarea value={form.internalNotes} onChange={(e) => setForm((f) => ({ ...f, internalNotes: e.target.value }))} rows={2} placeholder="Notes visible to staff only…" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand resize-none" />
