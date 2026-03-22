@@ -72,6 +72,7 @@ export const products = sqliteTable('products', {
   gstApplicable: integer('gst_applicable', { mode: 'boolean' }).notNull().default(true),
   seasonalStart: integer('seasonal_start'), // unix ms
   seasonalEnd: integer('seasonal_end'),
+  cookingTips: text('cooking_tips'),
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull(),
 });

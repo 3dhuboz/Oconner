@@ -147,7 +147,12 @@ export default function ShopPage() {
               <h2 className="text-2xl font-black text-brand mb-2" style={{ fontFamily: 'var(--font-heading)' }}>{modal.name}</h2>
 
               {modal.description && (
-                <p className="text-sm text-gray-600 leading-relaxed mb-4">{modal.description}</p>
+                <p className="text-sm text-gray-600 leading-relaxed mb-3">{modal.description}</p>
+              )}
+              {(modal as any).cookingTips && (
+                <p className="text-sm text-brand/80 italic mb-4 flex items-start gap-1.5">
+                  <span className="text-base">🍳</span> {(modal as any).cookingTips}
+                </p>
               )}
 
               <div className="flex items-end justify-between gap-4">
