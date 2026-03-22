@@ -62,21 +62,18 @@ export default function AddressAutocomplete({ value, onChange, className }: Prop
     debounceRef.current = setTimeout(async () => {
       try {
         const params = new URLSearchParams({
-          q: `${q}, Queensland, Australia`,
-          limit: '5',
+          q: `${q}, Australia`,
+          limit: '8',
           lang: 'en',
-          lat: '-23.3791',
-          lon: '150.5100',
-          location_bias_scale: '10',
-          bbox: '137.0,-29.5,154.0,-10.0',
+          lat: '-25.2744',
+          lon: '133.7751',
         });
         const res = await fetch(`https://photon.komoot.io/api/?${params}`);
         const data = (await res.json()) as { features: PhotonFeature[] };
         const auResults = data.features.filter(
           (f) =>
             f.properties.country === 'Australia' &&
-            f.properties.street &&
-            (f.properties.state === 'Queensland' || f.properties.postcode?.startsWith('4')),
+            f.properties.street,
         );
         setSuggestions(auResults);
         setShowDropdown(auResults.length > 0);
