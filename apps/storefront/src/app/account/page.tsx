@@ -69,6 +69,10 @@ export default function AccountPage() {
   const [saving, setSaving] = useState(false);
   const [pushStatus, setPushStatus] = useState<'unknown' | 'granted' | 'denied' | 'unsupported'>('unknown');
   const [pushSaving, setPushSaving] = useState(false);
+  const [setupName, setSetupName] = useState('');
+  const [setupPhone, setSetupPhone] = useState('');
+  const [setupAddr, setSetupAddr] = useState<Address>({ line1: '', suburb: '', state: 'QLD', postcode: '' });
+  const [setupSaving, setSetupSaving] = useState(false);
 
   // API_URL imported from @butcher/shared
 
@@ -149,11 +153,6 @@ export default function AccountPage() {
   const activeSubscription = subscriptions.find((s) => s.status === 'active' || s.status === 'paused');
   const defaultAddress = customer?.addresses?.[0];
   const isNewUser = !customer || (!customer.phone && !defaultAddress);
-
-  const [setupName, setSetupName] = useState('');
-  const [setupPhone, setSetupPhone] = useState('');
-  const [setupAddr, setSetupAddr] = useState<Address>({ line1: '', suburb: '', state: 'QLD', postcode: '' });
-  const [setupSaving, setSetupSaving] = useState(false);
 
   const handleSetup = async () => {
     if (!setupAddr.line1 || !setupAddr.suburb || !setupAddr.postcode) {
