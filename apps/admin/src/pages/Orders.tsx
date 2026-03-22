@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { api, formatCurrency, ORDER_STATUS_LABELS } from '@butcher/shared';
 import type { Order, OrderStatus } from '@butcher/shared';
 import { Link } from 'react-router-dom';
-import { Search, Plus, X, Trash2, Pencil } from 'lucide-react';
+import { Search, Plus, X, Trash2, Pencil, Receipt } from 'lucide-react';
 import { toast } from '../lib/toast';
 import AddressAutocomplete from '../components/AddressAutocomplete';
 
@@ -82,6 +82,7 @@ export default function OrdersPage() {
   // Delete state
   const [deleteTarget, setDeleteTarget] = useState<Order | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [invoiceSending, setInvoiceSending] = useState<string | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -313,6 +314,22 @@ export default function OrdersPage() {
     }
   };
 
+  const sendInvoice = async (order: Order) => {
+    setInvoiceSending(order.id);
+    try {
+      const result = await api.post<{ ok: boolean; method: string; url?: string }>(`/api/orders/${order.id}/invoice`, {});
+      if (result.url) {
+        toast(`Payment link sent to ${order.customerEmail}`);
+      } else {
+        toast(`Invoice sent to ${order.customerEmail}`);
+      }
+    } catch (e: any) {
+      toast(e?.message ?? 'Failed to send invoice', 'error');
+    } finally {
+      setInvoiceSending(null);
+    }
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -427,6 +444,16 @@ export default function OrdersPage() {
                     <button onClick={() => openEdit(order)} className="text-gray-400 hover:text-brand transition-colors" title="Edit order">
                       <Pencil className="h-3.5 w-3.5" />
                     </button>
+                    {order.paymentStatus !== 'paid' && (
+                      <button
+                        onClick={() => sendInvoice(order)}
+                        disabled={invoiceSending === order.id}
+                        className="text-gray-400 hover:text-amber-600 transition-colors disabled:opacity-50"
+                        title="Send Square invoice"
+                      >
+                        <Receipt className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                     <button onClick={() => setDeleteTarget(order)} className="text-gray-400 hover:text-red-500 transition-colors" title="Delete order">
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>

@@ -344,4 +344,114 @@ app.delete('/:id', async (c) => {
   return c.json({ ok: true });
 });
 
+// ── Square Invoice ──
+const SQUARE_API = 'https://connect.squareup.com/v2';
+
+app.post('/:id/invoice', async (c) => {
+  const accessToken = c.env.SQUARE_ACCESS_TOKEN;
+  const locationId = c.env.SQUARE_LOCATION_ID;
+  if (!accessToken || !locationId) return c.json({ error: 'Square not configured' }, 400);
+
+  const db = drizzle(c.env.DB);
+  const orderId = c.req.param('id');
+  const [order] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+  if (!order) return c.json({ error: 'Order not found' }, 404);
+
+  const items = JSON.parse(order.items) as Array<{ productName: string; quantity?: number; lineTotal: number }>;
+
+  const squareFetch = async (path: string, body: unknown) => {
+    const res = await fetch(`${SQUARE_API}${path}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        'Square-Version': '2024-01-18',
+      },
+      body: JSON.stringify(body),
+    });
+    return res.json() as Promise<any>;
+  };
+
+  try {
+    // Create Square invoice
+    const invoiceResult = await squareFetch('/invoices', {
+      idempotency_key: crypto.randomUUID(),
+      invoice: {
+        location_id: locationId,
+        order_id: undefined, // We don't create a Square order, just invoice line items
+        primary_recipient: {
+          given_name: order.customerName?.split(' ')[0] ?? '',
+          family_name: order.customerName?.split(' ').slice(1).join(' ') ?? '',
+          email_address: order.customerEmail,
+          phone_number: order.customerPhone ? `+61${order.customerPhone.replace(/^0/, '')}` : undefined,
+        },
+        payment_requests: [{
+          request_type: 'BALANCE',
+          due_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          automatic_payment_source: 'NONE',
+        }],
+        delivery_method: 'EMAIL',
+        title: `O'Connor Agriculture — Order #${orderId.slice(0, 8).toUpperCase()}`,
+        description: items.map((i) => `${i.productName} x${i.quantity ?? 1}`).join(', '),
+        accepted_payment_methods: {
+          card: true,
+          square_gift_card: false,
+          bank_account: false,
+          buy_now_pay_later: false,
+        },
+      },
+    });
+
+    if (invoiceResult.errors) {
+      // Fallback: use payment link instead of invoice
+      const linkResult = await squareFetch('/online-checkout/payment-links', {
+        idempotency_key: crypto.randomUUID(),
+        quick_pay: {
+          name: `Order #${orderId.slice(0, 8).toUpperCase()} — ${order.customerName}`,
+          price_money: { amount: order.total, currency: 'AUD' },
+          location_id: locationId,
+        },
+        checkout_options: {
+          redirect_url: `${c.env.STOREFRONT_URL}/track/${orderId}`,
+        },
+        pre_populated_data: {
+          buyer_email: order.customerEmail,
+        },
+      });
+
+      if (linkResult.errors) {
+        return c.json({ error: 'Failed to create payment link', details: linkResult.errors }, 400);
+      }
+
+      const paymentUrl = (linkResult as any).payment_link?.url ?? (linkResult as any).related_resources?.checkout?.checkout_page_url;
+
+      // Update order with payment link
+      await db.update(orders).set({
+        internalNotes: `${order.internalNotes ?? ''}\nSquare payment link: ${paymentUrl}`.trim(),
+        updatedAt: Date.now(),
+      }).where(eq(orders.id, orderId));
+
+      return c.json({ ok: true, method: 'payment_link', url: paymentUrl });
+    }
+
+    // Publish the invoice to send it
+    const invoice = (invoiceResult as any).invoice;
+    if (invoice?.id) {
+      await squareFetch(`/invoices/${invoice.id}/publish`, {
+        idempotency_key: crypto.randomUUID(),
+        version: invoice.version ?? 0,
+      });
+    }
+
+    await db.update(orders).set({
+      internalNotes: `${order.internalNotes ?? ''}\nSquare invoice sent: ${invoice?.id ?? 'unknown'}`.trim(),
+      updatedAt: Date.now(),
+    }).where(eq(orders.id, orderId));
+
+    return c.json({ ok: true, method: 'invoice', invoiceId: invoice?.id });
+  } catch (e: any) {
+    return c.json({ error: e?.message ?? 'Invoice creation failed' }, 500);
+  }
+});
+
 export default app;
