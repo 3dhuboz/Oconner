@@ -203,6 +203,17 @@ export const stockMovements = sqliteTable('stock_movements', {
   createdAt: integer('created_at').notNull(),
 });
 
+// ── Delivery Day Stock Allocations ────────────────────────────────────────────
+export const deliveryDayStock = sqliteTable('delivery_day_stock', {
+  id: text('id').primaryKey(),
+  deliveryDayId: text('delivery_day_id').notNull().references(() => deliveryDays.id),
+  productId: text('product_id').notNull().references(() => products.id),
+  productName: text('product_name').notNull().default(''),
+  allocated: real('allocated').notNull().default(0),  // kg or units allocated for this day
+  sold: real('sold').notNull().default(0),            // kg or units sold so far
+  createdAt: integer('created_at').notNull(),
+});
+
 // ── Stocktake Sessions ────────────────────────────────────────────────────────
 export const stocktakeSessions = sqliteTable('stocktake_sessions', {
   id: text('id').primaryKey(),

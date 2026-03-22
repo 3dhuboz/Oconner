@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { notifyCustomer } from './push';
 import { drizzle } from 'drizzle-orm/d1';
 import { eq, asc, gte, and } from 'drizzle-orm';
-import { deliveryDays, orders, stops, notifications, subscriptions, customers, users, deliveryRuns, products } from '@butcher/db';
+import { deliveryDays, orders, stops, notifications, subscriptions, customers, users, deliveryRuns, products, deliveryDayStock } from '@butcher/db';
 import { deductStock } from '../lib/stock';
 import { sendEmail, buildOrderEmail, getSubject } from '../lib/email';
 import type { Env, AuthUser } from '../types';
@@ -368,6 +368,66 @@ app.post('/:id/send-reminders', async (c) => {
   }
 
   return c.json({ sent, total: pendingOrders.length });
+});
+
+// ── Delivery Day Stock Allocations ───────────────────────────────────────────
+
+app.get('/:id/stock', async (c) => {
+  const db = drizzle(c.env.DB);
+  const dayId = c.req.param('id');
+  const rows = await db.select().from(deliveryDayStock).where(eq(deliveryDayStock.deliveryDayId, dayId));
+  return c.json(rows);
+});
+
+app.put('/:id/stock', async (c) => {
+  const db = drizzle(c.env.DB);
+  const dayId = c.req.param('id');
+  const body = await c.req.json<{ allocations: { productId: string; productName: string; allocated: number }[] }>();
+  const now = Date.now();
+
+  // Delete existing allocations for this day, then insert fresh
+  await db.delete(deliveryDayStock).where(eq(deliveryDayStock.deliveryDayId, dayId));
+
+  if (body.allocations.length > 0) {
+    const values = body.allocations.map((a) => ({
+      id: crypto.randomUUID(),
+      deliveryDayId: dayId,
+      productId: a.productId,
+      productName: a.productName,
+      allocated: a.allocated,
+      sold: 0,
+      createdAt: now,
+    }));
+    await db.insert(deliveryDayStock).values(values);
+  }
+
+  return c.json({ ok: true });
+});
+
+// Copy allocations from a previous delivery day
+app.post('/:id/stock/copy-from/:sourceId', async (c) => {
+  const db = drizzle(c.env.DB);
+  const dayId = c.req.param('id');
+  const sourceId = c.req.param('sourceId');
+  const now = Date.now();
+
+  const source = await db.select().from(deliveryDayStock).where(eq(deliveryDayStock.deliveryDayId, sourceId));
+  if (source.length === 0) return c.json({ error: 'No allocations to copy' }, 404);
+
+  // Delete existing for target, insert copies with sold=0
+  await db.delete(deliveryDayStock).where(eq(deliveryDayStock.deliveryDayId, dayId));
+  const values = source.map((s) => ({
+    id: crypto.randomUUID(),
+    deliveryDayId: dayId,
+    productId: s.productId,
+    productName: s.productName,
+    allocated: s.allocated,
+    sold: 0,
+    createdAt: now,
+  }));
+  await db.insert(deliveryDayStock).values(values);
+
+  return c.json({ copied: values.length });
 });
 
 export default app;

@@ -7,7 +7,7 @@ import DeliveryRunsTab from './DeliveryRunsTab';
 import {
   ArrowLeft, Route, Printer, Bell, Package, FileText,
   CheckCircle, Clock, Navigation, AlertTriangle, User, Camera,
-  Eye, MapPin, Timer, TrendingUp, ChevronUp, ChevronDown, Info, Send, Layers,
+  Eye, MapPin, Timer, TrendingUp, ChevronUp, ChevronDown, Info, Send, Layers, BarChart3, Save, Copy,
 } from 'lucide-react';
 
 const DRIVER_URL = import.meta.env.VITE_DRIVER_URL ?? 'https://butcher-driver.pages.dev';
@@ -180,6 +180,39 @@ export default function DeliveryManifestPage() {
     }).catch(() => {});
   }, [dayId]);
 
+  const loadStockTab = async () => {
+    if (stockLoaded || !dayId) return;
+    try {
+      const [allocData, prodsData, daysData] = await Promise.all([
+        api.deliveryDays.getStock(dayId),
+        api.products.list(),
+        api.deliveryDays.list(),
+      ]);
+      setStockAllocations(allocData as typeof stockAllocations);
+      setAllProducts((prodsData as any[]).filter((p: any) => p.active).map((p: any) => ({
+        id: p.id, name: p.name, stockOnHand: p.stockOnHand, isMeatPack: p.isMeatPack,
+      })));
+      // Previous days for "copy from" dropdown
+      const pastDays = (daysData as any[])
+        .filter((d: any) => d.id !== dayId && d.active)
+        .sort((a: any, b: any) => b.date - a.date)
+        .slice(0, 10);
+      setPreviousDays(pastDays);
+      setStockLoaded(true);
+    } catch { toast('Failed to load stock data', 'error'); }
+  };
+
+  const saveStockAllocations = async () => {
+    if (!dayId) return;
+    setStockSaving(true);
+    try {
+      const toSave = stockAllocations.filter((a) => a.allocated > 0);
+      await api.deliveryDays.setStock(dayId, toSave);
+      toast('Stock allocations saved');
+    } catch { toast('Failed to save allocations', 'error'); }
+    finally { setStockSaving(false); }
+  };
+
   const generateStops = async () => {
     if (!dayId) return;
     setGenerating(true);
@@ -261,7 +294,12 @@ export default function DeliveryManifestPage() {
     ? new Date(day.date as unknown as number).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
     : '—';
 
-  const [activeTab, setActiveTab] = useState<'manifest' | 'runs'>('manifest');
+  const [activeTab, setActiveTab] = useState<'manifest' | 'runs' | 'stock'>('manifest');
+  const [stockAllocations, setStockAllocations] = useState<{ productId: string; productName: string; allocated: number; sold: number }[]>([]);
+  const [allProducts, setAllProducts] = useState<{ id: string; name: string; stockOnHand: number; isMeatPack: boolean }[]>([]);
+  const [stockSaving, setStockSaving] = useState(false);
+  const [stockLoaded, setStockLoaded] = useState(false);
+  const [previousDays, setPreviousDays] = useState<{ id: string; date: number }[]>([]);
 
   return (
     <div>
@@ -293,9 +331,107 @@ export default function DeliveryManifestPage() {
         <button onClick={() => setActiveTab('runs')} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'runs' ? 'bg-white text-brand shadow-sm' : 'text-gray-500 hover:text-brand'}`}>
           <Layers className="h-4 w-4" /> Delivery Runs
         </button>
+        <button onClick={() => { setActiveTab('stock'); loadStockTab(); }} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === 'stock' ? 'bg-white text-brand shadow-sm' : 'text-gray-500 hover:text-brand'}`}>
+          <BarChart3 className="h-4 w-4" /> Stock Allocation
+        </button>
       </div>
 
       {activeTab === 'runs' && dayId && <DeliveryRunsTab dayId={dayId} />}
+
+      {activeTab === 'stock' && dayId && (
+        <div className="bg-white rounded-xl border overflow-hidden">
+          <div className="px-5 py-4 border-b flex items-center justify-between">
+            <div>
+              <h3 className="font-semibold">Stock Allocation for This Day</h3>
+              <p className="text-xs text-gray-400 mt-0.5">Set how much of each product is available for this delivery day</p>
+            </div>
+            <div className="flex items-center gap-2">
+              {previousDays.length > 0 && (
+                <select
+                  onChange={async (e) => {
+                    if (!e.target.value || !dayId) return;
+                    try {
+                      await api.deliveryDays.copyStock(dayId, e.target.value);
+                      const fresh = await api.deliveryDays.getStock(dayId) as typeof stockAllocations;
+                      setStockAllocations(fresh);
+                      toast('Copied allocations from previous day');
+                    } catch { toast('Failed to copy', 'error'); }
+                    e.target.value = '';
+                  }}
+                  className="text-xs border rounded-lg px-2 py-1.5 text-gray-500"
+                >
+                  <option value="">Copy from...</option>
+                  {previousDays.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {new Date(d.date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <button
+                onClick={saveStockAllocations}
+                disabled={stockSaving}
+                className="flex items-center gap-1.5 bg-brand text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-mid disabled:opacity-50"
+              >
+                <Save className="h-4 w-4" /> {stockSaving ? 'Saving…' : 'Save Allocations'}
+              </button>
+            </div>
+          </div>
+          {!stockLoaded ? (
+            <div className="p-10 text-center text-gray-400">Loading…</div>
+          ) : (
+            <div className="divide-y max-h-[600px] overflow-y-auto">
+              {allProducts.map((product) => {
+                const alloc = stockAllocations.find((a) => a.productId === product.id);
+                const allocated = alloc?.allocated ?? 0;
+                const sold = alloc?.sold ?? 0;
+                const pct = allocated > 0 ? Math.min(100, (sold / allocated) * 100) : 0;
+                return (
+                  <div key={product.id} className="px-5 py-3 flex items-center gap-4">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm">{product.name}</p>
+                      <p className="text-xs text-gray-400">Global stock: {product.stockOnHand} {product.isMeatPack ? 'units' : 'kg'}</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="text-right">
+                        <label className="text-[10px] text-gray-400 block">Allocated</label>
+                        <input
+                          type="number"
+                          min={0}
+                          step={product.isMeatPack ? 1 : 0.5}
+                          value={allocated || ''}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value) || 0;
+                            setStockAllocations((prev) => {
+                              const existing = prev.find((a) => a.productId === product.id);
+                              if (existing) return prev.map((a) => a.productId === product.id ? { ...a, allocated: val } : a);
+                              return [...prev, { productId: product.id, productName: product.name, allocated: val, sold: 0 }];
+                            });
+                          }}
+                          className="w-20 border rounded px-2 py-1 text-sm text-right focus:outline-none focus:ring-1 focus:ring-brand"
+                          placeholder="0"
+                        />
+                      </div>
+                      <div className="text-right w-14">
+                        <label className="text-[10px] text-gray-400 block">Sold</label>
+                        <p className="text-sm font-medium text-gray-600">{sold}</p>
+                      </div>
+                      <div className="w-20">
+                        <div className="w-full bg-gray-200 rounded-full h-1.5">
+                          <div
+                            className={`h-1.5 rounded-full ${pct >= 90 ? 'bg-red-500' : pct >= 60 ? 'bg-amber-500' : 'bg-brand'}`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {activeTab === 'manifest' && (<>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
