@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '@butcher/shared';
-import { Plus, X, Save, ShieldCheck, ShieldOff } from 'lucide-react';
+import { Plus, X, Save, ShieldCheck, ShieldOff, Send } from 'lucide-react';
 import { toast } from '../lib/toast';
 
 interface StaffUser {
@@ -100,6 +100,20 @@ export default function StaffPage() {
     }
   };
 
+  const [inviting, setInviting] = useState<string | null>(null);
+
+  const sendInvite = async (u: StaffUser) => {
+    setInviting(u.id);
+    try {
+      await api.post('/api/staff/invite', { name: u.name, email: u.email, role: u.role });
+      toast(`Invite sent to ${u.email}`);
+    } catch (e: any) {
+      toast(e?.message ?? 'Failed to send invite', 'error');
+    } finally {
+      setInviting(null);
+    }
+  };
+
   const toggleActive = async (u: StaffUser) => {
     try {
       await api.users.update(u.id, { active: !u.active });
@@ -157,6 +171,14 @@ export default function StaffPage() {
                 </td>
                 <td className="px-4 py-3 text-right">
                   <div className="flex items-center justify-end gap-2">
+                    <button
+                      onClick={() => sendInvite(u)}
+                      disabled={inviting === u.id}
+                      title="Send sign-up invite email"
+                      className="flex items-center gap-1 text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2 py-1 rounded-lg hover:bg-amber-100 disabled:opacity-50"
+                    >
+                      <Send className="h-3 w-3" /> {inviting === u.id ? '…' : 'Invite'}
+                    </button>
                     <button onClick={() => openEdit(u)} className="text-xs text-brand hover:underline">Edit</button>
                     <button onClick={() => toggleActive(u)} title={u.active ? 'Deactivate' : 'Activate'} className="text-gray-400 hover:text-gray-700">
                       {u.active ? <ShieldOff className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
