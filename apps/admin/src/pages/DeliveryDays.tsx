@@ -4,6 +4,7 @@ import type { DeliveryDay } from '@butcher/shared';
 import { Plus, X, CalendarDays, ClipboardList, RefreshCw, AlertTriangle, Pencil, MapPin, Save, Trash2, Store } from 'lucide-react';
 import { toast } from '../lib/toast';
 import { useNavigate } from 'react-router-dom';
+import { ZoneAutocomplete } from '../components/ZoneAutocomplete';
 
 export default function DeliveryDaysPage() {
   const navigate = useNavigate();
@@ -256,15 +257,12 @@ export default function DeliveryDaysPage() {
                     className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
                 </div>
               )}
-              <div>
-                <label className="text-xs text-gray-500 mb-1 block">{editForm.type === 'pickup' ? 'Location / Area' : 'Delivery Areas / Zones'}</label>
-                <input
-                  value={editForm.zones}
-                  onChange={(e) => setEditForm({ ...editForm, zones: e.target.value })}
-                  placeholder={editForm.type === 'pickup' ? 'e.g. Clinton' : 'e.g. Rockhampton, Yeppoon, Biloela'}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
-                />
-              </div>
+              <ZoneAutocomplete
+                value={editForm.zones}
+                onChange={(v) => setEditForm({ ...editForm, zones: v })}
+                label={editForm.type === 'pickup' ? 'Location / Area' : 'Delivery Areas / Zones'}
+                placeholder={editForm.type === 'pickup' ? 'Type suburb...' : 'Type suburb to add zone...'}
+              />
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs text-gray-500 mb-1 block">Max Orders</label>
@@ -313,13 +311,13 @@ export default function DeliveryDaysPage() {
                   <option value={0}>Sunday</option><option value={1}>Monday</option><option value={2}>Tuesday</option><option value={3}>Wednesday</option><option value={4}>Thursday</option><option value={5}>Friday</option><option value={6}>Saturday</option>
                 </select>
               </div>
-              <div>
-                <label className="text-xs text-gray-500 mb-1 block">Delivery Areas / Zones</label>
-                <input value={bulkForm.zones} onChange={(e) => setBulkForm((f) => ({ ...f, zones: e.target.value }))}
-                  placeholder="e.g. Rockhampton, Yeppoon, Biloela"
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
-                <p className="text-xs text-gray-400 mt-1">All created days will have these zones</p>
-              </div>
+              <ZoneAutocomplete
+                value={bulkForm.zones}
+                onChange={(v) => setBulkForm((f) => ({ ...f, zones: v }))}
+                label="Delivery Areas / Zones"
+                placeholder="Type suburb to add zone..."
+                hint="All created days will have these zones"
+              />
               <div>
                 <label className="text-xs text-gray-500 mb-1 block">How many weeks ahead</label>
                 <input type="number" min={1} max={52} value={bulkForm.weeks} onChange={(e) => setBulkForm((f) => ({ ...f, weeks: Number(e.target.value) }))} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
@@ -375,12 +373,12 @@ export default function DeliveryDaysPage() {
                     className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
                 </div>
               )}
-              <div>
-                <label className="text-xs text-gray-500 mb-1 block">{form.type === 'pickup' ? 'Location / Area' : 'Delivery Areas / Zones'}</label>
-                <input value={form.zones} onChange={(e) => setForm((f) => ({ ...f, zones: e.target.value }))}
-                  placeholder={form.type === 'pickup' ? 'e.g. Clinton' : 'e.g. Gladstone, Calliope, Boyne Island'}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
-              </div>
+              <ZoneAutocomplete
+                value={form.zones}
+                onChange={(v) => setForm((f) => ({ ...f, zones: v }))}
+                label={form.type === 'pickup' ? 'Location / Area' : 'Delivery Areas / Zones'}
+                placeholder={form.type === 'pickup' ? 'Type suburb...' : 'Type suburb to add zone...'}
+              />
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs text-gray-500 mb-1 block">Max Orders</label>
