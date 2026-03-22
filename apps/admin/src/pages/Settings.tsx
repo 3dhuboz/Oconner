@@ -141,6 +141,16 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   );
 }
 
+const API_BASE = (import.meta.env.VITE_API_URL as string) ?? 'https://oconner-api.steve-700.workers.dev';
+
+function resolveImageUrl(value: string): string {
+  if (!value) return '';
+  if (value.startsWith('http')) return value;
+  // Partial path like "/648756608_..." — prepend API images path
+  if (value.startsWith('/')) return `${API_BASE}/images${value}`;
+  return `${API_BASE}/images/${value}`;
+}
+
 function ImageField({ label, value, onChange }: { label: string; value: string; onChange: (url: string) => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -158,44 +168,44 @@ function ImageField({ label, value, onChange }: { label: string; value: string; 
     }
   };
 
+  const previewUrl = resolveImageUrl(value);
+
   return (
     <div>
       <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
-      <div className="flex gap-3 items-start">
-        <div className="flex-1">
-          <div className="flex gap-2">
-            <input
-              className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand transition-colors"
-              value={value}
-              onChange={(e) => onChange(e.target.value)}
-              placeholder="Image URL or upload"
-            />
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              disabled={uploading}
-              className="flex items-center gap-1.5 border border-gray-200 px-3 py-2 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-50"
-            >
-              <Upload className="h-3.5 w-3.5" /> {uploading ? '...' : 'Upload'}
-            </button>
-          </div>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f); }}
-          />
-        </div>
-        {value && (
+      {previewUrl && (
+        <div className="mb-2">
           <img
-            src={value}
+            src={previewUrl}
             alt="Preview"
-            className="w-16 h-16 rounded-lg object-cover border flex-shrink-0"
+            className="w-full max-w-[200px] h-28 rounded-lg object-cover border"
             onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
           />
-        )}
+        </div>
+      )}
+      <div className="flex gap-2">
+        <input
+          className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-brand transition-colors"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="Image URL or upload"
+        />
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          disabled={uploading}
+          className="flex items-center gap-1.5 border border-gray-200 px-3 py-2 rounded-lg text-sm hover:bg-gray-50 disabled:opacity-50"
+        >
+          <Upload className="h-3.5 w-3.5" /> {uploading ? '...' : 'Upload'}
+        </button>
       </div>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f); }}
+      />
     </div>
   );
 }
