@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { api } from '@butcher/shared';
 import { Sparkles, Copy, Check, RefreshCw, Facebook, Instagram, Linkedin, ExternalLink } from 'lucide-react';
 
-const SOCIAL_STUDIO_URL = `https://creators.facebook.com/tools/reels?page_id=61574996320860`;
+const SOCIAL_STUDIO_URL = `https://oconnor-social.pages.dev`;
 
 const PLATFORMS = [
   { id: 'facebook', label: 'Facebook', icon: Facebook, color: 'text-blue-600' },
@@ -32,7 +32,7 @@ const BRANDS = [
 ];
 
 export default function SocialHubPage() {
-  const [activeTab, setActiveTab] = useState<'generator' | 'studio'>('generator');
+  const [activeTab, setActiveTab] = useState<'generator' | 'studio'>('studio');
   const [brand, setBrand] = useState('oconnor');
   const [platform, setPlatform] = useState('facebook');
   const [postType, setPostType] = useState('product');
@@ -85,8 +85,9 @@ export default function SocialHubPage() {
             <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
               <Sparkles className="h-6 w-6 text-brand" />
               Social AI Studio
+              <span className="text-xs font-normal text-gray-400 ml-1">— powered by Penny Wise I.T</span>
             </h1>
-            <p className="text-sm text-gray-500 mt-0.5">AI post generator + embedded social studio.</p>
+            <p className="text-sm text-gray-500 mt-0.5">AI-powered social media management for O'Connor Agriculture.</p>
           </div>
           {activeTab === 'studio' && (
             <a href={SOCIAL_STUDIO_URL} target="_blank" rel="noopener noreferrer"
