@@ -28,6 +28,21 @@ interface PhotonFeature {
   };
 }
 
+interface NominatimResult {
+  display_name?: string;
+  address?: {
+    house_number?: string;
+    road?: string;
+    street?: string;
+    suburb?: string;
+    city?: string;
+    town?: string;
+    village?: string;
+    state?: string;
+    postcode?: string;
+  };
+}
+
 const AU_STATE_MAP: Record<string, string> = {
   Queensland: 'QLD',
   'New South Wales': 'NSW',
@@ -62,26 +77,38 @@ export default function AddressAutocomplete({ value, onChange, className }: Prop
     debounceRef.current = setTimeout(async () => {
       try {
         const params = new URLSearchParams({
-          q: `${q}, Australia`,
+          q,
+          format: 'json',
+          addressdetails: '1',
+          countrycodes: 'au',
           limit: '8',
-          lang: 'en',
-          lat: '-25.2744',
-          lon: '133.7751',
         });
-        const res = await fetch(`https://photon.komoot.io/api/?${params}`);
-        const data = (await res.json()) as { features: PhotonFeature[] };
-        const auResults = data.features.filter(
-          (f) =>
-            f.properties.country === 'Australia' &&
-            f.properties.street,
-        );
-        setSuggestions(auResults);
-        setShowDropdown(auResults.length > 0);
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
+          headers: { 'Accept-Language': 'en' },
+        });
+        const data = await res.json() as NominatimResult[];
+
+        const results: PhotonFeature[] = data
+          .filter((r) => r.address?.road || r.address?.street)
+          .map((r) => ({
+            properties: {
+              housenumber: r.address?.house_number,
+              street: r.address?.road || r.address?.street,
+              name: r.display_name?.split(',')[0],
+              city: r.address?.suburb || r.address?.city || r.address?.town || r.address?.village,
+              state: r.address?.state,
+              postcode: r.address?.postcode,
+              country: 'Australia',
+            },
+          }));
+
+        setSuggestions(results);
+        setShowDropdown(results.length > 0);
       } catch {
         setSuggestions([]);
         setShowDropdown(false);
       }
-    }, 300);
+    }, 400);
   };
 
   const handleInputChange = (val: string) => {

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, formatCurrency } from '@butcher/shared';
 import type { Customer, Address } from '@butcher/shared';
-import { Search, Plus, X, Save, UserX, MapPin, Trash2 } from 'lucide-react';
+import { Search, Plus, X, Save, UserX, MapPin, Trash2, Pencil } from 'lucide-react';
 import { toast } from '../lib/toast';
 
 const BLANK_ADDR: Address = { line1: '', suburb: '', state: 'QLD', postcode: '', country: 'AU' };
@@ -140,13 +140,22 @@ export default function CustomersPage() {
                     : <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Active</span>}
                 </td>
                 <td className="px-4 py-3 text-right">
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setDeleteConfirm(c); }}
-                    className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50"
-                    title="Delete customer"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                  <div className="flex items-center justify-end gap-1">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); openEdit(c); }}
+                      className="p-1.5 text-brand hover:text-brand-mid rounded-lg hover:bg-brand/10"
+                      title="Edit customer"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setDeleteConfirm(c); }}
+                      className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50"
+                      title="Delete customer"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '@butcher/shared';
-import { Plus, X, Save, ShieldCheck, ShieldOff, Search, CheckCircle } from 'lucide-react';
+import { Plus, X, Save, ShieldCheck, ShieldOff } from 'lucide-react';
 import { toast } from '../lib/toast';
 
 interface StaffUser {
@@ -42,13 +42,7 @@ export default function StaffPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  // New-member lookup state
-  const [lookupEmail, setLookupEmail] = useState('');
-  const [lookupLoading, setLookupLoading] = useState(false);
-  const [lookupResult, setLookupResult] = useState<{ clerkId: string; email: string; name: string } | null>(null);
-  const [lookupError, setLookupError] = useState('');
-  const [newRole, setNewRole] = useState<'admin' | 'staff'>('staff');
-  const [newName, setNewName] = useState('');
+  const [newForm, setNewForm] = useState({ name: '', email: '', role: 'staff' as 'admin' | 'staff' });
 
   const load = () => {
     setLoading(true);
@@ -62,40 +56,25 @@ export default function StaffPage() {
 
   useEffect(() => { load(); }, []);
 
-  const resetNew = () => {
-    setLookupEmail(''); setLookupResult(null); setLookupError('');
-    setNewRole('staff'); setNewName(''); setError('');
-  };
-  const openNew = () => { resetNew(); setIsNew(true); };
+  const openNew = () => { setNewForm({ name: '', email: '', role: 'staff' }); setIsNew(true); setError(''); };
   const openEdit = (u: StaffUser) => { setEditing({ ...u }); setIsNew(false); setError(''); };
-  const close = () => { setEditing(null); setIsNew(false); resetNew(); };
-
-  const handleLookup = async () => {
-    if (!lookupEmail.trim()) return;
-    setLookupLoading(true); setLookupResult(null); setLookupError('');
-    try {
-      const result = await api.users.findByEmail(lookupEmail.trim()) as any;
-      setLookupResult(result);
-      setNewName(result.name || '');
-    } catch (e: any) {
-      setLookupError(e.message ?? 'Lookup failed');
-    } finally {
-      setLookupLoading(false);
-    }
-  };
+  const close = () => { setEditing(null); setIsNew(false); setError(''); };
 
   const handleAddNew = async () => {
-    if (!lookupResult) return;
+    if (!newForm.name || !newForm.email) { setError('Name and email are required.'); return; }
     setSaving(true); setError('');
+    let clerkId: string | null = null;
     try {
-      await api.users.create({
-        id: lookupResult.clerkId,
-        name: newName || lookupResult.name,
-        email: lookupResult.email,
-        role: newRole,
-        active: true,
-      });
+      const found = await api.users.findByEmail(newForm.email) as { clerkId: string };
+      clerkId = found.clerkId;
+    } catch {
+      // Not in Clerk yet — use UUID
+    }
+    const id = clerkId ?? crypto.randomUUID();
+    try {
+      await api.users.create({ id, name: newForm.name, email: newForm.email, role: newForm.role, active: true });
       load(); close();
+      toast(clerkId ? 'Staff member added and linked' : 'Staff member added — they must sign up to enable login');
     } catch (e: any) {
       setError(e.message ?? 'Save failed');
     } finally {
@@ -193,74 +172,29 @@ export default function StaffPage() {
       {/* Add new staff modal */}
       {isNew && (
         <Modal title="Add Staff Member" onClose={close}>
-          <p className="text-sm text-gray-500">
-            Enter the email address of the person you want to add. They must have signed up at the storefront first.
-          </p>
-
           <div>
-            <label className="block text-xs font-medium text-gray-600 mb-1">Email address *</label>
-            <div className="flex gap-2">
-              <input
-                className={inp}
-                type="email"
-                placeholder="person@example.com"
-                value={lookupEmail}
-                onChange={(e) => { setLookupEmail(e.target.value); setLookupResult(null); setLookupError(''); }}
-                onKeyDown={(e) => e.key === 'Enter' && handleLookup()}
-              />
-              <button
-                onClick={handleLookup}
-                disabled={lookupLoading || !lookupEmail.trim()}
-                className="flex items-center gap-1.5 px-3 py-2 bg-brand text-white rounded-lg text-sm disabled:opacity-50 flex-shrink-0"
-              >
-                <Search className="h-3.5 w-3.5" />
-                {lookupLoading ? 'Looking…' : 'Look up'}
-              </button>
-            </div>
-            {lookupError && (
-              <p className="text-red-600 text-xs mt-1.5">{lookupError}</p>
-            )}
+            <label className="block text-xs font-medium text-gray-600 mb-1">Full Name *</label>
+            <input className={inp} value={newForm.name} onChange={(e) => setNewForm((f) => ({ ...f, name: e.target.value }))} placeholder="Full name" />
           </div>
-
-          {lookupResult && (
-            <>
-              <div className="bg-brand-light border border-brand/20 rounded-lg px-4 py-3 flex items-center gap-3">
-                <CheckCircle className="h-5 w-5 text-brand flex-shrink-0" />
-                <div>
-                  <p className="text-sm font-semibold text-brand">{lookupResult.name || lookupResult.email}</p>
-                  <p className="text-xs text-gray-600">{lookupResult.email}</p>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Display Name</label>
-                <input className={inp} value={newName} onChange={(e) => setNewName(e.target.value)} />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Role</label>
-                <select className={inp} value={newRole} onChange={(e) => setNewRole(e.target.value as 'admin' | 'staff')}>
-                  <option value="staff">Staff — can view & manage orders, products, deliveries</option>
-                  <option value="admin">Admin — full access including settings, staff management</option>
-                </select>
-              </div>
-
-              {error && <p className="text-red-600 text-sm">{error}</p>}
-              <div className="flex justify-end gap-2 pt-1">
-                <button onClick={close} className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50">Cancel</button>
-                <button onClick={handleAddNew} disabled={saving}
-                  className="flex items-center gap-2 px-4 py-2 text-sm bg-brand text-white rounded-lg hover:bg-brand-mid disabled:opacity-60">
-                  <Save className="h-3.5 w-3.5" />{saving ? 'Adding…' : 'Add to Team'}
-                </button>
-              </div>
-            </>
-          )}
-
-          {!lookupResult && (
-            <div className="flex justify-end">
-              <button onClick={close} className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50">Cancel</button>
-            </div>
-          )}
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Email *</label>
+            <input className={inp} type="email" value={newForm.email} onChange={(e) => setNewForm((f) => ({ ...f, email: e.target.value }))} placeholder="email@example.com" />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Role</label>
+            <select className={inp} value={newForm.role} onChange={(e) => setNewForm((f) => ({ ...f, role: e.target.value as 'admin' | 'staff' }))}>
+              <option value="staff">Staff — can view & manage orders, products, deliveries</option>
+              <option value="admin">Admin — full access including settings, staff management</option>
+            </select>
+          </div>
+          {error && <p className="text-red-600 text-sm">{error}</p>}
+          <div className="flex justify-end gap-2 pt-1">
+            <button onClick={close} className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50">Cancel</button>
+            <button onClick={handleAddNew} disabled={saving}
+              className="flex items-center gap-2 px-4 py-2 text-sm bg-brand text-white rounded-lg hover:bg-brand-mid disabled:opacity-60">
+              <Save className="h-3.5 w-3.5" />{saving ? 'Adding…' : 'Add to Team'}
+            </button>
+          </div>
         </Modal>
       )}
 
