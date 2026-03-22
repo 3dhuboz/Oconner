@@ -373,12 +373,39 @@ app.post('/:id/invoice', async (c) => {
   };
 
   try {
-    // Create Square invoice
+    // Step 1: Create a Square Order with line items
+    const squareLineItems = items.map((i) => ({
+      name: i.productName ?? 'Item',
+      quantity: String(i.quantity ?? 1),
+      base_price_money: {
+        amount: Math.round((i.price ?? 0) / (i.quantity || 1)),
+        currency: 'AUD',
+      },
+    }));
+
+    const orderResult = await squareFetch('/orders', {
+      idempotency_key: crypto.randomUUID(),
+      order: {
+        location_id: locationId,
+        line_items: squareLineItems,
+      },
+    });
+
+    if (orderResult.errors) {
+      return c.json({ error: 'Failed to create Square order', details: orderResult.errors }, 400);
+    }
+
+    const squareOrderId = (orderResult as any).order?.id;
+    if (!squareOrderId) {
+      return c.json({ error: 'Square order created but no ID returned' }, 500);
+    }
+
+    // Step 2: Create invoice referencing the Square order
     const invoiceResult = await squareFetch('/invoices', {
       idempotency_key: crypto.randomUUID(),
       invoice: {
         location_id: locationId,
-        order_id: undefined, // We don't create a Square order, just invoice line items
+        order_id: squareOrderId,
         primary_recipient: {
           given_name: order.customerName?.split(' ')[0] ?? '',
           family_name: order.customerName?.split(' ').slice(1).join(' ') ?? '',
@@ -392,7 +419,6 @@ app.post('/:id/invoice', async (c) => {
         }],
         delivery_method: 'EMAIL',
         title: `O'Connor Agriculture — Order #${orderId.slice(0, 8).toUpperCase()}`,
-        description: items.map((i) => `${i.productName} x${i.quantity ?? 1}`).join(', '),
         accepted_payment_methods: {
           card: true,
           square_gift_card: false,
@@ -403,47 +429,24 @@ app.post('/:id/invoice', async (c) => {
     });
 
     if (invoiceResult.errors) {
-      // Fallback: use payment link instead of invoice
-      const linkResult = await squareFetch('/online-checkout/payment-links', {
-        idempotency_key: crypto.randomUUID(),
-        quick_pay: {
-          name: `Order #${orderId.slice(0, 8).toUpperCase()} — ${order.customerName}`,
-          price_money: { amount: order.total, currency: 'AUD' },
-          location_id: locationId,
-        },
-        checkout_options: {
-          redirect_url: `${c.env.STOREFRONT_URL}/track/${orderId}`,
-        },
-        pre_populated_data: {
-          buyer_email: order.customerEmail,
-        },
-      });
-
-      if (linkResult.errors) {
-        return c.json({ error: 'Failed to create payment link', details: linkResult.errors }, 400);
-      }
-
-      const paymentUrl = (linkResult as any).payment_link?.url ?? (linkResult as any).related_resources?.checkout?.checkout_page_url;
-
-      // Update order with payment link
-      await db.update(orders).set({
-        internalNotes: `${order.internalNotes ?? ''}\nSquare payment link: ${paymentUrl}`.trim(),
-        updatedAt: Date.now(),
-      }).where(eq(orders.id, orderId));
-
-      return c.json({ ok: true, method: 'payment_link', url: paymentUrl });
+      return c.json({ error: 'Failed to create invoice', details: invoiceResult.errors }, 400);
     }
 
-    // Publish the invoice to send it
+    // Step 3: Publish the invoice (this emails it to the customer)
     const invoice = (invoiceResult as any).invoice;
     if (invoice?.id) {
-      await squareFetch(`/invoices/${invoice.id}/publish`, {
+      const publishResult = await squareFetch(`/invoices/${invoice.id}/publish`, {
         idempotency_key: crypto.randomUUID(),
         version: invoice.version ?? 0,
       });
+
+      if (publishResult.errors) {
+        return c.json({ error: 'Invoice created but failed to send', details: publishResult.errors }, 400);
+      }
     }
 
     await db.update(orders).set({
+      paymentStatus: 'invoice_sent',
       internalNotes: `${order.internalNotes ?? ''}\nSquare invoice sent: ${invoice?.id ?? 'unknown'}`.trim(),
       updatedAt: Date.now(),
     }).where(eq(orders.id, orderId));
