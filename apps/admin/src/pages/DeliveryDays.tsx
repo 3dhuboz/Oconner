@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '@butcher/shared';
 import type { DeliveryDay } from '@butcher/shared';
-import { Plus, X, CalendarDays, ClipboardList, RefreshCw, AlertTriangle, Pencil, MapPin, Save } from 'lucide-react';
+import { Plus, X, CalendarDays, ClipboardList, RefreshCw, AlertTriangle, Pencil, MapPin, Save, Trash2 } from 'lucide-react';
 import { toast } from '../lib/toast';
 import { useNavigate } from 'react-router-dom';
 
@@ -17,6 +17,7 @@ export default function DeliveryDaysPage() {
   const [editing, setEditing] = useState<DeliveryDay | null>(null);
   const [editForm, setEditForm] = useState({ maxOrders: 0, notes: '', deliveryWindowStart: '09:00', zones: '' });
   const [editSaving, setEditSaving] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
   useEffect(() => {
     api.deliveryDays.list()
@@ -96,6 +97,17 @@ export default function DeliveryDaysPage() {
       setDays((prev) => prev.map((d) => d.id === day.id ? { ...d, active: !d.active } : d));
     } catch {
       toast('Failed to update delivery day', 'error');
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await api.deliveryDays.delete(id);
+      setDays((prev) => prev.filter((d) => d.id !== id));
+      setDeleteConfirm(null);
+      toast('Delivery day deleted');
+    } catch {
+      toast('Failed to delete delivery day', 'error');
     }
   };
 
@@ -188,6 +200,9 @@ export default function DeliveryDaysPage() {
                   </div>
                   <button onClick={() => openEdit(day)} className="text-gray-400 hover:text-brand transition-colors" title="Edit">
                     <Pencil className="h-4 w-4" />
+                  </button>
+                  <button onClick={() => setDeleteConfirm(day.id!)} className="text-gray-400 hover:text-red-500 transition-colors" title="Delete">
+                    <Trash2 className="h-4 w-4" />
                   </button>
                   <button
                     onClick={() => navigate(`/delivery-days/${day.id}`)}
@@ -346,6 +361,28 @@ export default function DeliveryDaysPage() {
               <button onClick={() => setShowForm(false)} className="flex-1 border py-2 rounded-lg text-sm">Cancel</button>
               <button onClick={handleCreate} disabled={saving || !form.date} className="flex-1 bg-brand text-white py-2 rounded-lg text-sm font-medium disabled:opacity-50">
                 {saving ? 'Saving…' : 'Create Day'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ── Delete Confirmation Modal ── */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setDeleteConfirm(null)}>
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="h-10 w-10 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
+                <Trash2 className="h-5 w-5 text-red-600" />
+              </div>
+              <div>
+                <h2 className="font-semibold text-gray-900">Delete Delivery Day?</h2>
+                <p className="text-sm text-gray-500">This will remove the day and any associated orders will remain but won't appear on future manifests.</p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setDeleteConfirm(null)} className="flex-1 border py-2 rounded-lg text-sm">Cancel</button>
+              <button onClick={() => handleDelete(deleteConfirm)} className="flex-1 bg-red-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-red-700">
+                Delete
               </button>
             </div>
           </div>
