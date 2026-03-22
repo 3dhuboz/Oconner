@@ -10,6 +10,7 @@ import type { DeliveryDay } from '@butcher/shared';
 import { useCart } from '@/lib/cart';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
+import AddressAutocomplete from '@/components/AddressAutocomplete';
 
 const FREE_DELIVERY_THRESHOLD = 10000; // $100 in cents
 const DELIVERY_FEE_AMOUNT = 1000;      // $10 in cents
@@ -123,14 +124,10 @@ export default function CheckoutPage() {
             ) : (
               <section>
                 <h2 className="text-lg font-semibold mb-4">Delivery Address</h2>
-                <div className="space-y-3">
-                  <input required placeholder="Street Address" value={form.line1} onChange={f('line1')} className="w-full border rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand text-sm" />
-                  <input placeholder="Apt / Unit (optional)" value={form.line2} onChange={f('line2')} className="w-full border rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand text-sm" />
-                  <div className="grid grid-cols-2 gap-3">
-                    <input required placeholder="Suburb" value={form.suburb} onChange={f('suburb')} className="w-full border rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand text-sm" />
-                    <input required placeholder="Postcode" value={form.postcode} onChange={f('postcode')} className="w-full border rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand text-sm" />
-                  </div>
-                </div>
+                <AddressAutocomplete
+                  value={{ line1: form.line1, line2: form.line2, suburb: form.suburb, state: form.state, postcode: form.postcode }}
+                  onChange={(addr) => setForm((prev) => ({ ...prev, line1: addr.line1, line2: addr.line2 ?? '', suburb: addr.suburb, state: addr.state, postcode: addr.postcode }))}
+                />
               </section>
             )}
 
