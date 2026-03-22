@@ -71,6 +71,10 @@ export const api = {
     sendReminders: (id: string) => api.post(`/api/delivery-days/${id}/send-reminders`, {}),
     generateStops: (id: string) => api.post<{ created: number; total: number }>(`/api/delivery-days/${id}/generate-stops`, {}),
     geocodeStops: (id: string) => api.post<{ updated: number; total: number }>(`/api/delivery-days/${id}/geocode-stops`, {}),
+    getStock: (id: string) => api.get(`/api/delivery-days/${id}/stock`),
+    setStock: (id: string, allocations: { productId: string; productName: string; allocated: number }[]) =>
+      api.put(`/api/delivery-days/${id}/stock`, { allocations }),
+    copyStock: (id: string, sourceId: string) => api.post(`/api/delivery-days/${id}/stock/copy-from/${sourceId}`, {}),
   },
 
   stops: {

@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/d1';
 import { eq, desc, inArray, gte } from 'drizzle-orm';
-import { orders, customers, deliveryDays, stops, stockMovements, notifications, auditLog } from '@butcher/db';
+import { orders, customers, deliveryDays, stops, stockMovements, notifications, auditLog, deliveryDayStock } from '@butcher/db';
 import type { Env, AuthUser } from '../types';
 import { sendEmail, buildOrderEmail, getSubject } from '../lib/email';
 import { deductStock } from '../lib/stock';
@@ -80,12 +80,38 @@ app.post('/', async (c) => {
     }
   }
 
+  // ── Server-side pricing: recalculate delivery fee & GST ──
+  const subtotal = body.subtotal ?? 0;
+  const deliveryFee = (body.fulfillmentType === 'pickup') ? 0 : (subtotal >= 10000 ? 0 : 1000); // free over $100, $10 under
+  const gst = 0; // no GST on goods
+  const total = subtotal + deliveryFee;
+
+  // ── Day-specific stock validation ──
+  const dayAllocations = await db.select().from(deliveryDayStock)
+    .where(eq(deliveryDayStock.deliveryDayId, body.deliveryDayId));
+
+  if (dayAllocations.length > 0) {
+    // Check each item against day allocation
+    for (const item of (body.items as any[])) {
+      const alloc = dayAllocations.find((a) => a.productId === item.productId);
+      if (alloc) {
+        const qty = item.weight ? item.weight / 1000 : (item.weightKg ?? item.quantity ?? 1);
+        if (alloc.sold + qty > alloc.allocated) {
+          return c.json({ error: `${item.productName} is sold out for this delivery day` }, 400);
+        }
+      }
+    }
+  }
+
   await db.insert(orders).values({
     ...body,
     id: orderId,
     customerId,
     items: JSON.stringify(body.items),
     deliveryAddress: JSON.stringify(body.deliveryAddress),
+    deliveryFee,
+    gst,
+    total,
     createdAt: now,
     updatedAt: now,
   });
@@ -93,10 +119,23 @@ app.post('/', async (c) => {
   // Deduct stock for each item in the order
   await deductStock(db, body.items as any[], orderId, now);
 
+  // ── Update day-specific stock sold counts ──
+  if (dayAllocations.length > 0) {
+    for (const item of (body.items as any[])) {
+      const alloc = dayAllocations.find((a) => a.productId === item.productId);
+      if (alloc) {
+        const qty = item.weight ? item.weight / 1000 : (item.weightKg ?? item.quantity ?? 1);
+        await db.update(deliveryDayStock)
+          .set({ sold: alloc.sold + qty })
+          .where(eq(deliveryDayStock.id, alloc.id));
+      }
+    }
+  }
+
   const [day] = await db.select().from(deliveryDays).where(eq(deliveryDays.id, body.deliveryDayId)).limit(1);
   if (day) await db.update(deliveryDays).set({ orderCount: day.orderCount + 1 }).where(eq(deliveryDays.id, day.id));
   const [cust] = await db.select().from(customers).where(eq(customers.id, customerId)).limit(1);
-  if (cust) await db.update(customers).set({ orderCount: cust.orderCount + 1, totalSpent: cust.totalSpent + (body.total ?? 0), updatedAt: now }).where(eq(customers.id, customerId));
+  if (cust) await db.update(customers).set({ orderCount: cust.orderCount + 1, totalSpent: cust.totalSpent + total, updatedAt: now }).where(eq(customers.id, customerId));
 
   return c.json({ id: orderId }, 201);
 });

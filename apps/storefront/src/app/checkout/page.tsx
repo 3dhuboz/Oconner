@@ -11,8 +11,8 @@ import { useCart } from '@/lib/cart';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 
-const DELIVERY_FEE = 1500;
-const GST_RATE = 0.1;
+const FREE_DELIVERY_THRESHOLD = 10000; // $100 in cents
+const DELIVERY_FEE_AMOUNT = 1000;      // $10 in cents
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -30,9 +30,9 @@ export default function CheckoutPage() {
 
   const selectedDay = deliveryDays.find((d) => d.id === selectedDayId);
   const isPickup = (selectedDay as any)?.type === 'pickup';
-  const deliveryFee = isPickup ? 0 : DELIVERY_FEE;
   const subtotal = total();
-  const gst = Math.round(subtotal * GST_RATE);
+  const deliveryFee = isPickup ? 0 : (subtotal >= FREE_DELIVERY_THRESHOLD ? 0 : DELIVERY_FEE_AMOUNT);
+  const gst = 0; // no GST on goods
   const grandTotal = subtotal + deliveryFee;
 
   useEffect(() => {
@@ -171,8 +171,15 @@ export default function CheckoutPage() {
               <hr className="mb-3" />
               <div className="space-y-1.5 text-sm">
                 <div className="flex justify-between"><span>Subtotal</span><span>{formatCurrency(subtotal)}</span></div>
-                <div className="flex justify-between"><span>{isPickup ? 'Pickup' : 'Delivery'}</span><span>{isPickup ? 'FREE' : formatCurrency(DELIVERY_FEE)}</span></div>
-                <div className="flex justify-between text-gray-500"><span>GST (inc.)</span><span>{formatCurrency(gst)}</span></div>
+                <div className="flex justify-between">
+                  <span>{isPickup ? 'Pickup' : 'Delivery'}</span>
+                  <span className={deliveryFee === 0 ? 'text-green-600 font-medium' : ''}>
+                    {deliveryFee === 0 ? 'FREE' : formatCurrency(deliveryFee)}
+                  </span>
+                </div>
+                {!isPickup && subtotal < FREE_DELIVERY_THRESHOLD && (
+                  <p className="text-xs text-green-600">Spend {formatCurrency(FREE_DELIVERY_THRESHOLD - subtotal)} more for free delivery!</p>
+                )}
                 <hr className="my-2" />
                 <div className="flex justify-between font-bold text-base"><span>Total</span><span className="text-brand">{formatCurrency(grandTotal)}</span></div>
               </div>
