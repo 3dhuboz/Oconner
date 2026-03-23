@@ -122,14 +122,24 @@ app.post('/', async (c) => {
   }
 
   await db.insert(orders).values({
-    ...body,
     id: orderId,
     customerId,
+    customerEmail: body.customerEmail,
+    customerName: body.customerName ?? '',
+    customerPhone: body.customerPhone ?? '',
     items: JSON.stringify(body.items),
-    deliveryAddress: JSON.stringify(body.deliveryAddress),
+    subtotal: body.subtotal ?? 0,
     deliveryFee,
     gst,
     total,
+    status: body.status ?? 'confirmed',
+    paymentStatus: body.paymentStatus ?? 'pending_payment',
+    deliveryDayId: body.deliveryDayId,
+    deliveryAddress: JSON.stringify(body.deliveryAddress),
+    internalNotes: body.internalNotes ?? '',
+    fulfillmentType: (body as any).fulfillmentType ?? 'delivery',
+    promoCode: (body as any).promoId ?? null,
+    promoDiscount: discount || null,
     createdAt: now,
     updatedAt: now,
   });
