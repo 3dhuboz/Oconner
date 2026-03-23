@@ -99,7 +99,7 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
       setBillingRate(job.hourlyRate || 120);
       setMiscCharges(job.miscCharges || []);
     }
-  }, [job.id]);
+  }, [job?.id]);
 
   if (!job) {
     return <div>Job not found</div>;

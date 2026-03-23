@@ -10,15 +10,16 @@ ENVIRONMENT = "production"
 binding = "DB"
 database_name = "wirez-r-us-db"
 database_id = "4e54dda5-f1e0-417e-b0ce-145fddadc15c"
+migrations_dir = "worker/migrations"
 
 # R2 Bucket for photos/files
 [[r2_buckets]]
 binding = "STORAGE"
 bucket_name = "wirez-r-us-uploads"
 
-# Cron triggers (replaces Vercel cron)
-[triggers]
-crons = ["*/5 * * * *"]  # email polling every 5 minutes
+# Email routing — send capability (for forwarding if needed)
+[[send_email]]
+name = "EMAIL"
 
 # Environment-specific secrets (set via `wrangler secret put`)
 # CLERK_SECRET_KEY
@@ -35,8 +36,4 @@ crons = ["*/5 * * * *"]  # email polling every 5 minutes
 # XERO_CLIENT_SECRET
 # OPENROUTER_API_KEY
 # RESEND_API_KEY
-# GMAIL_ADDRESS
-# GMAIL_CLIENT_ID
-# GMAIL_CLIENT_SECRET
-# GMAIL_REFRESH_TOKEN
 # GOOGLE_MAPS_API_KEY

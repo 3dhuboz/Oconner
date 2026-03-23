@@ -263,9 +263,9 @@ function AppContent() {
 
   return (
     <Routes>
-      <Route path="/login" element={<Login />} />
-      <Route path="/dev/login" element={<DevLogin />} />
-      <Route path="/purchase" element={<Purchase />} />
+      <Route path="/login/*" element={<Login />} />
+      <Route path="/dev/login/*" element={<DevLogin />} />
+      <Route path="/purchase/*" element={<Purchase />} />
       <Route path="/promo" element={<PromoFlyer />} />
 
       {/* Dev Only Route */}
