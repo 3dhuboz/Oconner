@@ -23,6 +23,12 @@ interface Config {
   cta: { headline: string; subtext: string; note: string; buttonText: string };
   contact: { email: string; social: string; location: string };
 }
+interface RewardsConfig {
+  enabled: boolean;
+  stampsRequired: number;
+  prize: string;
+  programName: string;
+}
 
 const DEFAULTS: Config = {
   hero: {
@@ -46,12 +52,16 @@ const DEFAULTS: Config = {
 
 export default function HomePage() {
   const [cfg, setCfg] = useState<Config>(DEFAULTS);
+  const [rewards, setRewards] = useState<RewardsConfig | null>(null);
   const [staffRole, setStaffRole] = useState<'admin' | 'driver' | null>(null);
   const { getToken, isSignedIn } = useAuth();
 
   useEffect(() => {
     api.config.get('storefront')
       .then((data) => { if (data) setCfg({ ...DEFAULTS, ...(data as Partial<Config>) }); })
+      .catch(() => {});
+    api.config.get('rewards')
+      .then((data) => { const r = (data as any)?.value ?? data; if (r?.enabled) setRewards(r as RewardsConfig); })
       .catch(() => {});
   }, []);
 
@@ -133,6 +143,24 @@ export default function HomePage() {
             </div>
           </div>
         </section>
+
+        {rewards && (
+          <section className="py-12 px-4 bg-brand text-white">
+            <div className="max-w-4xl mx-auto text-center">
+              <p className="text-brand-light text-sm font-semibold tracking-[0.15em] uppercase mb-2">Loyalty Program</p>
+              <h2 className="text-3xl md:text-4xl font-black uppercase tracking-wide mb-3" style={{ fontFamily: 'var(--font-heading)' }}>
+                {rewards.programName}
+              </h2>
+              <p className="text-lg text-brand-light mb-2">
+                Place <span className="text-white font-bold">{rewards.stampsRequired} orders</span> and earn a <span className="text-white font-bold">{rewards.prize}</span>
+              </p>
+              <p className="text-brand-light/70 text-sm mb-6">Every order gets you one step closer to your reward.</p>
+              <Link href="/shop" className="bg-white text-brand font-bold px-8 py-3 rounded-lg hover:bg-brand-light transition-colors inline-block uppercase tracking-wide">
+                Start Earning
+              </Link>
+            </div>
+          </section>
+        )}
 
         <FacebookReels />
 
