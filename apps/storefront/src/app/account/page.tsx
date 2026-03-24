@@ -10,7 +10,7 @@ import type { Order } from '@butcher/shared';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import Link from 'next/link';
-import { MapPin, Phone, Package, RefreshCw, ChevronDown, ChevronUp, Pencil, Check, X, Bell, BellOff } from 'lucide-react';
+import { MapPin, Phone, Package, RefreshCw, ChevronDown, ChevronUp, Pencil, Check, X, Bell, BellOff, Gift } from 'lucide-react';
 
 interface CustomerProfile {
   id: string;
@@ -39,6 +39,13 @@ interface Subscription {
   createdAt: number;
 }
 
+interface RewardsConfig {
+  enabled: boolean;
+  stampsRequired: number;
+  prize: string;
+  programName: string;
+}
+
 const STATUS_COLOURS: Record<string, string> = {
   pending_payment: 'bg-yellow-100 text-yellow-700',
   confirmed: 'bg-blue-100 text-blue-700',
@@ -61,6 +68,7 @@ export default function AccountPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [customer, setCustomer] = useState<CustomerProfile | null>(null);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
+  const [rewards, setRewards] = useState<RewardsConfig | null>(null);
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
   const [editingAddress, setEditingAddress] = useState(false);
   const [editingPhone, setEditingPhone] = useState(false);
@@ -96,6 +104,9 @@ export default function AccountPage() {
       }
     }).catch(() => {});
     api.subscriptions.mine().then((s) => setSubscriptions(s as Subscription[])).catch(() => {});
+    api.config.get('rewards')
+      .then((data) => { const r = (data as any)?.value ?? data; if (r?.enabled) setRewards(r as RewardsConfig); })
+      .catch(() => {});
   }, [user]);
 
   const savePhone = async () => {
@@ -269,6 +280,53 @@ export default function AccountPage() {
             </div>
           </div>
         </div>
+
+        {/* ── Rewards stamp tracker ── */}
+        {rewards && customer && (
+          (() => {
+            const stampsRequired = rewards.stampsRequired || 10;
+            const currentStamps = (customer.orderCount ?? 0) % stampsRequired;
+            const completedCycles = Math.floor((customer.orderCount ?? 0) / stampsRequired);
+            return (
+              <div className="bg-white rounded-2xl border p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="font-semibold text-gray-900 flex items-center gap-2">
+                    <Gift className="h-4 w-4 text-brand" /> {rewards.programName}
+                  </h2>
+                  {completedCycles > 0 && (
+                    <span className="text-xs font-semibold px-3 py-1 rounded-full bg-green-100 text-green-700">
+                      {completedCycles} reward{completedCycles !== 1 ? 's' : ''} earned!
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm text-gray-500 mb-4">
+                  Collect <span className="font-medium text-gray-700">{stampsRequired} stamps</span> to earn a <span className="font-medium text-gray-700">{rewards.prize}</span>
+                </p>
+                <div className="flex items-center gap-1.5 mb-3">
+                  {Array.from({ length: stampsRequired }).map((_, i) => (
+                    <div
+                      key={i}
+                      className={`h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
+                        i < currentStamps
+                          ? 'bg-brand text-white'
+                          : 'bg-gray-100 text-gray-300 border border-gray-200'
+                      }`}
+                    >
+                      {i < currentStamps ? '✓' : i + 1}
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-400">
+                  {currentStamps === 0 && completedCycles === 0
+                    ? 'Place your first order to start earning stamps!'
+                    : currentStamps === 0
+                    ? `You just claimed a reward! Start your next ${stampsRequired} stamps.`
+                    : `${stampsRequired - currentStamps} more order${stampsRequired - currentStamps !== 1 ? 's' : ''} until your next reward.`}
+                </p>
+              </div>
+            );
+          })()
+        )}
 
         {/* ── Delivery address ── */}
         <div className="bg-white rounded-2xl border p-6">
