@@ -367,7 +367,7 @@ app.post('/:id/invoice', async (c) => {
   const [order] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
   if (!order) return c.json({ error: 'Order not found' }, 404);
 
-  const items = JSON.parse(order.items) as Array<{ productName: string; quantity?: number; lineTotal: number }>;
+  const items = JSON.parse(order.items) as Array<{ productName: string; quantity?: number; weightKg?: number; lineTotal: number }>;
 
   const squareFetch = async (path: string, body: unknown) => {
     const res = await fetch(`${SQUARE_API}${path}`, {
@@ -384,14 +384,19 @@ app.post('/:id/invoice', async (c) => {
 
   try {
     // Step 1: Create a Square Order with line items
-    const squareLineItems = items.map((i) => ({
-      name: i.productName ?? 'Item',
-      quantity: String(i.quantity ?? 1),
-      base_price_money: {
-        amount: Math.round((i.price ?? 0) / (i.quantity || 1)),
-        currency: 'AUD',
-      },
-    }));
+    // Each line item uses quantity 1 with lineTotal as the price,
+    // since items may be priced by weight (lineTotal already calculated)
+    const squareLineItems = items.map((i) => {
+      const qty = i.quantity ?? 1;
+      return {
+        name: i.productName ?? 'Item',
+        quantity: String(qty),
+        base_price_money: {
+          amount: Math.round(i.lineTotal / qty),
+          currency: 'AUD',
+        },
+      };
+    });
 
     const orderResult = await squareFetch('/orders', {
       idempotency_key: crypto.randomUUID(),

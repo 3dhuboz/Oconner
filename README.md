@@ -9,26 +9,24 @@ Full-stack platform for a premium butcher's online ordering and delivery busines
 ├── apps/
 │   ├── storefront/     # Next.js 14 — customer-facing shop
 │   ├── admin/          # React + Vite — staff command centre
+│   ├── api/            # Hono API on Cloudflare Workers
 │   └── driver/         # React PWA — driver field app
 ├── packages/
-│   ├── shared/         # TypeScript types, Firestore helpers, constants
+│   ├── db/             # Drizzle ORM schema & migrations (SQLite / Cloudflare D1)
+│   ├── shared/         # TypeScript types, constants
 │   └── ui/             # Radix UI + Tailwind component library
-├── functions/          # Firebase Cloud Functions (Node 20)
-├── workers/
-│   ├── gps-relay/      # Cloudflare Worker — driver GPS → Firestore
-│   ├── payment-handler/# Cloudflare Worker — Stripe webhook processor
-│   ├── route-proxy/    # Cloudflare Worker — Google Maps route optimiser
-│   └── pdf-generator/  # Cloudflare Worker — packing list HTML generator
-├── firestore.rules
-├── firestore.indexes.json
-└── firebase.json
+└── workers/
+    ├── gps-relay/      # Cloudflare Worker — driver GPS relay
+    ├── image-upload/   # Cloudflare Worker — R2 image uploads
+    ├── payment-handler/# Cloudflare Worker — Stripe webhook processor
+    ├── route-proxy/    # Cloudflare Worker — Google Maps route optimiser
+    └── pdf-generator/  # Cloudflare Worker — packing list HTML generator
 ```
 
 ## Prerequisites
 
 - Node.js ≥ 20
 - pnpm ≥ 9
-- Firebase CLI (`npm i -g firebase-tools`)
 - Wrangler CLI (`npm i -g wrangler`)
 
 ## Setup
@@ -54,9 +52,7 @@ pnpm dev
 pnpm --filter storefront dev    # http://localhost:3000
 pnpm --filter admin dev         # http://localhost:5173
 pnpm --filter driver dev        # http://localhost:5174
-
-# Firebase emulators (auth, firestore, functions)
-firebase emulators:start
+pnpm --filter @butcher/api dev  # Cloudflare Workers on 8787
 ```
 
 ## Apps
@@ -64,34 +60,18 @@ firebase emulators:start
 ### Storefront (`apps/storefront`)
 - **Framework**: Next.js 14 (App Router)
 - **Features**: Product catalogue, cart, checkout, order tracking, customer account
-- **Env vars**: `NEXT_PUBLIC_FIREBASE_*`, `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`
 
 ### Admin (`apps/admin`)
 - **Framework**: React + Vite
 - **Features**: Dashboard, orders management, product CRUD, delivery day scheduling, stock tracking, driver map, audit log
-- **Env vars**: `VITE_FIREBASE_*`, `VITE_PDF_GENERATOR_URL`, `VITE_GOOGLE_MAPS_API_KEY`
 
 ### Driver PWA (`apps/driver`)
 - **Framework**: React + Vite + vite-plugin-pwa
 - **Features**: Daily stops list, stop navigation, delivery confirmation, GPS tracking (30s pings to Cloudflare Worker)
-- **Env vars**: `VITE_FIREBASE_*`, `VITE_GPS_RELAY_URL`
 
-## Firebase Cloud Functions
-
-| Function | Trigger | Purpose |
-|---|---|---|
-| `onOrderStatusChange` | Firestore write | Send email notifications via SendGrid |
-| `sendDayBeforeReminders` | Scheduled (daily 8am) | Reminder emails for next-day deliveries |
-| `onOrderPacked` | Firestore write | Deduct stock, send low-stock alerts |
-| `onDocumentWritten` | Firestore write | Append to audit log |
-
-```bash
-# Deploy functions
-firebase deploy --only functions
-
-# Deploy Firestore rules & indexes
-firebase deploy --only firestore
-```
+### API (`apps/api`)
+- **Framework**: Hono on Cloudflare Workers
+- **Features**: All business logic — orders, customers, products, stock, delivery, payments (Stripe/Square), email (Resend), web push notifications
 
 ## Cloudflare Workers
 
@@ -101,6 +81,7 @@ pnpm --filter gps-relay deploy
 pnpm --filter payment-handler deploy
 pnpm --filter route-proxy deploy
 pnpm --filter pdf-generator deploy
+pnpm --filter image-upload deploy
 ```
 
 ## Build
@@ -111,4 +92,4 @@ pnpm build
 
 ## Environment Variables Reference
 
-See `.env.example` for all required variables including Firebase, Stripe, SendGrid, Cloudflare, and Google Maps keys.
+See `.env.example` for all required variables including Clerk, Stripe, Resend, Cloudflare, and Google Maps keys.
