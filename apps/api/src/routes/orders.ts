@@ -383,9 +383,36 @@ app.post('/:id/invoice', async (c) => {
   };
 
   try {
-    // Step 1: Create a Square Order with line items
-    // Each line item uses quantity 1 with lineTotal as the price,
-    // since items may be priced by weight (lineTotal already calculated)
+    // Step 1: Find or create a Square customer (required for invoices)
+    const searchResult = await squareFetch('/customers/search', {
+      query: {
+        filter: {
+          email_address: { exact: order.customerEmail },
+        },
+      },
+    });
+
+    let squareCustomerId: string;
+    if (searchResult.customers?.length) {
+      squareCustomerId = searchResult.customers[0].id;
+    } else {
+      const createCustomerResult = await squareFetch('/customers', {
+        idempotency_key: crypto.randomUUID(),
+        given_name: order.customerName?.split(' ')[0] ?? '',
+        family_name: order.customerName?.split(' ').slice(1).join(' ') ?? '',
+        email_address: order.customerEmail,
+        phone_number: order.customerPhone ? `+61${order.customerPhone.replace(/^0/, '')}` : undefined,
+      });
+      if (createCustomerResult.errors) {
+        return c.json({ error: 'Failed to create Square customer', details: createCustomerResult.errors }, 400);
+      }
+      squareCustomerId = createCustomerResult.customer?.id;
+      if (!squareCustomerId) {
+        return c.json({ error: 'Square customer created but no ID returned' }, 500);
+      }
+    }
+
+    // Step 2: Create a Square Order with line items
     const squareLineItems = items.map((i) => {
       const qty = i.quantity ?? 1;
       return {
@@ -402,6 +429,7 @@ app.post('/:id/invoice', async (c) => {
       idempotency_key: crypto.randomUUID(),
       order: {
         location_id: locationId,
+        customer_id: squareCustomerId,
         line_items: squareLineItems,
       },
     });
@@ -410,22 +438,19 @@ app.post('/:id/invoice', async (c) => {
       return c.json({ error: 'Failed to create Square order', details: orderResult.errors }, 400);
     }
 
-    const squareOrderId = (orderResult as any).order?.id;
+    const squareOrderId = orderResult.order?.id;
     if (!squareOrderId) {
       return c.json({ error: 'Square order created but no ID returned' }, 500);
     }
 
-    // Step 2: Create invoice referencing the Square order
+    // Step 3: Create invoice referencing the Square order + customer
     const invoiceResult = await squareFetch('/invoices', {
       idempotency_key: crypto.randomUUID(),
       invoice: {
         location_id: locationId,
         order_id: squareOrderId,
         primary_recipient: {
-          given_name: order.customerName?.split(' ')[0] ?? '',
-          family_name: order.customerName?.split(' ').slice(1).join(' ') ?? '',
-          email_address: order.customerEmail,
-          phone_number: order.customerPhone ? `+61${order.customerPhone.replace(/^0/, '')}` : undefined,
+          customer_id: squareCustomerId,
         },
         payment_requests: [{
           request_type: 'BALANCE',
@@ -447,8 +472,8 @@ app.post('/:id/invoice', async (c) => {
       return c.json({ error: 'Failed to create invoice', details: invoiceResult.errors }, 400);
     }
 
-    // Step 3: Publish the invoice (this emails it to the customer)
-    const invoice = (invoiceResult as any).invoice;
+    // Step 4: Publish the invoice (this emails it to the customer)
+    const invoice = invoiceResult.invoice;
     if (invoice?.id) {
       const publishResult = await squareFetch(`/invoices/${invoice.id}/publish`, {
         idempotency_key: crypto.randomUUID(),
