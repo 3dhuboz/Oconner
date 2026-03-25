@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../utils';
 import { useAuth } from '../context/AuthContext';
-import { apiFetch } from '../services/api';
+import { apiFetch, apiRawFetch } from '../services/api';
 import toast from 'react-hot-toast';
 
 interface JobDetailProps {
@@ -116,15 +116,13 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
       updateJob(job.id, { status: newStatus });
       
       try {
-        const res = await apiFetch('/api/sms/send', {
+        const data = await apiFetch('/sms/send', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             to: electrician.phone,
             message: `Wirez R Us Dispatch: New Job ${job.id} at ${job.propertyAddress}. Scheduled: ${job.scheduledDate ? format(new Date(job.scheduledDate), 'MMM d, h:mm a') : 'TBD'}. Open app: ${window.location.origin}/field/${job.id}`
           })
         });
-        const data = await res.json();
         if (data.simulated) {
           toast.success(`Job dispatched — SMS simulated to ${electrician.name} (${electrician.phone})`);
         } else {
@@ -194,9 +192,8 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
 
     try {
       // Call server-side endpoint to generate Form 9 PDF
-      const response = await apiFetch('/api/form9/generate', {
+      const response = await apiRawFetch('/form9/generate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tenantName: job.tenantName,
           propertyAddress: job.propertyAddress,
@@ -207,17 +204,6 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
           jobType: job.type
         })
       });
-
-      if (!response.ok) {
-        let errorMsg = 'Failed to generate Form 9';
-        try {
-          const error = await response.json();
-          errorMsg = error.error || errorMsg;
-        } catch {
-          errorMsg = `Server returned status ${response.status}`;
-        }
-        throw new Error(errorMsg);
-      }
 
       // Download the PDF
       const blob = await response.blob();
@@ -629,17 +615,10 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
   const handleSyncXero = async () => {
     setIsSyncingXero(true);
     try {
-      const response = await apiFetch('/api/xero/invoice', {
+      const data = await apiFetch('/xero/invoice', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ job })
       });
-      
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to sync with Xero');
-      }
 
       updateJob(job.id, { xeroInvoiceId: data.invoiceNumber || data.invoiceId });
       toast.success(`Xero invoice ${data.invoiceNumber || data.invoiceId} created`);
@@ -693,9 +672,8 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
 
     setGeneratingPaymentLink(true);
     try {
-      const response = await apiFetch('/api/stripe/create-payment-link', {
+      const data = await apiFetch('/stripe/create-payment-link', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           jobId: job.id,
           amount: total,
@@ -717,12 +695,6 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
           ],
         }),
       });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to create payment link');
-      }
 
       updateJob(job.id, {
         paymentLinkUrl: data.paymentLinkUrl,
@@ -917,9 +889,24 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
                   try {
                     const schedDate = new Date(job.scheduledDate!);
                     const endTime = new Date(schedDate.getTime() + 2 * 60 * 60 * 1000);
-                    const res = await apiFetch('/api/notifications/send-tenant', {
+                    // Generate Form 9 (notice of entry) for the tenant
+                    try {
+                      await apiFetch('/form9/generate', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                          tenantName: job.tenantName || '',
+                          propertyAddress: job.propertyAddress || '',
+                          proposedEntryDate: job.scheduledDate,
+                          jobId: job.id,
+                        }),
+                      });
+                    } catch (f9err) {
+                      console.warn('Form 9 generation failed (continuing):', f9err);
+                    }
+
+                    // Send SMS + email notification to tenant
+                    const data = await apiFetch('/notifications/send-tenant', {
                       method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({
                         type: 'schedule_confirmation',
                         tenantPhone: job.tenantPhone || '',
@@ -931,7 +918,6 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
                         jobId: job.id,
                       }),
                     });
-                    const data = await res.json();
                     updateJob(job.id, { status: 'DISPATCHED' as any, tenantNotifiedAt: new Date().toISOString(), tenantNotificationType: 'schedule_confirmation' } as any);
                     toast.success(`Tenant notified${data.sms?.simulated || data.email?.simulated ? ' (simulated)' : ''} — job dispatched`);
                   } catch (err) {
@@ -1996,9 +1982,8 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
                       try {
                         const schedDate = new Date(job.scheduledDate!);
                         const endTime = new Date(schedDate.getTime() + 2 * 60 * 60 * 1000);
-                        const res = await apiFetch('/api/notifications/send-tenant', {
+                        const data = await apiFetch('/notifications/send-tenant', {
                           method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({
                             type: 'schedule_confirmation',
                             tenantPhone: job.tenantPhone || '',
@@ -2010,7 +1995,6 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
                             jobId: job.id,
                           }),
                         });
-                        const data = await res.json();
                         updateJob(job.id, { 
                           status: 'DISPATCHED' as any,
                           tenantNotifiedAt: new Date().toISOString(),
@@ -2047,7 +2031,7 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
                         try {
                           const schedDate = job.scheduledDate ? new Date(job.scheduledDate) : new Date();
                           const endTime = new Date(schedDate.getTime() + 2 * 60 * 60 * 1000);
-                          await apiFetch('/api/notifications/send-tenant', {
+                          await apiFetch('/notifications/send-tenant', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -2091,15 +2075,13 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
                     onClick={async () => {
                       setResendingSms(true);
                       try {
-                        const res = await apiFetch('/api/sms/send', {
+                        const data = await apiFetch('/sms/send', {
                           method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({
                             to: elec.phone,
                             message: `Wirez R Us Reminder: Job ${job.id} at ${job.propertyAddress}. Scheduled: ${job.scheduledDate ? format(new Date(job.scheduledDate), 'MMM d, h:mm a') : 'TBD'}. Open app: ${window.location.origin}/field/${job.id}`
                           })
                         });
-                        const data = await res.json();
                         if (data.simulated) {
                           toast.success(`SMS resent (simulated) to ${elec.name} at ${elec.phone}`);
                         } else {
@@ -2435,7 +2417,7 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
                                   return;
                                 }
                                 try {
-                                  const res = await apiFetch('/api/sms/send', {
+                                  const res = await apiFetch('/sms/send', {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({

@@ -20,6 +20,24 @@ export async function apiFetch(path: string, options: RequestInit = {}) {
   return res.json();
 }
 
+// Raw fetch with auth (for non-JSON responses like PDF blobs)
+export async function apiRawFetch(path: string, options: RequestInit = {}): Promise<Response> {
+  const token = await getAuthToken();
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...options.headers,
+    },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(err.error || res.statusText);
+  }
+  return res;
+}
+
 // Token getter — set by AuthContext when Clerk initializes
 let _getToken: (() => Promise<string | null>) | null = null;
 export function setAuthTokenGetter(fn: () => Promise<string | null>) {

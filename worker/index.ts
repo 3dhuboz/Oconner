@@ -2125,14 +2125,22 @@ app.post('/api/notifications/send-tenant', async (c) => {
 
       if (sid && token && from) {
         try {
+          // Normalize AU phone: 04xx → +614xx
+          let toPhone = tenantPhone.replace(/\s+/g, '');
+          if (toPhone.startsWith('0')) toPhone = '+61' + toPhone.slice(1);
+          if (!toPhone.startsWith('+')) toPhone = '+' + toPhone;
+
           const twilioRes = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
             method: 'POST',
             headers: {
               'Authorization': 'Basic ' + btoa(`${sid}:${token}`),
               'Content-Type': 'application/x-www-form-urlencoded',
             },
-            body: new URLSearchParams({ To: tenantPhone, From: from, Body: content.smsBody }),
+            body: new URLSearchParams({ To: toPhone, From: from, Body: content.smsBody }),
           });
+          if (!twilioRes.ok) {
+            console.error('[Notification SMS] Twilio error:', twilioRes.status, await twilioRes.text());
+          }
           results.sms = { sent: twilioRes.ok, simulated: false };
         } catch (smsErr: any) {
           console.error('[Notification SMS] Error:', smsErr.message);
@@ -2155,7 +2163,7 @@ app.post('/api/notifications/send-tenant', async (c) => {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              from: 'Wirez R Us <jobs@wirezrus.com.au>',
+              from: c.env.RESEND_FROM_EMAIL || 'Wirez R Us <onboarding@resend.dev>',
               to: tenantEmail,
               subject: content.emailSubject,
               html: content.emailHtml,

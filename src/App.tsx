@@ -75,7 +75,8 @@ function AppContent() {
 
     async function fetchJobs() {
       try {
-        const jobsData = await jobsApi.list();
+        const raw = await jobsApi.list();
+        const jobsData: Job[] = Array.isArray(raw) ? raw.filter((j: any) => j && j.id) : [];
         setJobs(jobsData);
         offlineJobs.putAll(jobsData);
 
