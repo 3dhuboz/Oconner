@@ -1,0 +1,161 @@
+.myapps-page {
+  min-height: calc(100vh - 64px);
+}
+
+.myapps-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.myapps-header h1 { font-size: 1.5rem; font-weight: 800; }
+
+.myapps-empty {
+  text-align: center;
+  padding: 5rem 1rem;
+}
+
+.myapps-empty h2 { font-size: 1.5rem; font-weight: 700; margin-bottom: 0.5rem; color: #f3f4f6; }
+.myapps-empty p { color: #9ca3af; }
+
+.myapps-section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 1.25rem;
+}
+
+.myapps-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  gap: 1.25rem;
+}
+
+.myapp-card {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 14px;
+  padding: 1.5rem;
+  transition: all 0.2s;
+}
+
+.myapp-card:hover {
+  box-shadow: 0 8px 30px rgba(139,92,246,0.1);
+  border-color: rgba(139,92,246,0.2);
+}
+
+.myapp-card-inactive {
+  opacity: 0.6;
+}
+
+.myapp-card-top {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.myapp-card-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.06);
+  color: #00d4ff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.myapp-card-top h3 {
+  font-size: 1.0625rem;
+  font-weight: 700;
+  color: #f3f4f6;
+}
+
+.myapp-original-name {
+  display: block;
+  font-size: 0.6875rem;
+  color: #6b7280;
+  font-weight: 400;
+}
+
+.myapp-plan-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  padding: 0.25rem 0.625rem;
+  border-radius: 9999px;
+  white-space: nowrap;
+}
+
+.myapp-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+  padding: 0.75rem;
+  background: rgba(255,255,255,0.03);
+  border-radius: 10px;
+}
+
+.myapp-stat {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.myapp-stat svg { color: #9ca3af; flex-shrink: 0; }
+
+.myapp-stat strong {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #f3f4f6;
+}
+
+.myapp-stat span {
+  display: block;
+  font-size: 0.625rem;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.myapp-branding-preview {
+  margin-bottom: 1.25rem;
+}
+
+.myapp-brand-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+}
+
+.myapp-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+
+.myapp-status-badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+@media (max-width: 640px) {
+  .myapps-grid { grid-template-columns: 1fr; }
+  .myapp-stats { grid-template-columns: 1fr; }
+}

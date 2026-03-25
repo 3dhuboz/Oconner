@@ -1,0 +1,54 @@
+.legal-page .page-hero {
+  background: radial-gradient(ellipse at 50% 50%, rgba(139,92,246,0.12) 0%, transparent 60%), #0a0a1a;
+  color: white;
+  padding: 4rem 0;
+  text-align: center;
+}
+
+.legal-content {
+  padding: 3rem 1.5rem;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.legal-content h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #f3f4f6;
+  margin-top: 2rem;
+  margin-bottom: 0.75rem;
+}
+
+.legal-content h2:first-of-type {
+  margin-top: 0;
+}
+
+.legal-content p {
+  font-size: 0.9375rem;
+  color: #9ca3af;
+  line-height: 1.8;
+  margin-bottom: 0.75rem;
+}
+
+.legal-content ul {
+  margin: 0.5rem 0 1rem 1.25rem;
+  color: #9ca3af;
+}
+
+.legal-content li {
+  font-size: 0.9375rem;
+  line-height: 1.8;
+  margin-bottom: 0.375rem;
+}
+
+.legal-content li strong {
+  color: #d1d5db;
+}
+
+.legal-content a {
+  color: #00d4ff;
+}
+
+.legal-content a:hover {
+  text-decoration: underline;
+}
