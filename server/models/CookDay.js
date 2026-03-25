@@ -18,6 +18,23 @@ const cookDaySchema = new mongoose.Schema({
   notes: { type: String, default: '' },
   isRecurring: { type: Boolean, default: false },
   recurringDay: { type: Number, min: 0, max: 6 }, // 0=Sun, 6=Sat
+  // Street Meatz additions
+  dayOfWeek: { type: Number, min: 0, max: 6 },
+  frozen: { type: Boolean, default: false },
+  deliveryWindowStart: { type: String, default: '' },
+  deliveryWindowEnd: { type: String, default: '' },
+  driverName: { type: String, default: '' },
+  zones: [String],
+  type: { type: String, enum: ['delivery', 'pickup', 'market'], default: 'pickup' },
+  marketLocation: {
+    name: { type: String, default: '' },
+    address: { type: String, default: '' },
+    lat: Number,
+    lng: Number
+  },
+  routeGenerated: { type: Boolean, default: false },
+  routeGeneratedAt: Date,
+  orderCount: { type: Number, default: 0 },
 }, { timestamps: true });
 
 cookDaySchema.index({ owner: 1, date: 1 });

@@ -4,7 +4,7 @@ import {
   Plus, Edit, Trash2, DollarSign, Clock, Eye, EyeOff,
   CheckCircle, XCircle, Search, TrendingUp, AlertCircle, Image,
   ChevronDown, ChevronUp, Star, Layers, Globe, Save, Loader2,
-  Settings, Palette
+  Settings, Palette, Wand2, Send
 } from 'lucide-react';
 import api from '../api';
 import toast from 'react-hot-toast';
@@ -15,9 +15,12 @@ import './Admin.css';
 const TABS = [
   { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { key: 'products', label: 'Products', icon: Package },
+  { key: 'categories', label: 'Categories', icon: Layers },
   { key: 'orders', label: 'Orders', icon: ShoppingCart },
   { key: 'pages', label: 'Pages (CMS)', icon: FileText },
   { key: 'inbox', label: 'Inbox', icon: Mail },
+  { key: 'aistudio', label: 'AI Studio', icon: Wand2 },
+  { key: 'email', label: 'Email', icon: Send },
   { key: 'social', label: 'Social & Marketing', icon: Sparkles },
   { key: 'settings', label: 'Settings', icon: Settings },
 ];
@@ -66,6 +69,29 @@ const SimpleWebsite = () => {
   const [msgLoading, setMsgLoading] = useState(false);
   const [expandedMsg, setExpandedMsg] = useState(null);
 
+  // Categories
+  const [categories, setCategories] = useState([]);
+  const [catLoading, setCatLoading] = useState(false);
+  const [showCatModal, setShowCatModal] = useState(false);
+  const [editCat, setEditCat] = useState(null);
+  const [catForm, setCatForm] = useState({ name: '', description: '', image: '', slug: '', sortOrder: 0 });
+
+  // AI Studio
+  const [aiDescInput, setAiDescInput] = useState({ productName: '', category: '' });
+  const [aiDescResult, setAiDescResult] = useState('');
+  const [aiDescLoading, setAiDescLoading] = useState(false);
+  const [aiImgInput, setAiImgInput] = useState({ productName: '', description: '' });
+  const [aiImgResult, setAiImgResult] = useState('');
+  const [aiImgLoading, setAiImgLoading] = useState(false);
+
+  // Email
+  const [emailTestLoading, setEmailTestLoading] = useState(false);
+  const [emailOrderConfirmId, setEmailOrderConfirmId] = useState('');
+  const [emailOrderConfirmLoading, setEmailOrderConfirmLoading] = useState(false);
+  const [emailShipId, setEmailShipId] = useState('');
+  const [emailShipLoading, setEmailShipLoading] = useState(false);
+  const [emailOrders, setEmailOrders] = useState([]);
+
   // Settings
   const [siteSettings, setSiteSettings] = useState(null);
   const [settingsLoading, setSettingsLoading] = useState(false);
@@ -103,6 +129,16 @@ const SimpleWebsite = () => {
     setMsgLoading(false);
   }, []);
 
+  const loadCategories = useCallback(async () => {
+    setCatLoading(true);
+    try { const res = await api.get('/simplewebsite/categories'); setCategories(res.data); } catch (err) { toast.error('Failed to load categories'); }
+    setCatLoading(false);
+  }, []);
+
+  const loadEmailOrders = useCallback(async () => {
+    try { const res = await api.get('/simplewebsite/orders'); setEmailOrders(res.data); } catch (err) { console.error(err); }
+  }, []);
+
   const loadSettings = useCallback(async () => {
     setSettingsLoading(true);
     try { const res = await api.get('/settings'); setSiteSettings(res.data); } catch (err) { console.error(err); }
@@ -124,11 +160,13 @@ const SimpleWebsite = () => {
   useEffect(() => {
     if (tab === 'dashboard') loadDashboard();
     if (tab === 'products') loadProducts();
+    if (tab === 'categories') loadCategories();
     if (tab === 'orders') loadOrders();
     if (tab === 'pages') loadPages();
     if (tab === 'inbox') loadMessages();
+    if (tab === 'email') loadEmailOrders();
     if (tab === 'settings' && !siteSettings) loadSettings();
-  }, [tab, loadDashboard, loadProducts, loadOrders, loadPages, loadMessages, loadSettings, siteSettings]);
+  }, [tab, loadDashboard, loadProducts, loadCategories, loadOrders, loadPages, loadMessages, loadEmailOrders, loadSettings, siteSettings]);
 
   // ── Product CRUD ──
   const openAddProduct = () => { setEditProd(null); setProdForm({ name: '', description: '', price: '', category: 'General', stock: '', isActive: true, isFeatured: false, images: [] }); setShowProdModal(true); };
@@ -197,6 +235,75 @@ const SimpleWebsite = () => {
   const deleteMessage = async (id) => {
     if (!window.confirm('Delete this message?')) return;
     try { await api.delete(`/simplewebsite/messages/${id}`); toast.success('Deleted'); loadMessages(); } catch (err) { toast.error('Failed'); }
+  };
+
+  // ── Category CRUD ──
+  const openAddCat = () => { setEditCat(null); setCatForm({ name: '', description: '', image: '', slug: '', sortOrder: 0 }); setShowCatModal(true); };
+  const openEditCat = (c) => { setEditCat(c); setCatForm({ name: c.name, description: c.description || '', image: c.image || '', slug: c.slug || '', sortOrder: c.sortOrder || 0 }); setShowCatModal(true); };
+
+  const handleCatSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const data = { ...catForm, sortOrder: parseInt(catForm.sortOrder) || 0 };
+      if (editCat) {
+        await api.put(`/simplewebsite/categories/${editCat._id}`, data);
+        toast.success('Category updated');
+      } else {
+        await api.post('/simplewebsite/categories', data);
+        toast.success('Category created');
+      }
+      setShowCatModal(false);
+      loadCategories();
+    } catch (err) { toast.error('Failed to save category'); }
+  };
+
+  const deleteCat = async (id) => {
+    if (!window.confirm('Delete this category?')) return;
+    try { await api.delete(`/simplewebsite/categories/${id}`); toast.success('Category deleted'); loadCategories(); } catch (err) { toast.error('Failed to delete'); }
+  };
+
+  // ── AI Studio actions ──
+  const generateDescription = async () => {
+    if (!aiDescInput.productName) return toast.error('Enter a product name');
+    setAiDescLoading(true);
+    try {
+      const res = await api.post('/simplewebsite/ai/product-description', aiDescInput);
+      setAiDescResult(res.data.description || res.data.result || '');
+      toast.success('Description generated');
+    } catch (err) { toast.error('Failed to generate description'); }
+    setAiDescLoading(false);
+  };
+
+  const generateImage = async () => {
+    if (!aiImgInput.productName) return toast.error('Enter a product name');
+    setAiImgLoading(true);
+    try {
+      const res = await api.post('/simplewebsite/ai/product-image', aiImgInput);
+      setAiImgResult(res.data.imageUrl || res.data.url || '');
+      toast.success('Image generated');
+    } catch (err) { toast.error('Failed to generate image'); }
+    setAiImgLoading(false);
+  };
+
+  // ── Email actions ──
+  const sendTestEmail = async () => {
+    setEmailTestLoading(true);
+    try { await api.post('/simplewebsite/email/test'); toast.success('Test email sent'); } catch (err) { toast.error('Failed to send test email'); }
+    setEmailTestLoading(false);
+  };
+
+  const sendOrderConfirmation = async () => {
+    if (!emailOrderConfirmId) return toast.error('Select an order');
+    setEmailOrderConfirmLoading(true);
+    try { await api.post('/simplewebsite/email/order-confirmation', { orderId: emailOrderConfirmId }); toast.success('Order confirmation sent'); } catch (err) { toast.error('Failed to send confirmation'); }
+    setEmailOrderConfirmLoading(false);
+  };
+
+  const sendShippingNotification = async () => {
+    if (!emailShipId) return toast.error('Select an order');
+    setEmailShipLoading(true);
+    try { await api.post('/simplewebsite/email/shipping-notification', { orderId: emailShipId }); toast.success('Shipping notification sent'); } catch (err) { toast.error('Failed to send notification'); }
+    setEmailShipLoading(false);
   };
 
   // Filter tabs — hide Social tab if SocialAI not enabled
@@ -373,6 +480,60 @@ const SimpleWebsite = () => {
           </div>
         )}
 
+        {/* ═══ CATEGORIES ═══ */}
+        {tab === 'categories' && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h2 style={{ fontSize: '1.125rem', fontWeight: 700, color: '#f3f4f6' }}>Categories ({categories.length})</h2>
+              <button onClick={openAddCat} className="btn btn-primary btn-sm"><Plus size={14} /> Add Category</button>
+            </div>
+            {catLoading ? <div className="page-loading">Loading...</div> : categories.length === 0 ? (
+              <div className="card" style={{ padding: '2.5rem', textAlign: 'center' }}>
+                <Layers size={40} style={{ color: '#4b5563', marginBottom: '1rem' }} />
+                <h3 style={{ color: '#d1d5db', marginBottom: '0.5rem' }}>No Categories Yet</h3>
+                <p style={{ color: '#6b7280', fontSize: '0.875rem', marginBottom: '1rem' }}>Add categories to organize your products.</p>
+                <button onClick={openAddCat} className="btn btn-primary"><Plus size={14} /> Add Category</button>
+              </div>
+            ) : (
+              <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                      <th style={{ padding: '0.75rem 1rem', textAlign: 'left', color: '#9ca3af', fontWeight: 600 }}>Image</th>
+                      <th style={{ padding: '0.75rem 1rem', textAlign: 'left', color: '#9ca3af', fontWeight: 600 }}>Name</th>
+                      <th style={{ padding: '0.75rem 1rem', textAlign: 'left', color: '#9ca3af', fontWeight: 600 }}>Slug</th>
+                      <th style={{ padding: '0.75rem 1rem', textAlign: 'left', color: '#9ca3af', fontWeight: 600 }}>Description</th>
+                      <th style={{ padding: '0.75rem 1rem', textAlign: 'center', color: '#9ca3af', fontWeight: 600 }}>Sort</th>
+                      <th style={{ padding: '0.75rem 1rem', textAlign: 'right', color: '#9ca3af', fontWeight: 600 }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {categories.map(c => (
+                      <tr key={c._id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                        <td style={{ padding: '0.625rem 1rem' }}>
+                          <div style={{ width: 40, height: 40, borderRadius: 6, background: 'rgba(255,255,255,0.04)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                            {c.image ? <img src={c.image} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Layers size={18} style={{ color: '#4b5563' }} />}
+                          </div>
+                        </td>
+                        <td style={{ padding: '0.625rem 1rem', color: '#f3f4f6', fontWeight: 600 }}>{c.name}</td>
+                        <td style={{ padding: '0.625rem 1rem', color: '#6b7280', fontFamily: 'monospace', fontSize: '0.75rem' }}>{c.slug}</td>
+                        <td style={{ padding: '0.625rem 1rem', color: '#9ca3af', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.description || '—'}</td>
+                        <td style={{ padding: '0.625rem 1rem', color: '#9ca3af', textAlign: 'center' }}>{c.sortOrder || 0}</td>
+                        <td style={{ padding: '0.625rem 1rem', textAlign: 'right' }}>
+                          <div style={{ display: 'flex', gap: '0.25rem', justifyContent: 'flex-end' }}>
+                            <button onClick={() => openEditCat(c)} className="btn btn-sm btn-secondary" style={{ padding: '0.25rem 0.5rem' }}><Edit size={12} /></button>
+                            <button onClick={() => deleteCat(c._id)} className="btn btn-sm btn-danger" style={{ padding: '0.25rem 0.5rem' }}><Trash2 size={12} /></button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ═══ ORDERS ═══ */}
         {tab === 'orders' && (
           <div>
@@ -538,6 +699,131 @@ const SimpleWebsite = () => {
           </div>
         )}
 
+        {/* ═══ AI STUDIO ═══ */}
+        {tab === 'aistudio' && (
+          <div>
+            <h2 style={{ fontSize: '1.125rem', fontWeight: 700, color: '#f3f4f6', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Wand2 size={22} /> AI Studio
+            </h2>
+
+            {/* Generate Product Description */}
+            <div className="card" style={{ padding: '1.25rem', marginBottom: '1rem' }}>
+              <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#d1d5db', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <FileText size={16} style={{ color: '#8b5cf6' }} /> Generate Product Description
+              </h3>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div className="form-group">
+                  <label>Product Name</label>
+                  <input value={aiDescInput.productName} onChange={e => setAiDescInput(f => ({ ...f, productName: e.target.value }))} placeholder="e.g. Organic Coffee Beans" />
+                </div>
+                <div className="form-group">
+                  <label>Category</label>
+                  <input value={aiDescInput.category} onChange={e => setAiDescInput(f => ({ ...f, category: e.target.value }))} placeholder="e.g. Beverages" />
+                </div>
+              </div>
+              <button onClick={generateDescription} className="btn btn-primary btn-sm" disabled={aiDescLoading} style={{ marginTop: '0.5rem' }}>
+                {aiDescLoading ? <Loader2 size={14} className="spin" /> : <Wand2 size={14} />} Generate Description
+              </button>
+              {aiDescResult && (
+                <div className="form-group" style={{ marginTop: '0.75rem' }}>
+                  <label>Generated Description</label>
+                  <textarea rows={5} value={aiDescResult} onChange={e => setAiDescResult(e.target.value)} style={{ fontSize: '0.8125rem' }} />
+                </div>
+              )}
+            </div>
+
+            {/* Generate Product Image */}
+            <div className="card" style={{ padding: '1.25rem' }}>
+              <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#d1d5db', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Image size={16} style={{ color: '#f59e0b' }} /> Generate Product Image
+              </h3>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div className="form-group">
+                  <label>Product Name</label>
+                  <input value={aiImgInput.productName} onChange={e => setAiImgInput(f => ({ ...f, productName: e.target.value }))} placeholder="e.g. Organic Coffee Beans" />
+                </div>
+                <div className="form-group">
+                  <label>Description</label>
+                  <input value={aiImgInput.description} onChange={e => setAiImgInput(f => ({ ...f, description: e.target.value }))} placeholder="e.g. Premium roasted beans in a bag" />
+                </div>
+              </div>
+              <button onClick={generateImage} className="btn btn-primary btn-sm" disabled={aiImgLoading} style={{ marginTop: '0.5rem' }}>
+                {aiImgLoading ? <Loader2 size={14} className="spin" /> : <Wand2 size={14} />} Generate Image
+              </button>
+              {aiImgResult && (
+                <div style={{ marginTop: '0.75rem' }}>
+                  <img src={aiImgResult} alt="Generated" style={{ maxWidth: '100%', maxHeight: 300, borderRadius: 8, objectFit: 'contain' }} />
+                  <p style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '0.5rem', wordBreak: 'break-all' }}>{aiImgResult}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ═══ EMAIL ═══ */}
+        {tab === 'email' && (
+          <div>
+            <h2 style={{ fontSize: '1.125rem', fontWeight: 700, color: '#f3f4f6', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Send size={22} /> Email
+            </h2>
+
+            {/* Send Test Email */}
+            <div className="card" style={{ padding: '1.25rem', marginBottom: '1rem' }}>
+              <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#d1d5db', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Mail size={16} style={{ color: '#3b82f6' }} /> Send Test Email
+              </h3>
+              <p style={{ fontSize: '0.8125rem', color: '#6b7280', marginBottom: '0.75rem' }}>Send a test email to verify your email configuration is working correctly.</p>
+              <button onClick={sendTestEmail} className="btn btn-primary btn-sm" disabled={emailTestLoading}>
+                {emailTestLoading ? <Loader2 size={14} className="spin" /> : <Send size={14} />} Send Test Email
+              </button>
+            </div>
+
+            {/* Order Confirmation */}
+            <div className="card" style={{ padding: '1.25rem', marginBottom: '1rem' }}>
+              <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#d1d5db', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <CheckCircle size={16} style={{ color: '#10b981' }} /> Order Confirmation
+              </h3>
+              <p style={{ fontSize: '0.8125rem', color: '#6b7280', marginBottom: '0.75rem' }}>Send an order confirmation email to the customer.</p>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end' }}>
+                <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
+                  <label>Select Order</label>
+                  <select value={emailOrderConfirmId} onChange={e => setEmailOrderConfirmId(e.target.value)}>
+                    <option value="">-- Select an order --</option>
+                    {emailOrders.map(o => (
+                      <option key={o._id} value={o._id}>{o.orderNumber} — {o.customerName} (${o.total?.toFixed(2)})</option>
+                    ))}
+                  </select>
+                </div>
+                <button onClick={sendOrderConfirmation} className="btn btn-primary btn-sm" disabled={emailOrderConfirmLoading} style={{ whiteSpace: 'nowrap' }}>
+                  {emailOrderConfirmLoading ? <Loader2 size={14} className="spin" /> : <Send size={14} />} Send
+                </button>
+              </div>
+            </div>
+
+            {/* Shipping Notification */}
+            <div className="card" style={{ padding: '1.25rem' }}>
+              <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#d1d5db', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Package size={16} style={{ color: '#f59e0b' }} /> Shipping Notification
+              </h3>
+              <p style={{ fontSize: '0.8125rem', color: '#6b7280', marginBottom: '0.75rem' }}>Send a shipping notification email to the customer.</p>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end' }}>
+                <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
+                  <label>Select Order</label>
+                  <select value={emailShipId} onChange={e => setEmailShipId(e.target.value)}>
+                    <option value="">-- Select an order --</option>
+                    {emailOrders.map(o => (
+                      <option key={o._id} value={o._id}>{o.orderNumber} — {o.customerName} (${o.total?.toFixed(2)})</option>
+                    ))}
+                  </select>
+                </div>
+                <button onClick={sendShippingNotification} className="btn btn-primary btn-sm" disabled={emailShipLoading} style={{ whiteSpace: 'nowrap' }}>
+                  {emailShipLoading ? <Loader2 size={14} className="spin" /> : <Send size={14} />} Send
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ═══ SOCIAL TAB — Embedded SocialAI ═══ */}
         {tab === 'social' && hasSocialAI && <SocialAI embedded />}
 
@@ -619,6 +905,147 @@ const SimpleWebsite = () => {
                     </div>
                   </div>
                 </div>
+                {/* Square Payment Config */}
+                <div className="card" style={{ padding: '1.25rem', marginBottom: '1rem' }}>
+                  <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#d1d5db', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <DollarSign size={16} style={{ color: '#10b981' }} /> Square Payment Config
+                  </h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                    <div className="form-group">
+                      <label>Application ID</label>
+                      <input value={siteSettings.squareApplicationId || ''} onChange={e => updateSetting('squareApplicationId', e.target.value)} placeholder="sq0idp-..." />
+                    </div>
+                    <div className="form-group">
+                      <label>Access Token</label>
+                      <input type="password" value={siteSettings.squareAccessToken || ''} onChange={e => updateSetting('squareAccessToken', e.target.value)} placeholder="sq0atp-..." />
+                    </div>
+                    <div className="form-group">
+                      <label>Location ID</label>
+                      <input value={siteSettings.squareLocationId || ''} onChange={e => updateSetting('squareLocationId', e.target.value)} placeholder="Location ID" />
+                    </div>
+                    <div className="form-group">
+                      <label>Environment</label>
+                      <select value={siteSettings.squareEnvironment || 'sandbox'} onChange={e => updateSetting('squareEnvironment', e.target.value)}>
+                        <option value="sandbox">Sandbox</option>
+                        <option value="production">Production</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Email Config */}
+                <div className="card" style={{ padding: '1.25rem', marginBottom: '1rem' }}>
+                  <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#d1d5db', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <Mail size={16} style={{ color: '#8b5cf6' }} /> Email Config (Resend)
+                  </h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                    <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                      <label>Resend API Key</label>
+                      <input type="password" value={siteSettings.resendApiKey || ''} onChange={e => updateSetting('resendApiKey', e.target.value)} placeholder="re_..." />
+                    </div>
+                    <div className="form-group">
+                      <label>From Email</label>
+                      <input value={siteSettings.resendFromEmail || ''} onChange={e => updateSetting('resendFromEmail', e.target.value)} placeholder="noreply@yourdomain.com" />
+                    </div>
+                    <div className="form-group">
+                      <label>From Name</label>
+                      <input value={siteSettings.resendFromName || ''} onChange={e => updateSetting('resendFromName', e.target.value)} placeholder="Your Business Name" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Shipping Config */}
+                <div className="card" style={{ padding: '1.25rem', marginBottom: '1rem' }}>
+                  <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#d1d5db', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <Package size={16} style={{ color: '#f59e0b' }} /> Shipping Config
+                  </h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.75rem' }}>
+                    <div className="form-group">
+                      <label>Carrier Name</label>
+                      <input value={siteSettings.carrierName || ''} onChange={e => updateSetting('carrierName', e.target.value)} placeholder="e.g. Australia Post" />
+                    </div>
+                    <div className="form-group">
+                      <label>Free Shipping Threshold ($)</label>
+                      <input type="number" step="0.01" value={siteSettings.freeShippingThreshold || ''} onChange={e => updateSetting('freeShippingThreshold', parseFloat(e.target.value) || 0)} placeholder="e.g. 100" />
+                    </div>
+                    <div className="form-group">
+                      <label>Default Item Weight (kg)</label>
+                      <input type="number" step="0.01" value={siteSettings.defaultItemWeight || ''} onChange={e => updateSetting('defaultItemWeight', parseFloat(e.target.value) || 0)} placeholder="e.g. 0.5" />
+                    </div>
+                  </div>
+                  <div style={{ marginTop: '0.75rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                      <label style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#9ca3af' }}>Shipping Tiers</label>
+                      <button onClick={() => updateSetting('shippingTiers', [...(siteSettings.shippingTiers || []), { maxWeight: '', standardPrice: '', expressPrice: '' }])} className="btn btn-sm btn-secondary"><Plus size={12} /> Add Tier</button>
+                    </div>
+                    {(siteSettings.shippingTiers || []).map((tier, i) => (
+                      <div key={i} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.375rem' }}>
+                        <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
+                          <input type="number" step="0.01" value={tier.maxWeight || ''} onChange={e => { const tiers = [...(siteSettings.shippingTiers || [])]; tiers[i] = { ...tiers[i], maxWeight: parseFloat(e.target.value) || 0 }; updateSetting('shippingTiers', tiers); }} placeholder="Max Weight (kg)" />
+                        </div>
+                        <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
+                          <input type="number" step="0.01" value={tier.standardPrice || ''} onChange={e => { const tiers = [...(siteSettings.shippingTiers || [])]; tiers[i] = { ...tiers[i], standardPrice: parseFloat(e.target.value) || 0 }; updateSetting('shippingTiers', tiers); }} placeholder="Standard ($)" />
+                        </div>
+                        <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
+                          <input type="number" step="0.01" value={tier.expressPrice || ''} onChange={e => { const tiers = [...(siteSettings.shippingTiers || [])]; tiers[i] = { ...tiers[i], expressPrice: parseFloat(e.target.value) || 0 }; updateSetting('shippingTiers', tiers); }} placeholder="Express ($)" />
+                        </div>
+                        <button onClick={() => { const tiers = [...(siteSettings.shippingTiers || [])]; tiers.splice(i, 1); updateSetting('shippingTiers', tiers); }} className="btn btn-sm btn-danger" style={{ padding: '0.25rem 0.5rem' }}><Trash2 size={12} /></button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Tax Config */}
+                <div className="card" style={{ padding: '1.25rem', marginBottom: '1rem' }}>
+                  <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#d1d5db', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <DollarSign size={16} style={{ color: '#6ee7b7' }} /> Tax Config
+                  </h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                    <div className="form-group">
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', cursor: 'pointer' }}>
+                        <input type="checkbox" checked={siteSettings.gstEnabled || false} onChange={e => updateSetting('gstEnabled', e.target.checked)} />
+                        GST Enabled
+                      </label>
+                    </div>
+                    <div className="form-group">
+                      <label>GST Rate (%)</label>
+                      <input type="number" step="0.01" value={siteSettings.gstRate || ''} onChange={e => updateSetting('gstRate', parseFloat(e.target.value) || 0)} placeholder="e.g. 10" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Brand Assets */}
+                <div className="card" style={{ padding: '1.25rem', marginBottom: '1rem' }}>
+                  <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#d1d5db', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <Image size={16} style={{ color: '#3b82f6' }} /> Brand Assets
+                  </h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                    <div className="form-group">
+                      <label>Brand Logo URL</label>
+                      <input value={siteSettings.brandLogo || ''} onChange={e => updateSetting('brandLogo', e.target.value)} placeholder="https://..." />
+                    </div>
+                    <div className="form-group">
+                      <label>Favicon URL</label>
+                      <input value={siteSettings.favicon || ''} onChange={e => updateSetting('favicon', e.target.value)} placeholder="https://..." />
+                    </div>
+                    <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                      <label>Founder Image URL</label>
+                      <input value={siteSettings.founderImage || ''} onChange={e => updateSetting('founderImage', e.target.value)} placeholder="https://..." />
+                    </div>
+                  </div>
+                </div>
+
+                {/* AI Config */}
+                <div className="card" style={{ padding: '1.25rem', marginBottom: '1rem' }}>
+                  <h3 style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#d1d5db', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <Wand2 size={16} style={{ color: '#8b5cf6' }} /> AI Config
+                  </h3>
+                  <div className="form-group">
+                    <label>OpenRouter API Key</label>
+                    <input type="password" value={siteSettings.openRouterApiKey || ''} onChange={e => updateSetting('openRouterApiKey', e.target.value)} placeholder="sk-or-..." />
+                  </div>
+                </div>
+
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                   <button onClick={saveSettings} className="btn btn-primary" disabled={savingSettings}>
                     {savingSettings ? <Loader2 size={14} className="spin" /> : <Save size={14} />} Save All Settings
@@ -677,6 +1104,43 @@ const SimpleWebsite = () => {
                 <div className="modal-actions">
                   <button type="button" onClick={() => setShowProdModal(false)} className="btn btn-secondary">Cancel</button>
                   <button type="submit" className="btn btn-primary"><Save size={14} /> {editProd ? 'Update' : 'Create'}</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* ═══ CATEGORY MODAL ═══ */}
+        {showCatModal && (
+          <div className="modal-overlay" onClick={() => setShowCatModal(false)}>
+            <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: 480 }}>
+              <h2>{editCat ? 'Edit Category' : 'Add Category'}</h2>
+              <form onSubmit={handleCatSubmit}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                  <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                    <label>Category Name *</label>
+                    <input required value={catForm.name} onChange={e => setCatForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Beverages" />
+                  </div>
+                  <div className="form-group">
+                    <label>Slug</label>
+                    <input value={catForm.slug} onChange={e => setCatForm(f => ({ ...f, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') }))} placeholder="e.g. beverages" />
+                  </div>
+                  <div className="form-group">
+                    <label>Sort Order</label>
+                    <input type="number" value={catForm.sortOrder} onChange={e => setCatForm(f => ({ ...f, sortOrder: e.target.value }))} />
+                  </div>
+                  <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                    <label>Description</label>
+                    <textarea rows={3} value={catForm.description} onChange={e => setCatForm(f => ({ ...f, description: e.target.value }))} placeholder="Category description..." />
+                  </div>
+                  <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                    <label>Image URL</label>
+                    <input value={catForm.image} onChange={e => setCatForm(f => ({ ...f, image: e.target.value }))} placeholder="https://..." />
+                  </div>
+                </div>
+                <div className="modal-actions">
+                  <button type="button" onClick={() => setShowCatModal(false)} className="btn btn-secondary">Cancel</button>
+                  <button type="submit" className="btn btn-primary"><Save size={14} /> {editCat ? 'Update' : 'Create'}</button>
                 </div>
               </form>
             </div>

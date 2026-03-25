@@ -36,4 +36,28 @@ const staffOrAdmin = (req, res, next) => {
   next();
 };
 
-module.exports = { auth, adminOnly, staffOrAdmin };
+const optionalAuth = async (req, res, next) => {
+  try {
+    const token = req.header('Authorization')?.replace('Bearer ', '');
+    if (!token) {
+      req.user = null;
+      return next();
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.id).select('-password');
+
+    if (!user || !user.isActive) {
+      req.user = null;
+      return next();
+    }
+
+    req.user = user;
+    next();
+  } catch (err) {
+    req.user = null;
+    next();
+  }
+};
+
+module.exports = { auth, adminOnly, staffOrAdmin, optionalAuth };

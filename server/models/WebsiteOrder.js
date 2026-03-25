@@ -30,7 +30,13 @@ const websiteOrderSchema = new mongoose.Schema({
     country: { type: String, default: 'AU' }
   },
   notes: { type: String, default: '' },
-  trackingNumber: { type: String, default: '' }
+  trackingNumber: { type: String, default: '' },
+  gst: { type: Number, default: 0 },
+  gstRate: { type: Number, default: 10 },
+  isGuestCheckout: { type: Boolean, default: false },
+  shippingMethod: { type: String, default: 'standard' },
+  shippingWeight: { type: Number, default: 0 },
+  customerAccount: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }
 }, { timestamps: true });
 
 websiteOrderSchema.index({ userId: 1, status: 1 });

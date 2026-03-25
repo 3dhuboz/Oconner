@@ -20,9 +20,10 @@ const foodOrderSchema = new mongoose.Schema({
   orderType: { type: String, enum: ['pickup', 'delivery', 'catering'], default: 'pickup' },
   status: {
     type: String,
-    enum: ['pending', 'confirmed', 'preparing', 'ready', 'completed', 'cancelled'],
+    enum: ['pending', 'confirmed', 'preparing', 'packed', 'ready', 'out_for_delivery', 'delivered', 'completed', 'cancelled', 'refunded'],
     default: 'pending'
   },
+  fulfillmentType: { type: String, enum: ['pickup', 'delivery', 'market', 'subscription'], default: 'pickup' },
   cookDay: { type: mongoose.Schema.Types.ObjectId, ref: 'CookDay' },
   pickupDate: Date,
   pickupTime: String,
@@ -40,6 +41,17 @@ const foodOrderSchema = new mongoose.Schema({
   },
   notes: String,
   loyaltyStampsEarned: { type: Number, default: 0 },
+  // Street Meatz additions
+  deliveryFee: { type: Number, default: 0 },
+  gst: { type: Number, default: 0 },
+  promoCode: { type: String, default: '' },
+  promoDiscount: { type: Number, default: 0 },
+  postcodeZone: { type: String, default: '' },
+  internalNotes: { type: String, default: '' },
+  proofUrl: { type: String, default: '' },
+  packedAt: Date,
+  packedBy: { type: String, default: '' },
+  foodCustomer: { type: mongoose.Schema.Types.ObjectId, ref: 'FoodCustomer' },
 }, { timestamps: true });
 
 // Auto-generate order number

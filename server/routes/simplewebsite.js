@@ -3,7 +3,11 @@ const Product = require('../models/Product');
 const WebsiteOrder = require('../models/WebsiteOrder');
 const WebsitePage = require('../models/WebsitePage');
 const ContactMessage = require('../models/ContactMessage');
-const { auth, adminOnly } = require('../middleware/auth');
+const Category = require('../models/Category');
+const WebsiteSettings = require('../models/WebsiteSettings');
+const { auth, adminOnly, optionalAuth } = require('../middleware/auth');
+const { sendEmail, sendOrderConfirmation, sendShippingNotification } = require('../services/resend');
+const { generateText, generateImage } = require('../services/openrouter');
 
 const router = express.Router();
 
@@ -292,6 +296,341 @@ router.get('/dashboard', auth, async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ message: 'Failed to fetch dashboard', error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════
+//  CATEGORIES
+// ═══════════════════════════════════════════════
+
+// GET all categories for current user
+router.get('/categories', auth, async (req, res) => {
+  try {
+    const categories = await Category.find({ userId: req.user._id }).sort({ sortOrder: 1, name: 1 });
+    res.json(categories);
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to fetch categories', error: err.message });
+  }
+});
+
+// POST create category
+router.post('/categories', auth, async (req, res) => {
+  try {
+    const category = await Category.create({ ...req.body, userId: req.user._id });
+    res.status(201).json(category);
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to create category', error: err.message });
+  }
+});
+
+// PUT update category
+router.put('/categories/:id', auth, async (req, res) => {
+  try {
+    const category = await Category.findOneAndUpdate(
+      { _id: req.params.id, userId: req.user._id },
+      req.body,
+      { new: true }
+    );
+    if (!category) return res.status(404).json({ message: 'Category not found' });
+    res.json(category);
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to update category', error: err.message });
+  }
+});
+
+// DELETE category
+router.delete('/categories/:id', auth, async (req, res) => {
+  try {
+    await Category.findOneAndDelete({ _id: req.params.id, userId: req.user._id });
+    res.json({ message: 'Category deleted' });
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to delete category', error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════
+//  WEBSITE SETTINGS
+// ═══════════════════════════════════════════════
+
+// GET settings (create default if not exists)
+router.get('/settings', auth, async (req, res) => {
+  try {
+    let settings = await WebsiteSettings.findOne({ userId: req.user._id });
+    if (!settings) {
+      settings = await WebsiteSettings.create({ userId: req.user._id });
+    }
+    res.json(settings);
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to fetch settings', error: err.message });
+  }
+});
+
+// PUT update settings
+router.put('/settings', auth, async (req, res) => {
+  try {
+    const settings = await WebsiteSettings.findOneAndUpdate(
+      { userId: req.user._id },
+      req.body,
+      { new: true, upsert: true }
+    );
+    res.json(settings);
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to update settings', error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════
+//  PUBLIC / GUEST ROUTES
+// ═══════════════════════════════════════════════
+
+// POST public order (guest checkout)
+router.post('/public/orders', optionalAuth, async (req, res) => {
+  try {
+    const { userId, items, customerName, customerEmail, customerPhone, shippingAddress, paymentId, paymentMethod, shippingMethod, notes } = req.body;
+
+    if (!userId) return res.status(400).json({ message: 'userId is required' });
+
+    // Load settings for shipping + GST calculation
+    const settings = await WebsiteSettings.findOne({ userId }) || {};
+    const tiers = settings.shippingTiers || [];
+    const gstEnabled = settings.gstEnabled !== false;
+    const gstRate = settings.gstRate || 10;
+    const freeShippingThreshold = settings.freeShippingThreshold || 75;
+    const defaultItemWeight = settings.defaultItemWeight || 500;
+
+    // Calculate subtotal
+    const subtotal = (items || []).reduce((sum, item) => sum + (item.price * (item.quantity || 1)), 0);
+
+    // Calculate total weight
+    const shippingWeight = (items || []).reduce((sum, item) => sum + (defaultItemWeight * (item.quantity || 1)), 0);
+
+    // Calculate shipping from tiers
+    let shipping = 0;
+    const method = shippingMethod || 'standard';
+    if (subtotal < freeShippingThreshold && tiers.length > 0) {
+      const tier = tiers.find(t => shippingWeight <= t.maxWeight) || tiers[tiers.length - 1];
+      shipping = method === 'express' ? (tier.expressPrice || 0) : (tier.standardPrice || 0);
+    }
+
+    // Calculate GST
+    const gst = gstEnabled ? Math.round((subtotal + shipping) * (gstRate / 100) * 100) / 100 : 0;
+
+    // Total
+    const total = subtotal + shipping + gst;
+
+    // Generate order number
+    const count = await WebsiteOrder.countDocuments({ userId });
+    const orderNumber = `ORD-${String(count + 1).padStart(4, '0')}`;
+
+    const order = await WebsiteOrder.create({
+      userId,
+      orderNumber,
+      customerName,
+      customerEmail,
+      customerPhone: customerPhone || '',
+      items: items || [],
+      subtotal,
+      tax: gst,
+      gst,
+      gstRate: gstEnabled ? gstRate : 0,
+      shipping,
+      shippingMethod: method,
+      shippingWeight,
+      total,
+      shippingAddress: shippingAddress || {},
+      paymentId: paymentId || '',
+      paymentMethod: paymentMethod || 'square',
+      notes: notes || '',
+      isGuestCheckout: !req.user,
+      customerAccount: req.user?._id || null
+    });
+
+    res.status(201).json(order);
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to create order', error: err.message });
+  }
+});
+
+// POST public contact form
+router.post('/public/contact', async (req, res) => {
+  try {
+    const { userId, name, email, phone, subject, message } = req.body;
+
+    if (!userId) return res.status(400).json({ message: 'userId is required' });
+    if (!name || !email || !message) return res.status(400).json({ message: 'Name, email, and message are required' });
+
+    const contactMessage = await ContactMessage.create({
+      userId,
+      name,
+      email,
+      phone: phone || '',
+      subject: subject || 'Contact Form',
+      message
+    });
+
+    res.status(201).json(contactMessage);
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to send message', error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════
+//  AI ROUTES
+// ═══════════════════════════════════════════════
+
+// POST generate product description
+router.post('/ai/product-description', auth, async (req, res) => {
+  try {
+    const settings = await WebsiteSettings.findOne({ userId: req.user._id });
+    if (!settings?.openRouterApiKey) {
+      return res.status(400).json({ message: 'OpenRouter API key not configured. Update your settings first.' });
+    }
+
+    const { name, category } = req.body;
+    if (!name) return res.status(400).json({ message: 'Product name is required' });
+
+    const prompt = `Write a compelling, SEO-friendly product description for an e-commerce store. The product is called "${name}"${category ? ` in the "${category}" category` : ''}. Write 2-3 short paragraphs that highlight key features and benefits. Keep it professional and persuasive. Return only the description text, no headings or labels.`;
+
+    const description = await generateText(settings.openRouterApiKey, prompt);
+    res.json({ description: description.trim() });
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to generate description', error: err.message });
+  }
+});
+
+// POST generate product image
+router.post('/ai/product-image', auth, async (req, res) => {
+  try {
+    const settings = await WebsiteSettings.findOne({ userId: req.user._id });
+    if (!settings?.openRouterApiKey) {
+      return res.status(400).json({ message: 'OpenRouter API key not configured. Update your settings first.' });
+    }
+
+    const { name, description } = req.body;
+    if (!name) return res.status(400).json({ message: 'Product name is required' });
+
+    const prompt = `Create a professional product photograph for an e-commerce store. The product is: "${name}". ${description ? `Description: ${description}` : ''} The image should have a clean white background, professional studio lighting, and be suitable for an online store product listing.`;
+
+    const imageUrl = await generateImage(settings.openRouterApiKey, prompt);
+    res.json({ imageUrl });
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to generate image', error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════
+//  EMAIL ROUTES
+// ═══════════════════════════════════════════════
+
+// POST send order confirmation email
+router.post('/email/order-confirmation', auth, async (req, res) => {
+  try {
+    const { orderId } = req.body;
+    if (!orderId) return res.status(400).json({ message: 'orderId is required' });
+
+    const order = await WebsiteOrder.findOne({ _id: orderId, userId: req.user._id });
+    if (!order) return res.status(404).json({ message: 'Order not found' });
+
+    const settings = await WebsiteSettings.findOne({ userId: req.user._id });
+    if (!settings?.resendApiKey || !settings?.resendFromEmail) {
+      return res.status(400).json({ message: 'Resend email not configured. Update your settings first.' });
+    }
+
+    const result = await sendOrderConfirmation(settings, order);
+    res.json({ message: 'Order confirmation sent', result });
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to send order confirmation', error: err.message });
+  }
+});
+
+// POST send shipping notification email
+router.post('/email/shipping-notification', auth, async (req, res) => {
+  try {
+    const { orderId } = req.body;
+    if (!orderId) return res.status(400).json({ message: 'orderId is required' });
+
+    const order = await WebsiteOrder.findOne({ _id: orderId, userId: req.user._id });
+    if (!order) return res.status(404).json({ message: 'Order not found' });
+
+    const settings = await WebsiteSettings.findOne({ userId: req.user._id });
+    if (!settings?.resendApiKey || !settings?.resendFromEmail) {
+      return res.status(400).json({ message: 'Resend email not configured. Update your settings first.' });
+    }
+
+    const result = await sendShippingNotification(settings, order);
+    res.json({ message: 'Shipping notification sent', result });
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to send shipping notification', error: err.message });
+  }
+});
+
+// POST send test email
+router.post('/email/test', auth, async (req, res) => {
+  try {
+    const settings = await WebsiteSettings.findOne({ userId: req.user._id });
+    if (!settings?.resendApiKey || !settings?.resendFromEmail) {
+      return res.status(400).json({ message: 'Resend email not configured. Update your settings first.' });
+    }
+
+    const from = settings.resendFromName
+      ? `${settings.resendFromName} <${settings.resendFromEmail}>`
+      : settings.resendFromEmail;
+
+    const result = await sendEmail(settings.resendApiKey, {
+      from,
+      to: req.user.email,
+      subject: 'Test Email - SimpleWebsite',
+      html: `
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+          <h2 style="color:#7c3aed;">Test Email</h2>
+          <p>This is a test email from your SimpleWebsite store.</p>
+          <p>If you received this, your Resend email integration is working correctly.</p>
+          <p style="color:#6b7280;font-size:12px;">Sent at ${new Date().toISOString()}</p>
+        </div>
+      `
+    });
+
+    res.json({ message: 'Test email sent', result });
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to send test email', error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════
+//  SHIPPING CALCULATION
+// ═══════════════════════════════════════════════
+
+// POST calculate shipping rates
+router.post('/shipping/calculate', optionalAuth, async (req, res) => {
+  try {
+    const { weight, postcode, userId: bodyUserId } = req.body;
+    const userId = req.user?._id || bodyUserId;
+
+    if (!userId) return res.status(400).json({ message: 'userId is required' });
+
+    const settings = await WebsiteSettings.findOne({ userId });
+    if (!settings) return res.status(404).json({ message: 'Store settings not found' });
+
+    const tiers = settings.shippingTiers || [];
+    const freeShippingThreshold = settings.freeShippingThreshold || 75;
+    const shippingWeight = weight || settings.defaultItemWeight || 500;
+
+    // Find matching tier
+    const tier = tiers.find(t => shippingWeight <= t.maxWeight) || tiers[tiers.length - 1];
+
+    const standard = tier ? (tier.standardPrice || 0) : 0;
+    const express = tier ? (tier.expressPrice || 0) : 0;
+
+    res.json({
+      standard,
+      express,
+      freeShippingThreshold,
+      freeShipping: false, // caller checks subtotal against threshold
+      carrier: settings.carrierName,
+      tierLabel: tier?.label || ''
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to calculate shipping', error: err.message });
   }
 });
 

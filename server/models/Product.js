@@ -13,6 +13,7 @@ const productSchema = new mongoose.Schema({
   trackInventory: { type: Boolean, default: true },
   isActive: { type: Boolean, default: true },
   isFeatured: { type: Boolean, default: false },
+  categoryRef: { type: mongoose.Schema.Types.ObjectId, ref: 'Category', default: null },
   weight: { type: Number, default: 0 },
   tags: [{ type: String }],
   variants: [{

@@ -100,6 +100,19 @@ router.get('/orders', auth, async (req, res) => {
   }
 });
 
+// GET single order by ID
+router.get('/orders/:id', auth, async (req, res) => {
+  try {
+    const order = await FoodOrder.findOne({ _id: req.params.id, owner: req.user._id })
+      .populate('cookDay', 'date title location type')
+      .populate('foodCustomer', 'name email phone');
+    if (!order) return res.status(404).json({ message: 'Order not found' });
+    res.json(order);
+  } catch (err) {
+    res.status(500).json({ message: 'Failed to load order', error: err.message });
+  }
+});
+
 // GET order stats
 router.get('/orders/stats', auth, async (req, res) => {
   try {

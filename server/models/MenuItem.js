@@ -21,6 +21,23 @@ const menuItemSchema = new mongoose.Schema({
   isCatering: { type: Boolean, default: false },
   cateringMinQty: { type: Number, default: 10 },
   cateringPricePerHead: { type: Number, default: 0 },
+  // Stock management (Street Meatz)
+  stockOnHand: { type: Number, default: null }, // null = not tracked
+  minThreshold: { type: Number, default: 0 },
+  maxStock: { type: Number, default: 0 },
+  // Pricing modes
+  pricePerKg: { type: Number, default: 0 },
+  fixedPrice: { type: Boolean, default: true }, // true = use price field; false = use pricePerKg
+  weightOptions: [{
+    label: String,
+    grams: Number,
+    price: Number
+  }],
+  // Supplier & seasonality
+  supplier: { type: mongoose.Schema.Types.ObjectId, ref: 'Supplier', default: null },
+  seasonalStart: { type: Date, default: null },
+  seasonalEnd: { type: Date, default: null },
+  cookingTips: { type: String, default: '' },
 }, { timestamps: true });
 
 menuItemSchema.index({ owner: 1, category: 1 });
