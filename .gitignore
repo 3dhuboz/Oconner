@@ -1,8 +1,38 @@
+# Dependencies
 node_modules/
-client/node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+.vercel/
+
+# Environment
 .env
-.env.client*
-client/build/
-*.log
+.env.local
+.env.*.local
+.dev.vars
+
+# Turborepo
+.turbo/
+
+# Cloudflare
+.wrangler/
+worker-configuration.d.ts
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
 .DS_Store
-uploads/
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*

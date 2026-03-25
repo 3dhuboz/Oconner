@@ -1,42 +1,30 @@
 {
-  "name": "penny-wise-it",
-  "version": "1.0.0",
-  "description": "Penny Wise I.T - Web Hosting, App Development, and Workflow Solutions",
-  "main": "server/index.js",
+  "name": "the-butcher-online",
+  "version": "0.0.1",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "functions",
+    "workers/*"
+  ],
   "scripts": {
-    "dev": "concurrently \"npm run server\" \"npm run client\"",
-    "server": "nodemon server/index.js",
-    "client": "cd client && npm start",
-    "build": "cd client && npm run build",
-    "start": "node server/index.js"
-  },
-  "dependencies": {
-    "@google/genai": "^1.43.0",
-    "axios": "^1.5.0",
-    "bcryptjs": "^2.4.3",
-    "cors": "^2.8.5",
-    "dotenv": "^16.3.1",
-    "express": "^4.18.2",
-    "express-rate-limit": "^6.10.0",
-    "google-auth-library": "^10.6.1",
-    "helmet": "^7.0.0",
-    "jsonwebtoken": "^9.0.2",
-    "mongoose": "^7.5.0",
-    "multer": "^1.4.5-lts.1",
-    "node-fetch": "^2.7.0",
-    "nodemailer": "^6.9.4",
-    "square": "^44.0.0"
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "clean": "turbo run clean",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\""
   },
   "devDependencies": {
-    "concurrently": "^8.2.0",
-    "nodemon": "^3.0.1"
+    "prettier": "^3.3.3",
+    "turbo": "^2.3.3",
+    "typescript": "^5.5.4"
   },
-  "keywords": [
-    "web hosting",
-    "app development",
-    "workflow solutions",
-    "IT services"
-  ],
-  "author": "Penny Wise I.T",
-  "license": "MIT"
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild", "workerd", "sharp", "unrs-resolver"]
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
 }
