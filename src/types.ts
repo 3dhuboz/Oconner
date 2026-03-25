@@ -202,6 +202,16 @@ export interface Electrician {
   name: string;
   phone: string;
   email: string;
+  licenceNumber?: string;
+  licenceExpiry?: string;
+  carMake?: string;
+  carModel?: string;
+  carRego?: string;
+  driversLicence?: string;
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
+  notes?: string;
+  isActive?: boolean;
 }
 
 // Licensing & User Management Types

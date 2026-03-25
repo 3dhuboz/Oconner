@@ -1,9 +1,10 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { CatalogPart } from '../types';
-import { Plus, Trash2, Package, Search, Edit2, Check, X, ScanBarcode, Upload, Image, Camera, Loader2, CheckCircle2, AlertCircle, StopCircle } from 'lucide-react';
+import { Plus, Trash2, Package, Search, Edit2, Check, X, ScanBarcode, Upload, Image, Camera, Loader2, CheckCircle2, AlertCircle, StopCircle, FileSpreadsheet } from 'lucide-react';
 import { cn } from '../utils';
 import { uploadsApi } from '../services/api';
 import { Html5Qrcode } from 'html5-qrcode';
+import toast from 'react-hot-toast';
 
 interface PartsCatalogProps {
   parts: CatalogPart[];
@@ -181,6 +182,88 @@ export function PartsCatalog({ parts, setParts }: PartsCatalogProps) {
     setEditingId(null);
   };
 
+  // ── CSV/TSV Upload for supplier catalogues ──
+  const csvFileRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
+
+  const handleCsvUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    try {
+      const text = await file.text();
+      const lines = text.split(/\r?\n/).filter(l => l.trim());
+      if (lines.length < 2) { toast.error('File is empty or has no data rows'); setImporting(false); return; }
+
+      // Detect delimiter (comma, tab, semicolon)
+      const headerLine = lines[0];
+      const delimiter = headerLine.includes('\t') ? '\t' : headerLine.includes(';') ? ';' : ',';
+
+      const parseRow = (line: string): string[] => {
+        const result: string[] = [];
+        let current = '';
+        let inQuotes = false;
+        for (const ch of line) {
+          if (ch === '"') { inQuotes = !inQuotes; }
+          else if (ch === delimiter && !inQuotes) { result.push(current.trim()); current = ''; }
+          else { current += ch; }
+        }
+        result.push(current.trim());
+        return result;
+      };
+
+      const headers = parseRow(headerLine).map(h => h.toLowerCase().replace(/[^a-z0-9]/g, ''));
+
+      // Map common header names
+      const colMap: Record<string, number> = {};
+      headers.forEach((h, i) => {
+        if (['name', 'partname', 'itemname', 'description', 'item', 'product', 'productname'].includes(h)) colMap.name = i;
+        if (['cost', 'price', 'unitprice', 'sellprice', 'amount', 'defaultcost', 'rrp', 'saleprice'].includes(h)) colMap.cost = i;
+        if (['category', 'group', 'type', 'department'].includes(h)) colMap.category = i;
+        if (['barcode', 'ean', 'upc', 'sku', 'code', 'partnumber', 'partno', 'itemcode'].includes(h)) colMap.barcode = i;
+        if (['supplier', 'vendor', 'brand', 'manufacturer'].includes(h)) colMap.supplier = i;
+      });
+
+      if (colMap.name === undefined) {
+        // Try first column as name
+        colMap.name = 0;
+        if (headers.length > 1 && colMap.cost === undefined) colMap.cost = 1;
+      }
+
+      const newParts: CatalogPart[] = [];
+      const existingNames = new Set(parts.map(p => p.name.toLowerCase()));
+
+      for (let i = 1; i < lines.length; i++) {
+        const cols = parseRow(lines[i]);
+        const name = cols[colMap.name]?.trim();
+        if (!name) continue;
+        if (existingNames.has(name.toLowerCase())) continue; // skip duplicates
+
+        const cost = colMap.cost !== undefined ? parseFloat(cols[colMap.cost]?.replace(/[$,]/g, '') || '0') : 0;
+        newParts.push({
+          id: Math.random().toString(36).substr(2, 9),
+          name,
+          defaultCost: isNaN(cost) ? 0 : cost,
+          category: cols[colMap.category ?? -1]?.trim() || 'General',
+          barcode: cols[colMap.barcode ?? -1]?.trim() || undefined,
+          supplier: cols[colMap.supplier ?? -1]?.trim() || undefined,
+        });
+        existingNames.add(name.toLowerCase());
+      }
+
+      if (newParts.length === 0) {
+        toast.error('No new parts found in file (all duplicates or empty)');
+      } else {
+        setParts(prev => [...prev, ...newParts]);
+        toast.success(`Imported ${newParts.length} parts from ${file.name}`);
+      }
+    } catch (err: any) {
+      toast.error(`Import failed: ${err.message}`);
+    }
+    setImporting(false);
+    if (csvFileRef.current) csvFileRef.current.value = '';
+  };
+
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       {/* Header */}
@@ -193,12 +276,23 @@ export function PartsCatalog({ parts, setParts }: PartsCatalogProps) {
             {parts.length} part{parts.length !== 1 ? 's' : ''} &bull; Technicians can quick-add these on site
           </p>
         </div>
-        <button
-          onClick={() => setShowAdd(!showAdd)}
-          className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-medium hover:bg-slate-800 transition-colors flex items-center gap-2 self-start"
-        >
-          <Plus className="w-4 h-4" /> Add Part
-        </button>
+        <div className="flex gap-2 self-start">
+          <button
+            onClick={() => csvFileRef.current?.click()}
+            disabled={importing}
+            className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors flex items-center gap-2 disabled:opacity-50"
+          >
+            {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileSpreadsheet className="w-4 h-4" />}
+            {importing ? 'Importing...' : 'Import CSV'}
+          </button>
+          <input ref={csvFileRef} type="file" accept=".csv,.tsv,.txt" className="hidden" onChange={handleCsvUpload} />
+          <button
+            onClick={() => setShowAdd(!showAdd)}
+            className="px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-medium hover:bg-slate-800 transition-colors flex items-center gap-2"
+          >
+            <Plus className="w-4 h-4" /> Add Part
+          </button>
+        </div>
       </div>
 
       {/* Add Part Form */}

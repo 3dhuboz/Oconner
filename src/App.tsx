@@ -75,7 +75,8 @@ function AppContent() {
 
     async function fetchJobs() {
       try {
-        const jobsData = await jobsApi.list();
+        const raw = await jobsApi.list();
+        const jobsData: Job[] = Array.isArray(raw) ? raw.filter((j: any) => j && j.id) : [];
         setJobs(jobsData);
         offlineJobs.putAll(jobsData);
 
@@ -263,9 +264,9 @@ function AppContent() {
 
   return (
     <Routes>
-      <Route path="/login" element={<Login />} />
-      <Route path="/dev/login" element={<DevLogin />} />
-      <Route path="/purchase" element={<Purchase />} />
+      <Route path="/login/*" element={<Login />} />
+      <Route path="/dev/login/*" element={<DevLogin />} />
+      <Route path="/purchase/*" element={<Purchase />} />
       <Route path="/promo" element={<PromoFlyer />} />
 
       {/* Dev Only Route */}

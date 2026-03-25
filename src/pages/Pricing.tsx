@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Upload, AlertTriangle, TrendingUp, TrendingDown, Package, RefreshCw, DollarSign, BarChart3, CheckCircle2, XCircle, ArrowRight, Check, Percent, Settings, RefreshCcw, Pencil } from 'lucide-react';
 import { cn } from '../utils';
-import { partsCatalogApi } from '../services/api';
+import { partsCatalogApi, apiFetch } from '../services/api';
+import toast from 'react-hot-toast';
 
 interface PartEntry {
   _id: string;
@@ -69,11 +70,8 @@ export function Pricing() {
   const fetchParts = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/xero/pricing');
-      if (res.ok) {
-        const data = await res.json();
-        setParts(data.parts || []);
-      }
+      const data = await apiFetch('/xero/pricing');
+      setParts(data.parts || []);
     } catch (err) {
       console.error('Failed to fetch pricing:', err);
     }
@@ -146,9 +144,8 @@ export function Pricing() {
     setAnalyzing(true);
     setUploadResult(null);
     try {
-      const res = await fetch('/api/xero/import-csv', {
+      const data = await apiFetch('/xero/import-csv', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           csvData: csvText,
           supplier: csvSupplier || undefined,
@@ -156,7 +153,6 @@ export function Pricing() {
           dryRun: true,
         }),
       });
-      const data = await res.json();
       if (data.dryRun && data.items) {
         setPreviewItems(data.items.map((it: any) => ({ ...it, selected: it.status !== 'unchanged' })));
         setPreviewSummary(data.summary);
@@ -178,9 +174,8 @@ export function Pricing() {
     setUploading(true);
     setUploadResult(null);
     try {
-      const res = await fetch('/api/xero/pricing', {
+      const data = await apiFetch('/xero/pricing', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           items: selected.map(it => ({
             partName: it.partName,
@@ -192,7 +187,6 @@ export function Pricing() {
           })),
         }),
       });
-      const data = await res.json();
       setUploadResult({
         success: true,
         imported: selected.length,
@@ -236,9 +230,8 @@ export function Pricing() {
   const handleManualAdd = async () => {
     if (!manualName.trim() || !manualPrice) return;
     try {
-      await fetch('/api/xero/pricing', {
+      await apiFetch('/xero/pricing', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           items: [{
             partName: manualName.trim(),
@@ -254,8 +247,9 @@ export function Pricing() {
       setManualBarcode('');
       setShowManual(false);
       fetchParts();
-    } catch (err) {
-      console.error('Manual add failed:', err);
+      toast.success('Part added');
+    } catch (err: any) {
+      toast.error(`Failed to add: ${err.message}`);
     }
   };
 
@@ -277,14 +271,13 @@ export function Pricing() {
     const val = parseFloat(editSellValue);
     if (isNaN(val) || val <= 0) { setEditingSellPrice(null); return; }
     try {
-      await fetch('/api/xero/pricing', {
+      await apiFetch('/xero/pricing', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ partKey: part.partKey, sellPrice: val }),
       });
       setParts(prev => prev.map(p => p.partKey === part.partKey ? { ...p, sellPrice: val } : p));
-    } catch (err) {
-      console.error('Failed to save sell price:', err);
+    } catch (err: any) {
+      toast.error(`Failed to save: ${err.message}`);
     }
     setEditingSellPrice(null);
   };
@@ -292,14 +285,13 @@ export function Pricing() {
   // Clear per-item sell price (revert to global markup)
   const handleClearSellPrice = async (part: PartEntry) => {
     try {
-      await fetch('/api/xero/pricing', {
+      await apiFetch('/xero/pricing', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ partKey: part.partKey, sellPrice: null }),
       });
       setParts(prev => prev.map(p => p.partKey === part.partKey ? { ...p, sellPrice: null } : p));
-    } catch (err) {
-      console.error('Failed to clear sell price:', err);
+    } catch (err: any) {
+      toast.error(`Failed to clear: ${err.message}`);
     }
   };
 

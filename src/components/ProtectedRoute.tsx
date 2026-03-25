@@ -1,7 +1,6 @@
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { SignedIn, SignedOut, RedirectToSignIn } from '@clerk/clerk-react';
 import { Layout } from './Layout';
 import { TechLayout } from './TechLayout';
 import type { Job } from '../types';

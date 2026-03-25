@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { useUser, useAuth as useClerkAuth, useClerk } from '@clerk/clerk-react';
+import { useUser, useAuth as useClerkAuth } from '@clerk/react';
 import { userProfilesApi, setAuthTokenGetter } from '../services/api';
 import type { UserRole } from '../types';
 
@@ -40,7 +40,6 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { user: clerkUser, isLoaded, isSignedIn } = useUser();
   const { getToken, signOut } = useClerkAuth();
-  const clerk = useClerk();
   const [user, setUser] = useState<User | null>(null);
   const [license, setLicense] = useState<LicenseInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);

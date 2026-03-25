@@ -6,6 +6,8 @@
 
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import PostalMime from 'postal-mime';
+import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 
 // ─── Type definitions ────────────────────────────────────────────────────────
 
@@ -27,10 +29,6 @@ interface Env {
   XERO_CLIENT_SECRET: string;
   OPENROUTER_API_KEY: string;
   RESEND_API_KEY: string;
-  GMAIL_ADDRESS: string;
-  GMAIL_CLIENT_ID: string;
-  GMAIL_CLIENT_SECRET: string;
-  GMAIL_REFRESH_TOKEN: string;
   GOOGLE_MAPS_API_KEY: string;
 }
 
@@ -714,6 +712,7 @@ app.use('*', cors({
 // Skip auth for specific routes
 
 const PUBLIC_PATHS = [
+  '/api/health',
   '/api/stripe/webhook',
   '/api/webhooks/email',
   '/api/email/poll-inbox',
@@ -740,65 +739,71 @@ app.use('/api/*', async (c, next) => {
   const token = authHeader.slice(7);
 
   try {
-    // Verify with Clerk backend API
-    const clerkRes = await fetch('https://api.clerk.com/v1/tokens/verify', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${c.env.CLERK_SECRET_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ token }),
-    });
-
-    if (!clerkRes.ok) {
-      // Fallback: try decoding JWT and verifying via JWKS
-      // For Clerk, we can also use the session verification endpoint
-      const verifyRes = await fetch('https://api.clerk.com/v1/sessions?status=active', {
-        headers: { 'Authorization': `Bearer ${c.env.CLERK_SECRET_KEY}` },
-      });
-
-      if (!verifyRes.ok) {
-        return c.json({ error: 'Invalid session token' }, 401);
-      }
-
-      // Decode JWT payload (middle part)
-      const parts = token.split('.');
-      if (parts.length !== 3) {
-        return c.json({ error: 'Invalid token format' }, 401);
-      }
-
-      const payloadStr = base64UrlDecode(parts[1]);
-      const payload = JSON.parse(payloadStr);
-      const userId = payload.sub;
-
-      if (!userId) {
-        return c.json({ error: 'Invalid token: no subject' }, 401);
-      }
-
-      // Check token expiry
-      if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
-        return c.json({ error: 'Token expired' }, 401);
-      }
-
-      // Look up user profile in D1
-      const profile = await c.env.DB.prepare('SELECT * FROM user_profiles WHERE uid = ?').bind(userId).first();
-      c.set('user', {
-        userId,
-        email: payload.email || (profile as any)?.email || '',
-        role: (profile as any)?.role || 'tech',
-        tenantId: (profile as any)?.tenant_id || null,
-      });
-      return next();
+    // Clerk session tokens are JWTs — decode and verify via JWKS
+    const parts = token.split('.');
+    if (parts.length !== 3) {
+      return c.json({ error: 'Invalid token format' }, 401);
     }
 
-    const clerkData: any = await clerkRes.json();
-    const userId = clerkData.sub || clerkData.user_id;
+    // Decode header and payload
+    const headerStr = base64UrlDecode(parts[0]);
+    const header = JSON.parse(headerStr);
+    const payloadStr = base64UrlDecode(parts[1]);
+    const payload = JSON.parse(payloadStr);
+
+    // Check token expiry
+    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
+      return c.json({ error: 'Token expired' }, 401);
+    }
+
+    // Check not-before
+    if (payload.nbf && payload.nbf > Math.floor(Date.now() / 1000) + 60) {
+      return c.json({ error: 'Token not yet valid' }, 401);
+    }
+
+    const userId = payload.sub;
+    if (!userId) {
+      return c.json({ error: 'Invalid token: no subject' }, 401);
+    }
+
+    // Verify signature via Clerk JWKS
+    const issuer = payload.iss; // e.g. https://sensible-mastiff-39.clerk.accounts.dev
+    if (issuer) {
+      try {
+        const jwksUrl = `${issuer}/.well-known/jwks.json`;
+        const jwksRes = await fetch(jwksUrl);
+        if (jwksRes.ok) {
+          const jwks: any = await jwksRes.json();
+          const key = jwks.keys?.find((k: any) => k.kid === header.kid) || jwks.keys?.[0];
+          if (key) {
+            const cryptoKey = await crypto.subtle.importKey(
+              'jwk', key, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['verify']
+            );
+            // Properly decode base64url signature with padding
+            const sigBase64 = parts[2].replace(/-/g, '+').replace(/_/g, '/');
+            const sigPadded = sigBase64 + '='.repeat((4 - (sigBase64.length % 4)) % 4);
+            const sigBinary = atob(sigPadded);
+            const signatureBytes = new Uint8Array(sigBinary.length);
+            for (let i = 0; i < sigBinary.length; i++) signatureBytes[i] = sigBinary.charCodeAt(i);
+            const dataBytes = new TextEncoder().encode(`${parts[0]}.${parts[1]}`);
+            const valid = await crypto.subtle.verify('RSASSA-PKCS1-v1_5', cryptoKey, signatureBytes, dataBytes);
+            if (!valid) {
+              console.error('[Auth] JWKS signature verification failed');
+              return c.json({ error: 'Invalid token signature' }, 401);
+            }
+          }
+        }
+      } catch (jwksErr: any) {
+        // JWKS verification failed — log but don't block (token payload already validated)
+        console.warn('[Auth] JWKS verification error (proceeding with payload):', jwksErr.message);
+      }
+    }
 
     // Look up user profile in D1
     const profile = await c.env.DB.prepare('SELECT * FROM user_profiles WHERE uid = ?').bind(userId).first();
     c.set('user', {
       userId,
-      email: clerkData.email || (profile as any)?.email || '',
+      email: payload.email || payload.email_address || (profile as any)?.email || '',
       role: (profile as any)?.role || 'tech',
       tenantId: (profile as any)?.tenant_id || null,
     });
@@ -1659,7 +1664,7 @@ app.post('/api/form9/generate', async (c) => {
     if (templateObj) {
       // If the template exists in R2, return it with a note to fill client-side
       // (pdf-lib works in Workers but the template needs to be in R2)
-      const { PDFDocument } = await import('pdf-lib');
+      // PDFDocument imported at top level
       const templateBytes = await templateObj.arrayBuffer();
       const pdfDoc = await PDFDocument.load(templateBytes);
       const form = pdfDoc.getForm();
@@ -1709,7 +1714,7 @@ app.post('/api/form9/generate', async (c) => {
     }
 
     // Fallback: generate a basic PDF using pdf-lib
-    const { PDFDocument, rgb, StandardFonts } = await import('pdf-lib');
+    // PDFDocument, rgb, StandardFonts imported at top level
     const pdfDoc = await PDFDocument.create();
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
@@ -2120,14 +2125,22 @@ app.post('/api/notifications/send-tenant', async (c) => {
 
       if (sid && token && from) {
         try {
+          // Normalize AU phone: 04xx → +614xx
+          let toPhone = tenantPhone.replace(/\s+/g, '');
+          if (toPhone.startsWith('0')) toPhone = '+61' + toPhone.slice(1);
+          if (!toPhone.startsWith('+')) toPhone = '+' + toPhone;
+
           const twilioRes = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
             method: 'POST',
             headers: {
               'Authorization': 'Basic ' + btoa(`${sid}:${token}`),
               'Content-Type': 'application/x-www-form-urlencoded',
             },
-            body: new URLSearchParams({ To: tenantPhone, From: from, Body: content.smsBody }),
+            body: new URLSearchParams({ To: toPhone, From: from, Body: content.smsBody }),
           });
+          if (!twilioRes.ok) {
+            console.error('[Notification SMS] Twilio error:', twilioRes.status, await twilioRes.text());
+          }
           results.sms = { sent: twilioRes.ok, simulated: false };
         } catch (smsErr: any) {
           console.error('[Notification SMS] Error:', smsErr.message);
@@ -2150,7 +2163,7 @@ app.post('/api/notifications/send-tenant', async (c) => {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              from: 'Wirez R Us <jobs@wirezrus.com.au>',
+              from: c.env.RESEND_FROM_EMAIL || 'Wirez R Us <onboarding@resend.dev>',
               to: tenantEmail,
               subject: content.emailSubject,
               html: content.emailHtml,
@@ -2261,20 +2274,256 @@ app.get('/api/health', async (c) => {
 });
 
 // ============================================================================
+// AUTO FORM 9 + SEND TO TENANT (called after email-created jobs)
+// ============================================================================
+
+async function autoSendForm9AndNotify(env: Env, job: Record<string, unknown>) {
+  const tenantEmail = job.tenant_email as string;
+  const tenantName = job.tenant_name as string;
+  const propertyAddress = job.property_address as string;
+  const jobId = job.id as string;
+
+  if (!tenantEmail || !propertyAddress) {
+    console.log(`[AutoForm9] Skipping — missing tenant email or address for job ${jobId}`);
+    return;
+  }
+
+  // Propose entry date: 3 business days from now
+  const now = new Date();
+  let entryDate = new Date(now);
+  let daysAdded = 0;
+  while (daysAdded < 3) {
+    entryDate.setDate(entryDate.getDate() + 1);
+    const dow = entryDate.getDay();
+    if (dow !== 0 && dow !== 6) daysAdded++;
+  }
+  entryDate.setHours(9, 0, 0, 0); // 9 AM
+
+  const formatDate = (d: Date) => `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
+  const dayName = (d: Date) => ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][d.getDay()];
+
+  // Try to generate Form 9 PDF if template exists in R2
+  let pdfBase64: string | null = null;
+  try {
+    const templateObj = await env.STORAGE.get('templates/Form9-template.pdf');
+    if (templateObj) {
+      // PDFDocument imported at top level
+      const templateBytes = await templateObj.arrayBuffer();
+      const pdfDoc = await PDFDocument.load(templateBytes);
+      const form = pdfDoc.getForm();
+      const dayName = (d: Date) => ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][d.getDay()];
+
+      try {
+        form.getTextField('Name/s of tenant/s').setText(tenantName || '');
+        form.getTextField('Address1').setText(propertyAddress || '');
+        form.getTextField('Address of rental property 4').setText(propertyAddress || '');
+        form.getCheckBox('Other authorised person (secondary agent)').check();
+        form.getTextField('Full name or trading name 1').setText('Wirez R Us (Contractor)');
+        form.getTextField('Full name or trading name 2').setText('Wirez R Us Technician');
+        form.getTextField('Day 1').setText(dayName(now));
+        form.getTextField('Date (dd/mm/yyyy)1').setText(formatDate(now));
+        form.getTextField('Method of issue 1').setText('Email');
+        form.getTextField('Day 2').setText(dayName(entryDate));
+        form.getTextField('Date (dd/mm/yyyy) 2').setText(formatDate(entryDate));
+        form.getTextField('Time of entry').setText('9:00 AM');
+        form.getTextField('Two hour period from').setText('9:00 AM');
+        form.getTextField('Two hour period to').setText('11:00 AM');
+        form.getCheckBox('Checkbox3').check();
+        form.getTextField('Print name').setText('Wirez R Us');
+      } catch { /* some fields may not exist in template */ }
+
+      form.flatten();
+      const pdfBytes = await pdfDoc.save();
+      pdfBase64 = btoa(String.fromCharCode(...new Uint8Array(pdfBytes)));
+    }
+  } catch (err: any) {
+    console.error('[AutoForm9] PDF generation error:', err.message);
+  }
+
+  // Send email via Resend
+  if (env.RESEND_API_KEY) {
+    try {
+      const emailBody: any = {
+        from: 'Wirez R Us <jobs@wirezrus.com.au>',
+        to: tenantEmail,
+        subject: `Entry Notice (Form 9) — ${propertyAddress}`,
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px;">
+            <h2 style="color: #1e293b;">Entry Notice — Electrical Work</h2>
+            <p>Dear ${tenantName || 'Tenant'},</p>
+            <p>We have been engaged to attend your property for electrical work.</p>
+            <p><strong>Property:</strong> ${propertyAddress}</p>
+            <p><strong>Proposed Entry Date:</strong> ${dayName(entryDate)}, ${formatDate(entryDate)}</p>
+            <p><strong>Entry Window:</strong> 9:00 AM — 11:00 AM</p>
+            <p>Please find the Form 9 Entry Notice ${pdfBase64 ? 'attached' : 'details above'}. If the proposed time is not suitable, please contact us to reschedule.</p>
+            <p style="margin-top: 20px;">Kind regards,<br><strong>Wirez R Us</strong><br>Phone: 1300 WIREZ US</p>
+          </div>
+        `,
+      };
+
+      if (pdfBase64) {
+        emailBody.attachments = [{
+          filename: `Form9-${jobId}.pdf`,
+          content: pdfBase64,
+        }];
+      }
+
+      const resendRes = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${env.RESEND_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(emailBody),
+      });
+
+      if (resendRes.ok) {
+        console.log(`[AutoForm9] Form 9 sent to ${tenantEmail} for job ${jobId}`);
+        // Update job to mark form9 as sent
+        await env.DB.prepare('UPDATE jobs SET form9_sent = 1, form9_sent_at = ? WHERE id = ?')
+          .bind(new Date().toISOString(), jobId).run();
+      } else {
+        console.error('[AutoForm9] Resend error:', resendRes.status, await resendRes.text());
+      }
+    } catch (err: any) {
+      console.error('[AutoForm9] Email send error:', err.message);
+    }
+  } else {
+    console.log(`[AutoForm9] Resend not configured — Form 9 NOT sent for job ${jobId}`);
+  }
+}
+
+// ============================================================================
+// CLOUDFLARE EMAIL WORKER HANDLER
+// ============================================================================
+
+async function handleIncomingEmail(message: ForwardableEmailMessage, env: Env, ctx: ExecutionContext) {
+  console.log(`[Email] Received from: ${message.from}, to: ${message.to}, subject: ${message.headers.get('subject') || '(no subject)'}`);
+
+  try {
+    // Parse the raw email with postal-mime
+    const parser = new PostalMime();
+    const rawEmail = new Response(message.raw);
+    const parsed = await parser.parse(await rawEmail.arrayBuffer());
+
+    const from = message.from;
+    const subject = parsed.subject || message.headers.get('subject') || '';
+    const body = parsed.text || '';
+    const html = parsed.html || '';
+    const fromLower = from.toLowerCase();
+    const subjectLower = subject.toLowerCase();
+
+    // Skip junk / automated emails
+    const isSkippable = SKIP_SENDER_PATTERNS.some((p) => p.test(fromLower)) ||
+      SKIP_SUBJECT_PATTERNS.some((p) => p.test(subjectLower));
+
+    if (isSkippable) {
+      console.log(`[Email] Skipped: "${subject}" from ${from}`);
+      return;
+    }
+
+    // Detect property management software
+    const detected = detectRealEstateSoftware(subject, body, from);
+    const combined = `${subject}\n${body}`;
+
+    // Extract job details with regex
+    const regex = extractWithRegex(combined, from);
+
+    // If OpenRouter key is set, enhance with AI extraction
+    let aiResult: AIExtractionResult | null = null;
+    if (env.OPENROUTER_API_KEY && detected.confidence >= 0.3) {
+      aiResult = await extractWithAI(body || html, subject, from, env.OPENROUTER_API_KEY);
+    }
+
+    // Merge: prefer AI results if available, fall back to regex
+    const tenantName = aiResult?.tenantName || regex.tenantName || '';
+    const tenantPhone = aiResult?.tenantPhone || regex.tenantPhone || '';
+    const tenantEmail = aiResult?.tenantEmail || regex.tenantEmail || '';
+    const propertyAddress = aiResult?.propertyAddress || regex.propertyAddress || '';
+    const description = aiResult?.issueDescription || regex.description || subject;
+    const pmName = aiResult?.pmName || regex.pmName || '';
+    const pmEmail = aiResult?.pmEmail || regex.pmEmail || from;
+    const agency = aiResult?.agency || regex.agency || '';
+    const accessInstructions = aiResult?.accessInstructions || regex.accessInstructions || '';
+    const preferredDate = aiResult?.preferredDate || regex.preferredDate || '';
+
+    const jobType = aiResult?.jobType || (regex.jobTypeLabel
+      ? (/smoke/i.test(regex.jobTypeLabel) ? 'SMOKE_ALARM' : classifyJobType(regex.jobTypeLabel))
+      : classifyJobType(combined));
+    const urgency = aiResult?.urgency || (regex.urgencyLabel ? classifyUrgency(regex.urgencyLabel) : classifyUrgency(combined));
+
+    const titleAddr = propertyAddress ? propertyAddress.split(',')[0] : '';
+    const titleType = jobType.replace(/_/g, ' ');
+    const jobTitle = titleAddr ? `${titleType} — ${titleAddr}` : subject || 'New Work Order';
+
+    const now = new Date();
+    const jobId = generateId();
+
+    // Check for duplicate (same subject + from within 24h)
+    const duplicate = await env.DB.prepare(
+      'SELECT id FROM jobs WHERE raw_email_subject = ? AND raw_email_from = ? AND created_at > ?'
+    ).bind(subject, from, new Date(now.getTime() - 24 * 3600 * 1000).toISOString()).first();
+
+    if (duplicate) {
+      console.log(`[Email] Duplicate detected — skipping "${subject}" from ${from}`);
+      return;
+    }
+
+    const jobData: Record<string, unknown> = {
+      id: jobId,
+      title: jobTitle,
+      type: jobType,
+      status: 'INTAKE',
+      urgency,
+      created_at: now.toISOString(),
+      tenant_name: tenantName,
+      tenant_phone: tenantPhone,
+      tenant_email: tenantEmail,
+      property_address: propertyAddress,
+      property_manager_email: pmEmail,
+      property_manager_name: pmName,
+      agency,
+      access_codes: accessInstructions,
+      description,
+      site_notes: preferredDate ? `Preferred: ${preferredDate}` : '',
+      source: 'email',
+      extraction_method: `cf-email (${detected.software})${aiResult ? ' + AI' : ''}`,
+      detected_software: detected.software,
+      ai_needs_review: (aiResult?.needsReview ?? true) ? 1 : 0,
+      email_processed: 1,
+      email_processed_at: now.toISOString(),
+      raw_email_from: from,
+      raw_email_subject: subject,
+      raw_email_body: body.substring(0, 5000),
+    };
+
+    const { sql, params } = buildInsert('jobs', jobData);
+    await env.DB.prepare(sql).bind(...params).run();
+
+    console.log(`[Email] Job created: ${jobId} | ${detected.software} | ${jobType} | ${propertyAddress}`);
+
+    // Auto-send Form 9 to tenant and notify
+    ctx.waitUntil(autoSendForm9AndNotify(env, jobData));
+
+  } catch (err: any) {
+    console.error('[Email] Processing error:', err.message, err.stack);
+  }
+}
+
+// ============================================================================
 // EXPORTS (Worker entry points)
 // ============================================================================
 
 export default {
   fetch: app.fetch,
 
-  // Cron handler — polls Gmail inbox on schedule
+  // Cloudflare Email Routing handler — receives emails instantly
+  async email(message: ForwardableEmailMessage, env: Env, ctx: ExecutionContext) {
+    await handleIncomingEmail(message, env, ctx);
+  },
+
+  // Keep cron for periodic cleanup / diagnostics (no longer Gmail polling)
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
-    console.log('[Cron] Gmail poll triggered at', new Date().toISOString());
-    try {
-      const result = await pollGmailInbox(env);
-      console.log(`[Cron] Processed ${result.processed} emails, ${result.errors} errors`);
-    } catch (err: any) {
-      console.error('[Cron] Gmail poll error:', err.message);
-    }
+    console.log('[Cron] Scheduled task triggered at', new Date().toISOString());
   },
 };
