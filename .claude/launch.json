@@ -2,39 +2,11 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "Storefront (Next.js)",
-      "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
-      "runtimeArgs": ["-e", "const s=require('child_process').spawn('pnpm',['--filter','@butcher/storefront','exec','next','dev','-p',String(process.env.PORT||3000)],{stdio:'inherit',shell:true});s.on('exit',c=>process.exit(c))"],
+      "name": "pennywise-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["start"],
       "port": 3000,
-      "autoPort": true
-    },
-    {
-      "name": "Admin (Vite)",
-      "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
-      "runtimeArgs": ["-e", "const s=require('child_process').spawn('pnpm',['--filter','@butcher/admin','dev'],{stdio:'inherit',shell:true});s.on('exit',c=>process.exit(c))"],
-      "port": 3001,
-      "autoPort": true
-    },
-    {
-      "name": "Driver (Vite PWA)",
-      "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
-      "runtimeArgs": ["-e", "const s=require('child_process').spawn('pnpm',['--filter','@butcher/driver','dev'],{stdio:'inherit',shell:true});s.on('exit',c=>process.exit(c))"],
-      "port": 3002,
-      "autoPort": true
-    },
-    {
-      "name": "API (Hono/Wrangler)",
-      "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
-      "runtimeArgs": ["-e", "const s=require('child_process').spawn('pnpm',['--filter','@butcher/api','dev'],{stdio:'inherit',shell:true});s.on('exit',c=>process.exit(c))"],
-      "port": 8787,
-      "autoPort": true
-    },
-    {
-      "name": "Workers (all)",
-      "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
-      "runtimeArgs": ["-e", "const {spawn}=require('child_process');[['@butcher/worker-gps-relay','8788'],['@butcher/worker-image-upload','8790'],['@butcher/worker-payment-handler','8791'],['@butcher/worker-pdf-generator','8789'],['@butcher/worker-route-proxy','8792']].forEach(([f,p])=>spawn('pnpm',['--filter',f,'dev','--port',p],{stdio:'inherit',shell:true}));require('net').createServer().listen(8788)"],
-      "port": 8788,
-      "autoPort": true
+      "cwd": "client"
     }
   ]
 }

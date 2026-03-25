@@ -1,0 +1,15 @@
+PORT=5000
+NODE_ENV=development
+MONGODB_URI=mongodb+srv://admin:60tpprx7@cluster0.l8yvsld.mongodb.net/pennywise-it?retryWrites=true&w=majority&appName=Cluster0
+JWT_SECRET=pw-it-dev-secret-key-change-in-production
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=
+SMTP_PASS=
+SITEGROUND_API_URL=https://api.siteground.com
+SITEGROUND_API_TOKEN=
+ADMIN_EMAIL=admin@pennywiseit.com.au
+ADMIN_PASSWORD=admin123
+SQUARE_ACCESS_TOKEN=
+SQUARE_LOCATION_ID=
+SQUARE_ENVIRONMENT=sandbox
