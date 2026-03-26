@@ -215,7 +215,7 @@ const Services = () => {
                       <Link to="/autohue" className="btn btn-primary">
                         Learn More <ArrowRight size={16} />
                       </Link>
-                      <a href="https://autohue.vercel.app" target="_blank" rel="noopener noreferrer" className="btn btn-secondary">
+                      <a href="https://autohue.app" target="_blank" rel="noopener noreferrer" className="btn btn-secondary">
                         Launch App <ExternalLink size={16} />
                       </a>
                     </div>

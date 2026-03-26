@@ -108,7 +108,7 @@ async function connectDB() {
         icon: 'palette',
         category: 'automotive',
         routePath: '/autohue',
-        demoUrl: 'https://www.pennywiseit.com.au/autohue',
+        demoUrl: 'https://autohue.app',
         setupFee: 199,
         features: ['AI Car Detection (YOLOv8)', 'Dominant Colour Extraction', '11 Colour Categories', 'Bulk Photo Upload', 'Automatic Folder Sorting', 'ZIP Download Export', 'Real-Time Processing Status', 'White-Label Branding', 'API Access'],
         techStack: ['YOLOv8', 'PyTorch', 'OpenCV', 'K-Means Clustering', 'React', 'Vercel'],

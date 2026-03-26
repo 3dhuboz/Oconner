@@ -25,7 +25,7 @@ const SOLUTIONS = [
     app: 'AutoHue',
     slug: 'autohue',
     route: '/autohue',
-    demo: 'https://autohue.vercel.app',
+    demo: 'https://autohue.app',
     description: 'AI-powered car photo colour sorter. Upload vehicle photos and our AI detects cars, identifies colours, and sorts them into organised folders instantly.',
     price: 'From $29/mo'
   }
