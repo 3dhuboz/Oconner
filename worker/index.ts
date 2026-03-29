@@ -697,10 +697,23 @@ const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 // ─── CORS ────────────────────────────────────────────────────────────────────
 
+const ALLOWED_ORIGINS = [
+  'https://wirezapp.au',
+  'https://www.wirezapp.au',
+  'https://wires-r-us.pages.dev',
+];
+
+function isAllowedOrigin(origin: string): boolean {
+  if (ALLOWED_ORIGINS.includes(origin)) return true;
+  if (/^https:\/\/[\w-]+\.wires-r-us\.pages\.dev$/.test(origin)) return true;
+  if (/^http:\/\/localhost(:\d+)?$/.test(origin)) return true;
+  return false;
+}
+
 app.use('*', cors({
   origin: (origin) => {
-    // In dev, allow all. In prod, you'd restrict this to your frontend domain.
-    return origin || '*';
+    if (origin && isAllowedOrigin(origin)) return origin;
+    return '';
   },
   allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization'],
