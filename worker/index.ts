@@ -716,7 +716,7 @@ app.use('*', cors({
     if (origin && isAllowedOrigin(origin)) return origin;
     return '';
   },
-  allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization'],
   exposeHeaders: ['Content-Length'],
   maxAge: 86400,
@@ -740,8 +740,8 @@ app.use('/api/*', async (c, next) => {
     return next();
   }
 
-  // Skip auth for serving uploaded files — img tags can't send Bearer tokens
-  if (c.req.method === 'GET' && path.startsWith('/api/uploads/')) {
+  // Skip auth for upload PUT and GET — PUT uses raw fetch (no token), GET is for <img> tags
+  if ((c.req.method === 'GET' || c.req.method === 'PUT') && path.startsWith('/api/uploads/')) {
     return next();
   }
 
