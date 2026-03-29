@@ -2,6 +2,11 @@ name = "wirez-r-us-api"
 main = "worker/index.ts"
 compatibility_date = "2024-12-01"
 
+# Custom domain — routes api.wirezapp.au directly to this Worker
+[[routes]]
+pattern = "api.wirezapp.au"
+custom_domain = true
+
 [vars]
 ENVIRONMENT = "production"
 

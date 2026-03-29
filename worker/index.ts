@@ -700,6 +700,7 @@ const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 const ALLOWED_ORIGINS = [
   'https://wirezapp.au',
   'https://www.wirezapp.au',
+  'https://api.wirezapp.au',
   'https://wires-r-us.pages.dev',
 ];
 
@@ -905,6 +906,9 @@ app.post('/api/jobs', async (c) => {
     if (!snakeData.created_at) snakeData.created_at = new Date().toISOString();
     if (!snakeData.status) snakeData.status = 'INTAKE';
 
+    // Sanitize FK fields: empty strings → null to avoid FK constraint violations
+    if (snakeData.assigned_electrician_id === '') snakeData.assigned_electrician_id = null;
+
     const { sql, params } = buildInsert('jobs', snakeData);
     await c.env.DB.prepare(sql).bind(...params).run();
 
@@ -914,8 +918,8 @@ app.post('/api/jobs', async (c) => {
     const result = await attachJobChildren(c.env.DB, job as Record<string, unknown>);
     return c.json(result, 201);
   } catch (err: any) {
-    console.error('[POST /api/jobs]', err.message);
-    return c.json({ error: err.message }, 500);
+    console.error('[POST /api/jobs]', err.message, err.stack);
+    return c.json({ error: err.message || 'Unknown server error' }, 500);
   }
 });
 
@@ -928,6 +932,8 @@ app.patch('/api/jobs/:id', async (c) => {
 
     if (Object.keys(scalar).length > 0) {
       const snakeData = toSnakeCase(scalar);
+      // Sanitize FK fields: empty strings → null
+      if (snakeData.assigned_electrician_id === '') snakeData.assigned_electrician_id = null;
       const { sql, params } = buildUpdate('jobs', snakeData, 'id', id);
       await c.env.DB.prepare(sql).bind(...params).run();
     }
@@ -1929,7 +1935,7 @@ app.post('/api/webhooks/email', async (c) => {
       source: 'email',
       extraction_method: extractionMethod,
       detected_software: detectedSoftware,
-      ai_needs_review: aiNeedsReview ? 1 : 0,
+      ai_needs_review: 0,
       ai_confidence: aiConfidence ? JSON.stringify(aiConfidence) : null,
       raw_email_from: from,
       raw_email_subject: subject,
@@ -2014,7 +2020,7 @@ async function pollGmailInbox(env: Env): Promise<{ processed: number; errors: nu
         source: 'email',
         extraction_method: `gmail-poll (${detected.software})`,
         detected_software: detected.software,
-        ai_needs_review: detected.confidence < 0.5 || !regex.propertyAddress ? 1 : 0,
+        ai_needs_review: 0,
         email_processed: 1,
         email_processed_at: now.toISOString(),
         raw_email_from: from,
@@ -2502,7 +2508,7 @@ async function handleIncomingEmail(message: ForwardableEmailMessage, env: Env, c
       source: 'email',
       extraction_method: `cf-email (${detected.software})${aiResult ? ' + AI' : ''}`,
       detected_software: detected.software,
-      ai_needs_review: (aiResult?.needsReview ?? true) ? 1 : 0,
+      ai_needs_review: 0,
       email_processed: 1,
       email_processed_at: now.toISOString(),
       raw_email_from: from,
