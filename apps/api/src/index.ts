@@ -69,7 +69,9 @@ app.patch('/api/customers/me', async (c) => {
     const clerk = await verifyClerkToken(c.req.header('Authorization') ?? null, c.env.CLERK_SECRET_KEY);
     if (!clerk) return c.json({ error: 'Unauthorized' }, 401);
     const db = drizzle(c.env.DB);
-    const body = await c.req.json<{ phone?: string; addresses?: object[]; name?: string }>();
+    const body = await c.req.json<{ phone?: string; addresses?: object[]; name?: string; email?: string }>();
+    // Resolve email: prefer body.email, then clerk token, then empty
+    const resolvedEmail = body.email || clerk.email || '';
     let [customer] = await db.select().from(customersTable).where(eq(customersTable.clerkId, clerk.clerkId)).limit(1);
     if (!customer) {
       const now = Date.now();
@@ -77,8 +79,8 @@ app.patch('/api/customers/me', async (c) => {
       await db.insert(customersTable).values({
         id,
         clerkId: clerk.clerkId,
-        email: clerk.email,
-        name: body.name ?? clerk.email,
+        email: resolvedEmail,
+        name: body.name || resolvedEmail || 'Customer',
         phone: body.phone ?? '',
         addresses: JSON.stringify(body.addresses ?? []),
         createdAt: now,
@@ -90,6 +92,9 @@ app.patch('/api/customers/me', async (c) => {
     if (body.phone !== undefined) patch.phone = body.phone;
     if (body.addresses !== undefined) patch.addresses = JSON.stringify(body.addresses);
     if (body.name !== undefined) patch.name = body.name;
+    // Backfill empty email/name on existing records
+    if (!customer.email && resolvedEmail) patch.email = resolvedEmail;
+    if (!customer.name && (body.name || resolvedEmail)) patch.name = body.name || resolvedEmail;
     await db.update(customersTable).set(patch).where(eq(customersTable.id, customer.id));
     return c.json({ ok: true });
   } catch (err: unknown) {
