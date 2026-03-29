@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { cn } from '../utils';
-import { uploadsApi } from '../services/api';
+import { uploadsApi, partsCatalogApi } from '../services/api';
 import toast from 'react-hot-toast';
 import jsPDF from 'jspdf';
 
@@ -239,6 +239,20 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const prevJobIdRef = useRef<string | undefined>(undefined);
 
+  // Self-fetch parts catalog — don't rely solely on the prop (may be empty on first render)
+  const [localParts, setLocalParts] = useState<CatalogPart[]>(partsCatalog);
+  useEffect(() => {
+    // If prop already has data, use it immediately
+    if (partsCatalog.length > 0) {
+      setLocalParts(partsCatalog);
+      return;
+    }
+    // Otherwise fetch directly
+    partsCatalogApi.list().then((data: CatalogPart[]) => {
+      if (Array.isArray(data) && data.length > 0) setLocalParts(data);
+    }).catch(() => {});
+  }, [partsCatalog]);
+
   // Derive job from props — no hook
   const job = jobs.find(j => j.id === id);
 
@@ -398,7 +412,7 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
   const subtotal = laborCost + materialsCost;
   const total = subtotal * 1.1;
 
-  const filteredCatalog = partsCatalog.filter(p =>
+  const filteredCatalog = localParts.filter(p =>
     p.name.toLowerCase().includes(partSearch.toLowerCase()) ||
     (p.category ?? '').toLowerCase().includes(partSearch.toLowerCase())
   );
