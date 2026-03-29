@@ -65,32 +65,38 @@ app.get('/api/customers/me', async (c) => {
 });
 
 app.patch('/api/customers/me', async (c) => {
-  const clerk = await verifyClerkToken(c.req.header('Authorization') ?? null, c.env.CLERK_SECRET_KEY);
-  if (!clerk) return c.json({ error: 'Unauthorized' }, 401);
-  const db = drizzle(c.env.DB);
-  const body = await c.req.json<{ phone?: string; addresses?: object[]; name?: string }>();
-  let [customer] = await db.select().from(customersTable).where(eq(customersTable.clerkId, clerk.clerkId)).limit(1);
-  if (!customer) {
-    const now = Date.now();
-    const id = crypto.randomUUID();
-    await db.insert(customersTable).values({
-      id,
-      clerkId: clerk.clerkId,
-      email: clerk.email,
-      name: body.name ?? clerk.email,
-      phone: body.phone ?? '',
-      addresses: JSON.stringify(body.addresses ?? []),
-      createdAt: now,
-      updatedAt: now,
-    });
+  try {
+    const clerk = await verifyClerkToken(c.req.header('Authorization') ?? null, c.env.CLERK_SECRET_KEY);
+    if (!clerk) return c.json({ error: 'Unauthorized' }, 401);
+    const db = drizzle(c.env.DB);
+    const body = await c.req.json<{ phone?: string; addresses?: object[]; name?: string }>();
+    let [customer] = await db.select().from(customersTable).where(eq(customersTable.clerkId, clerk.clerkId)).limit(1);
+    if (!customer) {
+      const now = Date.now();
+      const id = crypto.randomUUID();
+      await db.insert(customersTable).values({
+        id,
+        clerkId: clerk.clerkId,
+        email: clerk.email,
+        name: body.name ?? clerk.email,
+        phone: body.phone ?? '',
+        addresses: JSON.stringify(body.addresses ?? []),
+        createdAt: now,
+        updatedAt: now,
+      });
+      return c.json({ ok: true });
+    }
+    const patch: Record<string, unknown> = { updatedAt: Date.now() };
+    if (body.phone !== undefined) patch.phone = body.phone;
+    if (body.addresses !== undefined) patch.addresses = JSON.stringify(body.addresses);
+    if (body.name !== undefined) patch.name = body.name;
+    await db.update(customersTable).set(patch).where(eq(customersTable.id, customer.id));
     return c.json({ ok: true });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    console.error('PATCH /api/customers/me failed:', message);
+    return c.json({ error: message }, 500);
   }
-  const patch: Record<string, unknown> = { updatedAt: Date.now() };
-  if (body.phone !== undefined) patch.phone = body.phone;
-  if (body.addresses !== undefined) patch.addresses = JSON.stringify(body.addresses);
-  if (body.name !== undefined) patch.name = body.name;
-  await db.update(customersTable).set(patch).where(eq(customersTable.id, customer.id));
-  return c.json({ ok: true });
 });
 
 app.get('/api/subscriptions/mine', async (c) => {
@@ -340,7 +346,7 @@ app.post('/api/push/admin/test-send', requireAuth, requireRole('admin'), async (
   if (!customer) return c.json({ error: 'No customer record for your account' }, 404);
   const subs = await db.select().from(pushSubscriptions).where(eq(pushSubscriptions.customerId, customer.id));
   if (!subs.length) return c.json({ error: 'No push subscriptions found for your account. Subscribe first from the storefront.' }, 404);
-  const contact = `mailto:${c.env.FROM_EMAIL}`;
+  const contact = `mailto:${c.env.FROM_EMAIL.replace(/.*<(.+)>/, '$1')}`;
   let sent = 0;
   for (const s of subs) {
     const ok = await sendPush({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, { title, body, url }, c.env.VAPID_PUBLIC_KEY, c.env.VAPID_PRIVATE_KEY, contact);
@@ -356,7 +362,7 @@ app.post('/api/push/admin/broadcast', requireAuth, requireRole('admin'), async (
   const { sendPush } = await import('./lib/webpush');
   const db = drizzle(c.env.DB);
   const subs = await db.select().from(pushSubscriptions);
-  const contact = `mailto:${c.env.FROM_EMAIL}`;
+  const contact = `mailto:${c.env.FROM_EMAIL.replace(/.*<(.+)>/, '$1')}`;
   let sent = 0;
   for (const s of subs) {
     const ok = await sendPush({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, { title, body, url }, c.env.VAPID_PUBLIC_KEY, c.env.VAPID_PRIVATE_KEY, contact);

@@ -65,7 +65,7 @@ export function buildOrderEmail(type: string, data: OrderEmailData): string {
     order_confirmation: `<p>Thank you for your order! We've confirmed <strong>#${data.orderId.slice(-8).toUpperCase()}</strong> for delivery on <strong>${data.deliveryDate}</strong>.</p>`,
     day_before: `<p>Your order is scheduled for delivery <strong>tomorrow, ${data.deliveryDate}</strong>. We'll notify you when it's on its way!</p>`,
     out_for_delivery: `<p>Your order is on its way! Our driver is heading to you now.</p>`,
-    delivered: `<p>Your order has been successfully delivered. Thank you for choosing The Butcher Online!</p>`,
+    delivered: `<p>Your order has been successfully delivered. Thank you for choosing O'Connor Agriculture!</p>`,
     order_cancelled: `<p>Your order <strong>#${data.orderId.slice(-8).toUpperCase()}</strong> has been cancelled. Contact us if this is an error.</p>`,
     refund_confirmation: `<p>Your refund of <strong>$${(data.total / 100).toFixed(2)}</strong> has been processed and will appear within 3-5 business days.</p>`,
   };
@@ -74,14 +74,14 @@ export function buildOrderEmail(type: string, data: OrderEmailData): string {
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="font-family:Arial,sans-serif;color:#333;max-width:600px;margin:0 auto;padding:20px">
-  <div style="background:#1B3A2E;padding:20px;border-radius:8px 8px 0 0">
-    <h1 style="color:white;margin:0;font-size:24px">The Butcher Online</h1>
+  <div style="background:#4E7732;padding:20px;border-radius:8px 8px 0 0">
+    <h1 style="color:white;margin:0;font-size:24px">O'Connor Agriculture</h1>
   </div>
   <div style="background:#f9f9f9;padding:24px;border:1px solid #eee;border-top:none;border-radius:0 0 8px 8px">
     <p>Hi ${data.customerName},</p>
     ${bodies[type] ?? '<p>Your order has been updated.</p>'}
     <table style="width:100%;border-collapse:collapse;margin:16px 0">
-      <thead><tr style="background:#1B3A2E;color:white">
+      <thead><tr style="background:#4E7732;color:white">
         <th style="padding:8px;text-align:left">Item</th>
         <th style="padding:8px;text-align:right">Price</th>
       </tr></thead>
@@ -94,10 +94,10 @@ export function buildOrderEmail(type: string, data: OrderEmailData): string {
       </tfoot>
     </table>
     <p><strong>Delivery Address:</strong> ${data.deliveryAddress}</p>
-    <p><a href="${data.trackingUrl}" style="background:#1B3A2E;color:white;padding:12px 24px;text-decoration:none;border-radius:6px;display:inline-block">Track My Order</a></p>
+    <p><a href="${data.trackingUrl}" style="background:#4E7732;color:white;padding:12px 24px;text-decoration:none;border-radius:6px;display:inline-block">Track My Order</a></p>
     ${data.proofUrl ? `<p><a href="${data.proofUrl}">View Proof of Delivery</a></p>` : ''}
     <hr style="margin:24px 0;border:none;border-top:1px solid #eee">
-    <p style="font-size:12px;color:#999">The Butcher Online — Fresh quality meat delivered to your door.</p>
+    <p style="font-size:12px;color:#999">O'Connor Agriculture — Fresh quality meat delivered to your door.</p>
   </div>
 </body>
 </html>`;

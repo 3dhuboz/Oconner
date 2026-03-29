@@ -65,7 +65,7 @@ export async function notifyCustomer(
   if (!env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY) return;
 
   const subs = await db.select().from(pushSubscriptions).where(eq(pushSubscriptions.customerId, customerId));
-  const contact = `mailto:${env.FROM_EMAIL}`;
+  const contact = `mailto:${env.FROM_EMAIL.replace(/.*<(.+)>/, '$1')}`;
 
   await Promise.allSettled(subs.map((s) =>
     sendPush(
