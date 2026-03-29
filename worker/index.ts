@@ -740,6 +740,11 @@ app.use('/api/*', async (c, next) => {
     return next();
   }
 
+  // Skip auth for serving uploaded files — img tags can't send Bearer tokens
+  if (c.req.method === 'GET' && path.startsWith('/api/uploads/')) {
+    return next();
+  }
+
   // Also skip OPTIONS (CORS preflight)
   if (c.req.method === 'OPTIONS') {
     return next();
@@ -2220,14 +2225,14 @@ app.post('/api/uploads/presign', async (c) => {
     const { filename, contentType } = await c.req.json();
     if (!filename) return c.json({ error: 'filename is required' }, 400);
 
-    // Generate a unique key
-    const ext = filename.split('.').pop() || 'bin';
-    const key = `uploads/${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${ext}`;
+    // Generate a unique key (no leading path — avoids double-prefix in URL)
+    const ext = (filename.split('.').pop() || 'bin').toLowerCase();
+    const key = `${Date.now()}-${crypto.randomUUID().slice(0, 8)}.${ext}`;
 
-    // For R2, we return the key and let the client upload via the Worker
-    // (R2 presigned URLs require the S3 API which needs additional config)
+    // Return the key and upload URL for direct PUT upload via the Worker
     return c.json({
       key,
+      url: `/api/uploads/${key}`,
       uploadUrl: `/api/uploads/${key}`,
       method: 'PUT',
       headers: { 'Content-Type': contentType || 'application/octet-stream' },

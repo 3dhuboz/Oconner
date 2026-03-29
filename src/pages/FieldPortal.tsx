@@ -347,12 +347,17 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
     setUploading(true);
     try {
       const filename = `job-photos/${job.id}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-      const { url, key } = await uploadsApi.getPresignedUrl(filename, file.type);
-      await fetch(url, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } });
-      const photoUrl = uploadsApi.getUrl(key);
-      setPhotos(prev => [...prev, photoUrl]);
+      // Presign returns { key, url, uploadUrl } — url is relative e.g. /api/uploads/key
+      const presign = await uploadsApi.getPresignedUrl(filename, file.type);
+      // Build absolute URL from the API base (strip trailing /api, add upload path)
+      const apiOrigin = (import.meta.env.VITE_API_URL || '/api').replace(/\/api$/, '');
+      const uploadUrl = presign.url.startsWith('http') ? presign.url : `${apiOrigin}${presign.url}`;
+      await fetch(uploadUrl, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } });
+      // Same absolute URL is the public photo URL (GET is now auth-free)
+      setPhotos(prev => [...prev, uploadUrl]);
       toast.success('Photo uploaded');
-    } catch {
+    } catch (err: any) {
+      console.error('[Photo upload]', err);
       toast.error('Photo upload failed');
     }
     setUploading(false);
