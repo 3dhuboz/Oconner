@@ -174,6 +174,7 @@ export default function AccountPage() {
     try {
       await api.customers.updateMe({
         name: setupName || user.fullName || user.primaryEmailAddress?.emailAddress || '',
+        email: user.primaryEmailAddress?.emailAddress || '',
         phone: setupPhone,
         addresses: [setupAddr],
       });
