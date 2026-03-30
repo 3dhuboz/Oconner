@@ -1773,7 +1773,7 @@ app.post('/api/stripe/create-checkout-session', async (c) => {
   try {
     if (!c.env.STRIPE_SECRET_KEY) return c.json({ error: 'Stripe is not configured.' }, 400);
     const { priceId } = await c.req.json();
-    const appUrl = 'https://app.wirezrus.com.au'; // Adjust as needed
+    const appUrl = 'https://app.wirezapp.au';
 
     const data = await stripeRequest('POST', '/checkout/sessions', c.env.STRIPE_SECRET_KEY, {
       'payment_method_types[0]': 'card',
