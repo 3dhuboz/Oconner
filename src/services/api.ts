@@ -83,6 +83,7 @@ export const techStockApi = {
   list: (technicianId?: string) => apiFetch(`/tech-stock${technicianId ? `?technicianId=${technicianId}` : ''}`),
   upsert: (data: any) => apiFetch('/tech-stock', { method: 'POST', body: JSON.stringify(data) }),
   update: (id: string, data: any) => apiFetch(`/tech-stock/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  delete: (id: string) => apiFetch(`/tech-stock/${id}`, { method: 'DELETE' }),
 };
 
 // ─── Stock Movements ──────────────────

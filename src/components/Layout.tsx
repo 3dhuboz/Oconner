@@ -65,7 +65,7 @@ export function Layout({ children, jobs = [] }: LayoutProps) {
         <div className="px-4 sm:px-6 pt-5 pb-4 flex items-center justify-between border-b border-white/10">
           <div className="flex items-center gap-3">
             <img
-              src="/logo.png"
+              src="/logo-icon.png"
               alt="Wirez R Us"
               className="w-12 h-12 sm:w-14 sm:h-14 object-contain drop-shadow-lg"
               style={{ filter: 'drop-shadow(0 0 10px #F5A623) drop-shadow(0 0 4px #F5A623)' }}

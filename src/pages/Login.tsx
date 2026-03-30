@@ -5,7 +5,7 @@ export function Login() {
     <div className="min-h-screen flex items-center justify-center bg-slate-100 px-4">
       <div className="w-full max-w-md mx-auto text-center">
         <div className="mb-8">
-          <img src="/logo.png" alt="Wirez R Us" className="h-20 mx-auto mb-4" />
+          <img src="/logo-black.png" alt="Wirez R Us" className="h-20 mx-auto mb-4" />
           <h1 className="text-2xl font-bold text-slate-900">Wirez R Us</h1>
           <p className="text-slate-500">Field Management System</p>
         </div>

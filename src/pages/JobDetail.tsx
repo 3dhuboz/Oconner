@@ -30,7 +30,9 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
   
   const [newNote, setNewNote] = useState('');
   const [isSyncingXero, setIsSyncingXero] = useState(false);
-  const [proposedEntryDate, setProposedEntryDate] = useState('');
+  const [proposedEntryDate, setProposedEntryDate] = useState(
+    job?.scheduledDate ? format(new Date(job.scheduledDate), "yyyy-MM-dd'T'HH:mm") : ''
+  );
   const [showRawEmail, setShowRawEmail] = useState(false);
 
   // ─── Delete confirmation state (multi-step) ───
@@ -74,6 +76,13 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
     agency: '',
   });
   const [confirmingReview, setConfirmingReview] = useState(false);
+
+  // Keep Form 9 entry date in sync when the scheduled date is set or changed
+  React.useEffect(() => {
+    if (job?.scheduledDate) {
+      setProposedEntryDate(format(new Date(job.scheduledDate), "yyyy-MM-dd'T'HH:mm"));
+    }
+  }, [job?.scheduledDate]);
 
   React.useEffect(() => {
     if (job?.aiNeedsReview) {
@@ -1858,50 +1867,57 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
                 )}
 
                 {/* Form 9 — always available (no 3-contact rule), 2hr window */}
-                {!job.form9Sent && (
-                  <div className="mt-4 p-4 bg-slate-50 border border-slate-200 rounded-xl">
-                    <p className="text-sm text-slate-700 font-medium mb-1">Form 9 — Entry Notice</p>
-                    <p className="text-xs text-slate-500 mb-3">
-                      {job.type === 'SMOKE_ALARM'
+                <div className="mt-4 p-4 bg-slate-50 border border-slate-200 rounded-xl">
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-sm text-slate-700 font-medium">Form 9 — Entry Notice</p>
+                    {job.form9Sent && (
+                      <span className="flex items-center gap-1 text-xs text-emerald-700 font-semibold bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                        <CheckCircle2 className="w-3 h-3" />
+                        Sent {format(new Date(job.form9SentAt!), 'MMM d')}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500 mb-3">
+                    {job.form9Sent
+                      ? 'Date changed? Update the entry date below and resend a new Form 9 to the tenant.'
+                      : job.type === 'SMOKE_ALARM'
                         ? 'SA check — Form 9 will be auto-sent to tenant on generation.'
                         : 'Non-SA job — Form 9 generated for download. Click "Send" separately when ready.'}
-                    </p>
-                    <div className="mb-3">
-                      <label className="block text-xs font-medium text-slate-600 mb-1">Proposed Entry Date & Time (Min 24h notice, 2hr window)</label>
-                      <input 
-                        type="datetime-local" 
-                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white"
-                        value={proposedEntryDate}
-                        onChange={e => setProposedEntryDate(e.target.value)}
-                      />
-                      {proposedEntryDate && (
-                        <p className="text-xs text-slate-500 mt-1">
-                          Window: {format(new Date(proposedEntryDate), 'h:mm a')} – {format(new Date(new Date(proposedEntryDate).getTime() + 2 * 60 * 60 * 1000), 'h:mm a')}
-                        </p>
-                      )}
-                    </div>
-                    <button 
-                      onClick={handleGenerateForm9} 
-                      disabled={!proposedEntryDate}
-                      className={cn(
-                        "w-full px-4 py-2 text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 disabled:cursor-not-allowed",
-                        job.type === 'SMOKE_ALARM'
+                  </p>
+                  <div className="mb-3">
+                    <label className="block text-xs font-medium text-slate-600 mb-1">Proposed Entry Date & Time (Min 24h notice, 2hr window)</label>
+                    <input
+                      type="datetime-local"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white"
+                      value={proposedEntryDate}
+                      onChange={e => setProposedEntryDate(e.target.value)}
+                    />
+                    {proposedEntryDate && (
+                      <p className="text-xs text-slate-500 mt-1">
+                        Window: {format(new Date(proposedEntryDate), 'h:mm a')} – {format(new Date(new Date(proposedEntryDate).getTime() + 2 * 60 * 60 * 1000), 'h:mm a')}
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    onClick={handleGenerateForm9}
+                    disabled={!proposedEntryDate}
+                    className={cn(
+                      "w-full px-4 py-2 text-white rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 disabled:cursor-not-allowed",
+                      job.form9Sent
+                        ? "bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300"
+                        : job.type === 'SMOKE_ALARM'
                           ? "bg-rose-600 hover:bg-rose-700 disabled:bg-rose-300"
                           : "bg-slate-700 hover:bg-slate-800 disabled:bg-slate-300"
-                      )}
-                    >
-                      <FileText className="w-4 h-4" />
-                      {job.type === 'SMOKE_ALARM' ? 'Generate & Send Form 9 to Tenant' : 'Generate Form 9 (Download Only)'}
-                    </button>
-                  </div>
-                )}
-                
-                {job.form9Sent && (
-                  <div className="mt-4 p-3 bg-emerald-50 border border-emerald-100 rounded-xl flex items-center gap-2 text-sm text-emerald-800 font-medium">
-                    <CheckCircle2 className="w-4 h-4" />
-                    Form 9 Sent ({format(new Date(job.form9SentAt!), 'MMM d')})
-                  </div>
-                )}
+                    )}
+                  >
+                    <FileText className="w-4 h-4" />
+                    {job.form9Sent
+                      ? 'Resend Form 9 with Updated Date'
+                      : job.type === 'SMOKE_ALARM'
+                        ? 'Generate & Send Form 9 to Tenant'
+                        : 'Generate Form 9 (Download Only)'}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -2079,17 +2095,19 @@ export function JobDetail({ jobs, updateJob, deleteJob, electricians }: JobDetai
                           method: 'POST',
                           body: JSON.stringify({
                             to: elec.phone,
-                            message: `Wirez R Us Reminder: Job ${job.id} at ${job.propertyAddress}. Scheduled: ${job.scheduledDate ? format(new Date(job.scheduledDate), 'MMM d, h:mm a') : 'TBD'}. Open app: ${window.location.origin}/field/${job.id}`
+                            message: `Wirez R Us: Job dispatched — ${job.title} at ${job.propertyAddress}. Scheduled: ${job.scheduledDate ? format(new Date(job.scheduledDate), 'EEE d MMM, h:mm a') : 'TBD'}. Open: ${window.location.origin}/field/${job.id}`
                           })
                         });
-                        if (data.simulated) {
-                          toast.success(`SMS resent (simulated) to ${elec.name} at ${elec.phone}`);
+                        if (!data.success) {
+                          toast.error(`SMS failed: ${data.error || 'Unknown Twilio error'}`);
+                        } else if (data.simulated) {
+                          toast.success(`SMS queued (Twilio not yet configured) — set TWILIO secrets via wrangler`);
                         } else {
-                          toast.success(`SMS resent to ${elec.name}`);
+                          toast.success(`SMS sent to ${elec.name} ✓`);
                         }
-                      } catch (err) {
+                      } catch (err: any) {
                         console.error(err);
-                        toast.error('Failed to resend SMS');
+                        toast.error(`SMS error: ${err?.message || 'Failed to send'}`  );
                       } finally {
                         setResendingSms(false);
                       }

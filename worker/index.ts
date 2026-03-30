@@ -29,6 +29,7 @@ interface Env {
   XERO_CLIENT_SECRET: string;
   OPENROUTER_API_KEY: string;
   RESEND_API_KEY: string;
+  RESEND_FROM_EMAIL: string; // e.g. "Wirez R Us <jobs@wirezapp.au>" — must be a verified Resend domain
   GOOGLE_MAPS_API_KEY: string;
 }
 
@@ -584,51 +585,258 @@ const SKIP_SUBJECT_PATTERNS = [
 
 // ─── Notification content builder (ported from send-tenant) ──────────────────
 
-function buildNotificationContent(type: string, data: any): { smsBody: string; emailSubject: string; emailHtml: string } {
+function buildNotificationContent(
+  type: string,
+  data: any,
+  opts?: { hasForm9?: boolean },
+): { smsBody: string; emailSubject: string; emailHtml: string } {
   const { tenantName, propertyAddress, scheduledDate, scheduledTime, jobId, techName, companyPhone, newEta } = data;
   const firstName = (tenantName || 'Tenant').split(' ')[0];
   const dateStr = scheduledDate || 'TBD';
   const timeStr = scheduledTime || 'TBD';
   const phone = companyPhone || '1300 WIREZ US';
 
+  // ── Branded HTML email wrapper ────────────────────────────────────────────
+  const emailWrap = (accentColor: string, headerTitle: string, headerSubtitle: string, bodyHtml: string) => `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Wirez R Us</title>
+</head>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:Arial,Helvetica,sans-serif;-webkit-font-smoothing:antialiased;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:32px 16px;">
+<tr><td align="center">
+<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.10);">
+
+  <!-- Amber accent top bar -->
+  <tr><td style="background:#F5A623;height:4px;font-size:0;">&nbsp;</td></tr>
+
+  <!-- Header -->
+  <tr><td style="background:#1a1a2e;padding:28px 32px;">
+    <table width="100%" cellpadding="0" cellspacing="0">
+      <tr>
+        <td valign="middle">
+          <div style="font-size:22px;font-weight:bold;color:#ffffff;letter-spacing:-0.5px;line-height:1;">Wirez R Us</div>
+          <div style="font-size:11px;color:#F5A623;margin-top:4px;letter-spacing:0.5px;text-transform:uppercase;">Licensed Electrical Contractors</div>
+        </td>
+        <td align="right" valign="middle">
+          <div style="font-size:11px;color:rgba(255,255,255,0.45);">${phone}</div>
+          <div style="font-size:10px;color:rgba(255,255,255,0.3);margin-top:2px;">wirezapp.au</div>
+        </td>
+      </tr>
+      <tr><td colspan="2" style="padding-top:20px;border-top:1px solid rgba(255,255,255,0.08);margin-top:20px;">
+        <table width="100%" cellpadding="0" cellspacing="0">
+          <tr>
+            <td>
+              <div style="display:inline-block;background:${accentColor};width:32px;height:3px;border-radius:2px;margin-bottom:10px;"></div>
+              <div style="font-size:20px;font-weight:bold;color:#ffffff;line-height:1.2;">${headerTitle}</div>
+              <div style="font-size:13px;color:rgba(255,255,255,0.6);margin-top:6px;">${headerSubtitle}</div>
+            </td>
+          </tr>
+        </table>
+      </td></tr>
+    </table>
+  </td></tr>
+
+  <!-- Body -->
+  <tr><td style="background:#ffffff;padding:32px;">
+    ${bodyHtml}
+  </td></tr>
+
+  <!-- Footer -->
+  <tr><td style="background:#0f172a;padding:20px 32px;">
+    <table width="100%" cellpadding="0" cellspacing="0">
+      <tr>
+        <td>
+          <div style="font-size:13px;color:#F5A623;font-weight:bold;">Wirez R Us</div>
+          <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-top:3px;">Licensed Electrical Contractors</div>
+          <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-top:2px;">${phone} &nbsp;·&nbsp; wirezapp.au</div>
+        </td>
+        <td align="right" valign="bottom">
+          <div style="font-size:10px;color:rgba(255,255,255,0.2);">This email was sent by Wirez R Us scheduling system.<br>Please do not reply directly to automated notifications.</div>
+        </td>
+      </tr>
+    </table>
+  </td></tr>
+
+</table>
+</td></tr>
+</table>
+</body>
+</html>`;
+
+  // ── Info card component ───────────────────────────────────────────────────
+  const infoCard = (label: string, value: string, icon = '') =>
+    `<table width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0;">
+      <tr>
+        <td style="background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid #F5A623;border-radius:0 8px 8px 0;padding:14px 16px;">
+          <div style="font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:4px;">${icon} ${label}</div>
+          <div style="font-size:15px;font-weight:bold;color:#1a1a2e;">${value}</div>
+        </td>
+      </tr>
+    </table>`;
+
+  // ── Alert box ─────────────────────────────────────────────────────────────
+  const alertBox = (bg: string, border: string, textColor: string, content: string) =>
+    `<table width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0;">
+      <tr>
+        <td style="background:${bg};border:1px solid ${border};border-radius:8px;padding:14px 16px;color:${textColor};font-size:13px;">
+          ${content}
+        </td>
+      </tr>
+    </table>`;
+
   switch (type) {
     case 'schedule_confirmation':
       return {
         smsBody: `Hi ${firstName}, your appointment with Wirez R Us has been scheduled for ${dateStr} between ${timeStr}. Please reply Y to confirm or N to reschedule. ${phone}`,
-        emailSubject: `Your Wirez R Us Appointment — ${dateStr}`,
-        emailHtml: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;"><div style="background:#0f172a;color:white;padding:20px 24px;border-radius:12px 12px 0 0;"><h1 style="margin:0;font-size:20px;">Wirez R Us</h1><p style="margin:4px 0 0;font-size:13px;opacity:0.8;">Licensed Electrical Contractors</p></div><div style="background:#fff;border:1px solid #e2e8f0;border-top:none;padding:24px;border-radius:0 0 12px 12px;"><h2 style="margin:0 0 16px;color:#0f172a;">Appointment Confirmed</h2><p style="color:#475569;">Hi ${firstName},</p><p style="color:#475569;">Your appointment has been scheduled:</p><div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin:16px 0;"><p style="margin:0;font-weight:bold;color:#0f172a;">${dateStr}</p><p style="margin:4px 0 0;font-weight:bold;color:#0f172a;">${timeStr}</p><p style="margin:8px 0 0;color:#64748b;font-size:13px;">${propertyAddress || ''}</p>${techName ? `<p style="margin:4px 0 0;color:#64748b;font-size:13px;">Technician: ${techName}</p>` : ''}</div><p style="color:#475569;font-size:14px;">Please ensure access is available and any pets are restrained.</p><p style="color:#475569;font-size:14px;">If you need to reschedule, please reply to this email or call ${phone}.</p><p style="color:#94a3b8;font-size:12px;margin-top:24px;">Wirez R Us Electrical Services<br/>${phone}</p></div></div>`,
+        emailSubject: `Appointment Confirmed — ${dateStr} | Wirez R Us`,
+        emailHtml: emailWrap(
+          '#F5A623',
+          'Appointment Confirmed',
+          `${dateStr} &nbsp;·&nbsp; ${timeStr}`,
+          `<p style="color:#475569;font-size:15px;margin:0 0 20px;">Hi <strong>${firstName}</strong>,</p>
+          <p style="color:#475569;font-size:14px;margin:0 0 20px;">Your electrical appointment with Wirez R Us has been confirmed. Please keep this email for your records.</p>
+          ${infoCard('Date & Time', `${dateStr} &nbsp;&nbsp; ${timeStr}`, '&#128197;')}
+          ${infoCard('Property', propertyAddress || 'As advised', '&#127968;')}
+          ${techName ? infoCard('Your Technician', techName, '&#128296;') : ''}
+          ${alertBox('#fffbeb', '#fde68a', '#78350f',
+            `<strong style="color:#92400e;">&#128203; Please prepare for your appointment:</strong>
+            <ul style="margin:8px 0 0;padding-left:20px;line-height:1.9;">
+              <li>Ensure clear access to the property at the scheduled time</li>
+              <li>Restrain or remove all pets (dogs especially)</li>
+              <li>An adult (18+) must be present unless key consent has been given</li>
+              <li>Ensure the electricity switchboard is accessible</li>
+            </ul>`
+          )}
+          ${opts?.hasForm9 ? alertBox('#f0fdf4', '#bbf7d0', '#166534',
+            `<strong>&#128206; Form 9 Entry Notice Attached</strong><br>
+            <span style="font-size:12px;margin-top:4px;display:block;">A Form 9 Entry Notice is attached to this email as required under the Residential Tenancies Act. Please review it and keep a copy for your records.</span>`
+          ) : ''}
+          <p style="color:#94a3b8;font-size:12px;margin:24px 0 0;border-top:1px solid #f1f5f9;padding-top:16px;">
+            Need to reschedule? Call <strong style="color:#475569;">${phone}</strong> or reply to this email at least 24 hours before your appointment.
+          </p>`,
+        ),
       };
+
     case 'reminder_day_before':
       return {
         smsBody: `Reminder: Wirez R Us is attending ${propertyAddress || 'your property'} tomorrow ${dateStr} between ${timeStr}. Please ensure access is available. Reply N to reschedule. ${phone}`,
-        emailSubject: `Reminder: Wirez R Us Appointment Tomorrow — ${dateStr}`,
-        emailHtml: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;"><div style="background:#0f172a;color:white;padding:20px 24px;border-radius:12px 12px 0 0;"><h1 style="margin:0;font-size:20px;">Wirez R Us — Appointment Reminder</h1></div><div style="background:#fff;border:1px solid #e2e8f0;border-top:none;padding:24px;border-radius:0 0 12px 12px;"><p style="color:#475569;">Hi ${firstName},</p><p style="color:#475569;">Just a reminder that we're attending <strong>${propertyAddress || 'your property'}</strong> tomorrow:</p><div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:16px;margin:16px 0;"><p style="margin:0;font-weight:bold;color:#92400e;">${dateStr} — ${timeStr}</p></div><p style="color:#475569;font-size:14px;"><strong>Please ensure:</strong></p><ul style="color:#475569;font-size:14px;"><li>Access to the property is available</li><li>Pets are restrained or secured</li><li>Someone over 18 is present (if required)</li></ul><p style="color:#475569;font-size:14px;">Need to reschedule? Reply to this email or call ${phone}.</p><p style="color:#94a3b8;font-size:12px;margin-top:24px;">Wirez R Us Electrical Services</p></div></div>`,
+        emailSubject: `Reminder: Your Appointment Tomorrow — ${dateStr} | Wirez R Us`,
+        emailHtml: emailWrap(
+          '#F5A623',
+          'Appointment Reminder',
+          'Your appointment is tomorrow',
+          `<p style="color:#475569;font-size:15px;margin:0 0 20px;">Hi <strong>${firstName}</strong>,</p>
+          <p style="color:#475569;font-size:14px;margin:0 0 20px;">Just a friendly reminder — we'll be attending your property <strong>tomorrow</strong>.</p>
+          ${infoCard('Date & Time', `${dateStr} &nbsp;&nbsp; ${timeStr}`, '&#128197;')}
+          ${infoCard('Property', propertyAddress || 'As advised', '&#127968;')}
+          ${techName ? infoCard('Your Technician', techName, '&#128296;') : ''}
+          ${alertBox('#fef3c7', '#fde68a', '#78350f',
+            `<strong style="color:#92400e;">&#9888; Before we arrive, please ensure:</strong>
+            <ul style="margin:8px 0 0;padding-left:20px;line-height:1.9;">
+              <li>Access to the property is available at the scheduled time</li>
+              <li>All pets are restrained or removed from the property</li>
+              <li>An adult (18+) is present, or key consent has been arranged</li>
+            </ul>`
+          )}
+          <p style="color:#94a3b8;font-size:12px;margin:24px 0 0;border-top:1px solid #f1f5f9;padding-top:16px;">
+            Need to reschedule? Please call <strong style="color:#475569;">${phone}</strong> as soon as possible.
+          </p>`,
+        ),
       };
+
     case 'reminder_1hr_before':
       return {
         smsBody: `Wirez R Us: We'll be arriving at ${propertyAddress || 'your property'} within the next hour. Please ensure access is available. ${phone}`,
-        emailSubject: `Wirez R Us — Arriving Soon`,
-        emailHtml: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;"><div style="background:#059669;color:white;padding:20px 24px;border-radius:12px;"><h1 style="margin:0;font-size:20px;">Wirez R Us — Arriving Soon!</h1><p style="margin:8px 0 0;font-size:15px;">Our technician will be at <strong>${propertyAddress || 'your property'}</strong> within the next hour.</p><p style="margin:8px 0 0;font-size:13px;opacity:0.9;">Please ensure access is available and pets are restrained.</p></div></div>`,
+        emailSubject: `We're On Our Way — Arriving Soon | Wirez R Us`,
+        emailHtml: emailWrap(
+          '#10b981',
+          "We're On Our Way!",
+          'Arriving within the next hour',
+          `<p style="color:#475569;font-size:15px;margin:0 0 20px;">Hi <strong>${firstName}</strong>,</p>
+          <p style="color:#475569;font-size:14px;margin:0 0 20px;">Our technician is on the way and will arrive at your property within the <strong>next hour</strong>.</p>
+          ${infoCard('Property', propertyAddress || 'As advised', '&#127968;')}
+          ${techName ? infoCard('Your Technician', techName, '&#128296;') : ''}
+          ${alertBox('#f0fdf4', '#bbf7d0', '#166534',
+            `<strong>&#9989; Last-minute checklist:</strong>
+            <ul style="margin:8px 0 0;padding-left:20px;line-height:1.9;">
+              <li>Ensure access to the property is available now</li>
+              <li>Secure or remove any pets</li>
+              <li>Have someone available to let our technician in</li>
+            </ul>`
+          )}
+          <p style="color:#94a3b8;font-size:12px;margin:24px 0 0;border-top:1px solid #f1f5f9;padding-top:16px;">
+            Any issues? Call us immediately on <strong style="color:#475569;">${phone}</strong>.
+          </p>`,
+        ),
       };
+
     case 'reschedule_key_consent':
       return {
         smsBody: `Wirez R Us: If you're not available to be home, do you give consent for us to collect keys from the Real Estate Agent? Please also ensure no dogs are left unrestrained. Reply Y for consent or N to reschedule. ${phone}`,
-        emailSubject: `Wirez R Us — Key Collection Consent`,
-        emailHtml: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;"><div style="background:#0f172a;color:white;padding:20px 24px;border-radius:12px 12px 0 0;"><h1 style="margin:0;font-size:20px;">Wirez R Us — Access Request</h1></div><div style="background:#fff;border:1px solid #e2e8f0;border-top:none;padding:24px;border-radius:0 0 12px 12px;"><p style="color:#475569;">Hi ${firstName},</p><p style="color:#475569;">We understand you may not be available during the scheduled appointment time.</p><div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin:16px 0;"><p style="margin:0;font-weight:bold;color:#0f172a;">Do you give consent for us to:</p><ul style="color:#475569;margin:8px 0 0;padding-left:20px;"><li>Collect keys from the Real Estate Agent</li><li>Enter the property to complete the work</li></ul></div><p style="color:#dc2626;font-weight:bold;font-size:14px;">Important: Please ensure no dogs or animals are left unrestrained during our visit.</p><p style="color:#475569;font-size:14px;">Please reply to this email with <strong>YES</strong> or <strong>NO</strong>, or call us at ${phone}.</p><p style="color:#94a3b8;font-size:12px;margin-top:24px;">Wirez R Us Electrical Services</p></div></div>`,
+        emailSubject: `Action Required: Key Collection Consent | Wirez R Us`,
+        emailHtml: emailWrap(
+          '#6366f1',
+          'Action Required',
+          'Key collection consent needed',
+          `<p style="color:#475569;font-size:15px;margin:0 0 20px;">Hi <strong>${firstName}</strong>,</p>
+          <p style="color:#475569;font-size:14px;margin:0 0 20px;">We understand you may not be available at the property during your scheduled appointment. We'd like to confirm whether you're comfortable with us collecting keys from your Real Estate Agent.</p>
+          ${infoCard('Date & Time', `${dateStr} &nbsp;&nbsp; ${timeStr}`, '&#128197;')}
+          ${infoCard('Property', propertyAddress || 'As advised', '&#127968;')}
+          ${alertBox('#fef2f2', '#fecaca', '#991b1b',
+            `<strong style="color:#dc2626;">&#128016; Important — Pets:</strong><br>
+            <span style="font-size:13px;">Please ensure <strong>no dogs or animals are left unrestrained</strong> in the property during our visit for the safety of all parties.</span>`
+          )}
+          ${alertBox('#eff6ff', '#bfdbfe', '#1e40af',
+            `<strong>Do you give consent for Wirez R Us to:</strong>
+            <ul style="margin:8px 0 0;padding-left:20px;line-height:1.9;">
+              <li>Collect keys from your Real Estate Agent</li>
+              <li>Access the property to complete the electrical work</li>
+            </ul>`
+          )}
+          <p style="color:#475569;font-size:14px;margin:20px 0;">
+            Please reply to this email with <strong>YES</strong> or <strong>NO</strong>, or call us at <strong>${phone}</strong>.
+          </p>`,
+        ),
       };
+
     case 'running_late': {
       const eta = newEta || 'shortly';
       return {
         smsBody: `Wirez R Us: Sorry, we're running a bit behind schedule. We now expect to arrive at ${propertyAddress || 'your property'} ${eta}. We apologise for any inconvenience. ${phone}`,
-        emailSubject: `Wirez R Us — Updated Arrival Time`,
-        emailHtml: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;"><div style="background:#d97706;color:white;padding:20px 24px;border-radius:12px;"><h1 style="margin:0;font-size:20px;">Wirez R Us — Running Slightly Behind</h1><p style="margin:8px 0 0;font-size:15px;">We now expect to arrive at <strong>${propertyAddress || 'your property'}</strong> ${eta}.</p><p style="margin:8px 0 0;font-size:13px;opacity:0.9;">We apologise for any inconvenience and appreciate your patience.</p></div></div>`,
+        emailSubject: `Updated Arrival Time | Wirez R Us`,
+        emailHtml: emailWrap(
+          '#f59e0b',
+          'Running Slightly Behind',
+          'Updated arrival time for your appointment',
+          `<p style="color:#475569;font-size:15px;margin:0 0 20px;">Hi <strong>${firstName}</strong>,</p>
+          <p style="color:#475569;font-size:14px;margin:0 0 20px;">We sincerely apologise — our technician is running a little behind schedule today.</p>
+          ${infoCard('Property', propertyAddress || 'As advised', '&#127968;')}
+          ${infoCard('Updated ETA', eta, '&#128336;')}
+          ${alertBox('#fffbeb', '#fde68a', '#78350f',
+            `We appreciate your patience and understanding. Our technician is still on the way and will be with you as soon as possible.`
+          )}
+          <p style="color:#94a3b8;font-size:12px;margin:24px 0 0;border-top:1px solid #f1f5f9;padding-top:16px;">
+            Questions? Call us on <strong style="color:#475569;">${phone}</strong>.
+          </p>`,
+        ),
       };
     }
+
     default:
       return {
         smsBody: `Wirez R Us notification regarding your appointment. Please call ${phone} for details.`,
         emailSubject: `Wirez R Us — Notification`,
-        emailHtml: `<p>Wirez R Us notification regarding your appointment at ${propertyAddress || 'your property'}. Please call ${phone} for details.</p>`,
+        emailHtml: emailWrap(
+          '#F5A623',
+          'Notification',
+          'Regarding your appointment',
+          `<p style="color:#475569;">Hi ${firstName},</p>
+          <p style="color:#475569;">We have an update regarding your appointment at <strong>${propertyAddress || 'your property'}</strong>. Please call us at <strong>${phone}</strong> for details.</p>`,
+        ),
       };
   }
 }
@@ -730,6 +938,8 @@ const PUBLIC_PATHS = [
   '/api/stripe/webhook',
   '/api/webhooks/email',
   '/api/email/poll-inbox',
+  '/api/sms/status',
+  '/api/stripe/status',
 ];
 
 app.use('/api/*', async (c, next) => {
@@ -1130,6 +1340,16 @@ app.patch('/api/tech-stock/:id', async (c) => {
   }
 });
 
+app.delete('/api/tech-stock/:id', async (c) => {
+  try {
+    const id = c.req.param('id');
+    await c.env.DB.prepare('DELETE FROM tech_stock WHERE id = ?').bind(id).run();
+    return c.json({ success: true });
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500);
+  }
+});
+
 // ============================================================================
 // STOCK MOVEMENTS
 // ============================================================================
@@ -1400,17 +1620,30 @@ app.delete('/api/licenses/:id', async (c) => {
 // SMS (Twilio via fetch)
 // ============================================================================
 
+// ── Phone normaliser: 04xx → +614xx, handles spaces/dashes ──
+function normaliseAuPhone(raw: string): string {
+  let p = raw.replace(/[\s\-().]/g, '');
+  if (p.startsWith('0')) p = '+61' + p.slice(1);
+  if (!p.startsWith('+')) p = '+' + p;
+  return p;
+}
+
 app.post('/api/sms/send', async (c) => {
   try {
     const { to, message } = await c.req.json();
+    if (!to || !message) return c.json({ error: 'Missing "to" or "message"' }, 400);
+
     const sid = c.env.TWILIO_ACCOUNT_SID;
     const token = c.env.TWILIO_AUTH_TOKEN;
     const from = c.env.TWILIO_PHONE_NUMBER;
 
     if (!sid || !token || !from) {
-      console.log(`[SMS Simulation] To: ${to} | Message: ${message}`);
+      console.log(`[SMS Simulation] To: ${to} | ${message}`);
       return c.json({ success: true, simulated: true });
     }
+
+    const toNorm = normaliseAuPhone(to);
+    console.log(`[SMS] Sending to ${toNorm} from ${from}`);
 
     const twilioRes = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
       method: 'POST',
@@ -1418,20 +1651,47 @@ app.post('/api/sms/send', async (c) => {
         'Authorization': 'Basic ' + btoa(`${sid}:${token}`),
         'Content-Type': 'application/x-www-form-urlencoded',
       },
-      body: new URLSearchParams({ To: to, From: from, Body: message }),
+      body: new URLSearchParams({ To: toNorm, From: from, Body: message }),
     });
 
+    const resultData: any = await twilioRes.json();
+
     if (!twilioRes.ok) {
-      const errData: any = await twilioRes.json();
-      throw new Error(errData.message || `Twilio error: ${twilioRes.status}`);
+      const twilioMsg = resultData?.message || resultData?.error_message || `Twilio error ${twilioRes.status}`;
+      console.error(`[SMS] Twilio error ${twilioRes.status}: ${twilioMsg}`);
+      // Return 200 with error detail so frontend can show a helpful message
+      return c.json({ success: false, error: twilioMsg, twilioCode: resultData?.code });
     }
 
-    const result: any = await twilioRes.json();
-    console.log(`[SMS Sent] To: ${to} | SID: ${result.sid}`);
-    return c.json({ success: true, simulated: false, sid: result.sid });
+    console.log(`[SMS Sent] To: ${toNorm} | SID: ${resultData.sid}`);
+    return c.json({ success: true, simulated: false, sid: resultData.sid, to: toNorm });
   } catch (err: any) {
     console.error('[SMS] Error:', err.message);
-    return c.json({ error: err.message }, 500);
+    return c.json({ success: false, error: err.message }, 500);
+  }
+});
+
+// GET /api/sms/status — check Twilio config
+app.get('/api/sms/status', async (c) => {
+  const configured = !!(c.env.TWILIO_ACCOUNT_SID && c.env.TWILIO_AUTH_TOKEN && c.env.TWILIO_PHONE_NUMBER);
+  if (!configured) return c.json({ configured: false });
+  // Quick account lookup to validate credentials
+  try {
+    const sid = c.env.TWILIO_ACCOUNT_SID;
+    const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}.json`, {
+      headers: { 'Authorization': 'Basic ' + btoa(`${sid}:${c.env.TWILIO_AUTH_TOKEN}`) }
+    });
+    const data: any = await res.json();
+    return c.json({
+      configured: true,
+      valid: res.ok,
+      friendlyName: data.friendly_name,
+      type: data.type, // 'Trial' or 'Full'
+      fromNumber: c.env.TWILIO_PHONE_NUMBER,
+      error: res.ok ? undefined : (data.message || 'Auth failed'),
+    });
+  } catch (err: any) {
+    return c.json({ configured: true, valid: false, error: err.message });
   }
 });
 
@@ -1481,6 +1741,19 @@ app.post('/api/sms/test', async (c) => {
 // ============================================================================
 // STRIPE
 // ============================================================================
+
+// GET /api/stripe/status — check if Stripe key is configured and valid
+app.get('/api/stripe/status', async (c) => {
+  const key = c.env.STRIPE_SECRET_KEY;
+  if (!key) return c.json({ configured: false, valid: false, mode: 'unknown' });
+  const mode = key.startsWith('sk_live_') ? 'live' : 'test';
+  try {
+    await stripeRequest('GET', '/account', key);
+    return c.json({ configured: true, valid: true, mode });
+  } catch (err: any) {
+    return c.json({ configured: true, valid: false, mode, error: err.message });
+  }
+});
 
 // GET /api/stripe/plans — list Stripe prices
 app.get('/api/stripe/plans', async (c) => {
@@ -1552,6 +1825,97 @@ app.post('/api/stripe/create-payment-link', async (c) => {
   } catch (err: any) {
     console.error('[Stripe] Payment link creation failed:', err.message);
     return c.json({ error: 'Failed to create payment link', details: err.message }, 500);
+  }
+});
+
+// POST /api/jobs/:id/send-invoice — email PDF invoice + optional payment link to tenant
+app.post('/api/jobs/:id/send-invoice', async (c) => {
+  try {
+    const id = c.req.param('id');
+    const { pdfBase64, invoiceNumber, totalAmount, paymentLinkUrl, recipientEmail } = await c.req.json();
+
+    const row = await c.env.DB.prepare('SELECT * FROM jobs WHERE id = ?').bind(id).first();
+    if (!row) return c.json({ error: 'Job not found' }, 404);
+    const job = toCamelCase(row as Record<string, unknown>) as any;
+
+    const to = recipientEmail || job.tenantEmail;
+    if (!to) return c.json({ error: 'No recipient email provided' }, 400);
+    if (!c.env.RESEND_API_KEY) return c.json({ error: 'Email not configured' }, 500);
+
+    const payBtn = paymentLinkUrl
+      ? `<p style="text-align:center;margin:24px 0">
+           <a href="${paymentLinkUrl}" style="background:#d97706;color:#fff;padding:14px 32px;border-radius:8px;font-weight:bold;text-decoration:none;font-size:16px">
+             💳 Pay Now
+           </a>
+         </p>`
+      : '';
+
+    const html = `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+        <div style="background:#1a1a2e;padding:24px;border-radius:8px 8px 0 0">
+          <h1 style="color:#F5A623;margin:0;font-size:22px">WIREZ R US</h1>
+          <p style="color:#94a3b8;margin:4px 0 0">Licensed Electrical Contractor</p>
+        </div>
+        <div style="background:#fff;padding:24px;border:1px solid #e2e8f0;border-top:none">
+          <h2 style="color:#1e293b">Tax Invoice ${invoiceNumber}</h2>
+          <p style="color:#475569">Hi ${job.tenantName || 'there'},</p>
+          <p style="color:#475569">Please find your invoice attached for electrical work completed at:</p>
+          <p style="color:#1e293b;font-weight:bold">${job.propertyAddress}</p>
+          <table style="width:100%;border-collapse:collapse;margin:16px 0">
+            <tr style="background:#f8fafc">
+              <td style="padding:10px;border:1px solid #e2e8f0;font-weight:bold">Invoice No</td>
+              <td style="padding:10px;border:1px solid #e2e8f0">${invoiceNumber}</td>
+            </tr>
+            <tr>
+              <td style="padding:10px;border:1px solid #e2e8f0;font-weight:bold">Total Due</td>
+              <td style="padding:10px;border:1px solid #e2e8f0;font-weight:bold;color:#d97706">$${Number(totalAmount).toFixed(2)}</td>
+            </tr>
+          </table>
+          ${payBtn}
+          <p style="color:#64748b;font-size:13px">The full invoice is attached as a PDF. Payment is due on completion.</p>
+          <hr style="border:none;border-top:1px solid #e2e8f0;margin:20px 0"/>
+          <p style="color:#94a3b8;font-size:12px;text-align:center">
+            Wirez R Us — Licensed Electrical Contractor<br/>
+            Questions? Contact us at admin@wirezapp.au
+          </p>
+        </div>
+      </div>`;
+
+    const fromAddress = c.env.RESEND_FROM_EMAIL || 'Wirez R Us <onboarding@resend.dev>';
+    const emailPayload: any = {
+      from: fromAddress,
+      to: [to],
+      subject: `Tax Invoice ${invoiceNumber} — $${Number(totalAmount).toFixed(2)} due`,
+      html,
+    };
+    if (pdfBase64) {
+      emailPayload.attachments = [{
+        filename: `${invoiceNumber}.pdf`,
+        content: pdfBase64,
+      }];
+    }
+
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${c.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(emailPayload),
+    });
+    if (!res.ok) {
+      const err = await res.json() as any;
+      const msg = err.message || err.name || 'Resend error';
+      // Surface domain verification errors clearly
+      if (msg.toLowerCase().includes('domain') || msg.toLowerCase().includes('verif')) {
+        return c.json({ error: `Sending domain not verified with Resend. Go to resend.com/domains and verify your sending domain, then set RESEND_FROM_EMAIL as a worker secret. (${msg})` }, 500);
+      }
+      return c.json({ error: msg }, 500);
+    }
+
+    await c.env.DB.prepare(`UPDATE jobs SET finished_job_email_sent=1, finished_job_email_sent_at=?, finished_job_email_to=? WHERE id=?`)
+      .bind(new Date().toISOString(), to, id).run();
+
+    return c.json({ success: true, sentTo: to });
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500);
   }
 });
 
@@ -2133,15 +2497,94 @@ app.post('/api/notifications/send-tenant', async (c) => {
 
     if (!type) return c.json({ error: 'Missing notification type' }, 400);
 
+    // ── For schedule_confirmation: generate Form 9 PDF to attach ──────────
+    let form9Base64: string | null = null;
+    if (type === 'schedule_confirmation' && channels.includes('email') && tenantEmail) {
+      try {
+        const templateObj = await c.env.STORAGE.get('templates/Form9-template.pdf');
+        if (templateObj) {
+          const now = new Date();
+          // Parse scheduled date or default to 3 business days from now
+          let entryDate: Date;
+          if (scheduledDate) {
+            // Try to parse dd/mm/yyyy or similar
+            const parts = scheduledDate.split(/[\/-]/);
+            if (parts.length === 3) {
+              // Detect dd/mm/yyyy vs mm/dd/yyyy
+              const d = parseInt(parts[0], 10);
+              const m = parseInt(parts[1], 10);
+              const y = parseInt(parts[2].length === 2 ? '20' + parts[2] : parts[2], 10);
+              entryDate = new Date(y, m - 1, d);
+            } else {
+              entryDate = new Date(scheduledDate);
+            }
+            if (isNaN(entryDate.getTime())) entryDate = new Date(now);
+          } else {
+            entryDate = new Date(now);
+            let daysAdded = 0;
+            while (daysAdded < 3) {
+              entryDate.setDate(entryDate.getDate() + 1);
+              const dow = entryDate.getDay();
+              if (dow !== 0 && dow !== 6) daysAdded++;
+            }
+          }
+          entryDate.setHours(9, 0, 0, 0);
+
+          const fmt = (d: Date) => `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getFullYear()}`;
+          const dayN = (d: Date) => ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][d.getDay()];
+          const entryTimeStr = scheduledTime || '9:00 AM';
+          // Parse end time (add ~2hrs or use window)
+          const entryTimeTo = (() => {
+            const m = entryTimeStr.match(/(\d+):(\d+)\s*(AM|PM)?/i);
+            if (!m) return '11:00 AM';
+            let h = parseInt(m[1], 10);
+            const min = m[2];
+            const meridiem = m[3]?.toUpperCase() || (h < 7 ? 'PM' : 'AM');
+            h = (h + 2) % 24;
+            const newMeridiem = h < 12 ? 'AM' : 'PM';
+            const displayH = h % 12 || 12;
+            return `${displayH}:${min} ${newMeridiem}`;
+          })();
+
+          const templateBytes = await templateObj.arrayBuffer();
+          const pdfDoc = await PDFDocument.load(templateBytes);
+          const form = pdfDoc.getForm();
+          try {
+            form.getTextField('Name/s of tenant/s').setText(tenantName || '');
+            form.getTextField('Address1').setText(propertyAddress || '');
+            form.getTextField('Address of rental property 4').setText(propertyAddress || '');
+            form.getCheckBox('Other authorised person (secondary agent)').check();
+            form.getTextField('Full name or trading name 1').setText('Wirez R Us (Contractor)');
+            form.getTextField('Full name or trading name 2').setText('Wirez R Us Technician');
+            form.getTextField('Day 1').setText(dayN(now));
+            form.getTextField('Date (dd/mm/yyyy)1').setText(fmt(now));
+            form.getTextField('Method of issue 1').setText('Email');
+            form.getTextField('Day 2').setText(dayN(entryDate));
+            form.getTextField('Date (dd/mm/yyyy) 2').setText(fmt(entryDate));
+            form.getTextField('Time of entry').setText(entryTimeStr);
+            form.getTextField('Two hour period from').setText(entryTimeStr);
+            form.getTextField('Two hour period to').setText(entryTimeTo);
+            form.getCheckBox('Checkbox3').check();
+            form.getTextField('Print name').setText('Wirez R Us');
+          } catch { /* some fields may not exist in this template version */ }
+          form.flatten();
+          const pdfBytes = await pdfDoc.save();
+          form9Base64 = btoa(String.fromCharCode(...new Uint8Array(pdfBytes)));
+        }
+      } catch (pdfErr: any) {
+        console.error('[Notification Form9] PDF generation error:', pdfErr.message);
+      }
+    }
+
     const content = buildNotificationContent(type, {
       tenantName, propertyAddress, scheduledDate, scheduledTime, jobId, techName,
       companyPhone: '1300 WIREZ US',
       newEta,
-    });
+    }, { hasForm9: !!form9Base64 });
 
     const results: any = { type, jobId };
 
-    // Send SMS via Twilio
+    // ── Send SMS via Twilio ────────────────────────────────────────────────
     if (channels.includes('sms') && tenantPhone) {
       const sid = c.env.TWILIO_ACCOUNT_SID;
       const token = c.env.TWILIO_AUTH_TOKEN;
@@ -2149,11 +2592,7 @@ app.post('/api/notifications/send-tenant', async (c) => {
 
       if (sid && token && from) {
         try {
-          // Normalize AU phone: 04xx → +614xx
-          let toPhone = tenantPhone.replace(/\s+/g, '');
-          if (toPhone.startsWith('0')) toPhone = '+61' + toPhone.slice(1);
-          if (!toPhone.startsWith('+')) toPhone = '+' + toPhone;
-
+          const toPhone = normaliseAuPhone(tenantPhone);
           const twilioRes = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
             method: 'POST',
             headers: {
@@ -2162,13 +2601,21 @@ app.post('/api/notifications/send-tenant', async (c) => {
             },
             body: new URLSearchParams({ To: toPhone, From: from, Body: content.smsBody }),
           });
-          if (!twilioRes.ok) {
-            console.error('[Notification SMS] Twilio error:', twilioRes.status, await twilioRes.text());
+          if (twilioRes.ok) {
+            results.sms = { sent: true, simulated: false };
+          } else {
+            const errText = await twilioRes.text();
+            let twilioMessage = `HTTP ${twilioRes.status}`;
+            try {
+              const errJson = JSON.parse(errText);
+              twilioMessage = errJson.message || errJson.code || twilioMessage;
+            } catch {}
+            console.error('[Notification SMS] Twilio error:', twilioRes.status, errText);
+            results.sms = { sent: false, simulated: false, error: twilioMessage };
           }
-          results.sms = { sent: twilioRes.ok, simulated: false };
         } catch (smsErr: any) {
           console.error('[Notification SMS] Error:', smsErr.message);
-          results.sms = { sent: false, simulated: false };
+          results.sms = { sent: false, simulated: false, error: smsErr.message };
         }
       } else {
         console.log(`[SMS Simulation] To: ${tenantPhone} | ${content.smsBody}`);
@@ -2176,38 +2623,48 @@ app.post('/api/notifications/send-tenant', async (c) => {
       }
     }
 
-    // Send Email via Resend
+    // ── Send Email via Resend ──────────────────────────────────────────────
     if (channels.includes('email') && tenantEmail) {
       if (c.env.RESEND_API_KEY) {
         try {
+          const emailPayload: any = {
+            from: c.env.RESEND_FROM_EMAIL || 'Wirez R Us <onboarding@resend.dev>',
+            to: tenantEmail,
+            subject: content.emailSubject,
+            html: content.emailHtml,
+          };
+          if (form9Base64) {
+            emailPayload.attachments = [{
+              filename: `Form9-Entry-Notice${jobId ? '-' + jobId : ''}.pdf`,
+              content: form9Base64,
+            }];
+          }
           const emailRes = await fetch('https://api.resend.com/emails', {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${c.env.RESEND_API_KEY}`,
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({
-              from: c.env.RESEND_FROM_EMAIL || 'Wirez R Us <onboarding@resend.dev>',
-              to: tenantEmail,
-              subject: content.emailSubject,
-              html: content.emailHtml,
-            }),
+            body: JSON.stringify(emailPayload),
           });
-          results.email = { sent: emailRes.ok, simulated: false };
-          if (!emailRes.ok) {
-            console.error('[Notification Email] Resend error:', emailRes.status, await emailRes.text());
+          if (emailRes.ok) {
+            results.email = { sent: true, simulated: false, form9Attached: !!form9Base64 };
+          } else {
+            const errText = await emailRes.text();
+            console.error('[Notification Email] Resend error:', emailRes.status, errText);
+            results.email = { sent: false, simulated: false, error: errText };
           }
         } catch (emailErr: any) {
           console.error('[Notification Email] Error:', emailErr.message);
-          results.email = { sent: false, simulated: false };
+          results.email = { sent: false, simulated: false, error: emailErr.message };
         }
       } else {
         console.log(`[Email Simulation] To: ${tenantEmail} | Subject: ${content.emailSubject}`);
-        results.email = { sent: true, simulated: true };
+        results.email = { sent: true, simulated: true, form9Attached: !!form9Base64 };
       }
     }
 
-    console.log(`[Tenant Notification] Type: ${type} | Job: ${jobId} | SMS: ${results.sms?.sent ? 'sent' : 'skipped'} | Email: ${results.email?.sent ? 'sent' : 'skipped'}`);
+    console.log(`[Tenant Notification] Type: ${type} | Job: ${jobId} | SMS: ${results.sms?.sent ? 'sent' : 'skipped'} | Email: ${results.email?.sent ? 'sent' : 'skipped'} | Form9: ${!!form9Base64}`);
     return c.json({ success: true, ...results });
   } catch (err: any) {
     console.error('[Notification] Error:', err.message);
@@ -2367,22 +2824,79 @@ async function autoSendForm9AndNotify(env: Env, job: Record<string, unknown>) {
   // Send email via Resend
   if (env.RESEND_API_KEY) {
     try {
+      const autoForm9Html = `
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:Arial,Helvetica,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:32px 16px;">
+<tr><td align="center">
+<table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.10);">
+  <tr><td style="background:#F5A623;height:4px;font-size:0;">&nbsp;</td></tr>
+  <tr><td style="background:#1a1a2e;padding:28px 32px;">
+    <table width="100%" cellpadding="0" cellspacing="0">
+      <tr>
+        <td><div style="font-size:22px;font-weight:bold;color:#ffffff;letter-spacing:-0.5px;">Wirez R Us</div>
+        <div style="font-size:11px;color:#F5A623;margin-top:4px;letter-spacing:0.5px;text-transform:uppercase;">Licensed Electrical Contractors</div></td>
+        <td align="right"><div style="font-size:11px;color:rgba(255,255,255,0.45);">1300 WIREZ US</div></td>
+      </tr>
+      <tr><td colspan="2" style="padding-top:20px;border-top:1px solid rgba(255,255,255,0.08);">
+        <div style="background:#F5A623;width:32px;height:3px;border-radius:2px;margin-bottom:10px;"></div>
+        <div style="font-size:20px;font-weight:bold;color:#ffffff;">Entry Notice — Electrical Work</div>
+        <div style="font-size:13px;color:rgba(255,255,255,0.6);margin-top:6px;">Form 9 — Residential Tenancies Act</div>
+      </td></tr>
+    </table>
+  </td></tr>
+  <tr><td style="background:#ffffff;padding:32px;">
+    <p style="color:#475569;font-size:15px;margin:0 0 20px;">Dear <strong>${tenantName || 'Tenant'}</strong>,</p>
+    <p style="color:#475569;font-size:14px;margin:0 0 20px;">We have been engaged to attend your property to complete electrical work. You are required to be given a minimum of 24 hours notice under the Residential Tenancies Act.</p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0;">
+      <tr><td style="background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid #F5A623;border-radius:0 8px 8px 0;padding:14px 16px;">
+        <div style="font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:4px;">&#127968; Property</div>
+        <div style="font-size:15px;font-weight:bold;color:#1a1a2e;">${propertyAddress}</div>
+      </td></tr>
+    </table>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0;">
+      <tr><td style="background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid #F5A623;border-radius:0 8px 8px 0;padding:14px 16px;">
+        <div style="font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:4px;">&#128197; Proposed Entry Date</div>
+        <div style="font-size:15px;font-weight:bold;color:#1a1a2e;">${dayName(entryDate)}, ${formatDate(entryDate)}</div>
+        <div style="font-size:13px;color:#64748b;margin-top:4px;">Entry Window: 9:00 AM — 11:00 AM</div>
+      </td></tr>
+    </table>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0;">
+      <tr><td style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:14px 16px;color:#166534;font-size:13px;">
+        ${pdfBase64 ? '<strong>&#128206; Form 9 Entry Notice is attached</strong> to this email as required by law. Please keep a copy for your records.' : '<strong>&#128203; Entry Notice Details</strong> are provided above as required by law.'}
+      </td></tr>
+    </table>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:16px 0;">
+      <tr><td style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:14px 16px;color:#78350f;font-size:13px;">
+        <strong style="color:#92400e;">&#9888; Before our visit, please ensure:</strong>
+        <ul style="margin:8px 0 0;padding-left:20px;line-height:1.9;">
+          <li>Clear access to the property and electrical switchboard</li>
+          <li>All pets are restrained or removed</li>
+          <li>An adult (18+) is present, or contact us to arrange key access</li>
+        </ul>
+      </td></tr>
+    </table>
+    <p style="color:#94a3b8;font-size:12px;margin:24px 0 0;border-top:1px solid #f1f5f9;padding-top:16px;">
+      If the proposed time is not suitable, please contact us at <strong style="color:#475569;">1300 WIREZ US</strong> to reschedule.
+    </p>
+  </td></tr>
+  <tr><td style="background:#0f172a;padding:20px 32px;border-radius:0 0 12px 12px;">
+    <div style="font-size:13px;color:#F5A623;font-weight:bold;">Wirez R Us</div>
+    <div style="font-size:11px;color:rgba(255,255,255,0.4);margin-top:3px;">Licensed Electrical Contractors &nbsp;·&nbsp; 1300 WIREZ US &nbsp;·&nbsp; wirezapp.au</div>
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>`;
+
       const emailBody: any = {
-        from: 'Wirez R Us <jobs@wirezrus.com.au>',
+        from: c.env.RESEND_FROM_EMAIL || 'Wirez R Us <onboarding@resend.dev>',
         to: tenantEmail,
         subject: `Entry Notice (Form 9) — ${propertyAddress}`,
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px;">
-            <h2 style="color: #1e293b;">Entry Notice — Electrical Work</h2>
-            <p>Dear ${tenantName || 'Tenant'},</p>
-            <p>We have been engaged to attend your property for electrical work.</p>
-            <p><strong>Property:</strong> ${propertyAddress}</p>
-            <p><strong>Proposed Entry Date:</strong> ${dayName(entryDate)}, ${formatDate(entryDate)}</p>
-            <p><strong>Entry Window:</strong> 9:00 AM — 11:00 AM</p>
-            <p>Please find the Form 9 Entry Notice ${pdfBase64 ? 'attached' : 'details above'}. If the proposed time is not suitable, please contact us to reschedule.</p>
-            <p style="margin-top: 20px;">Kind regards,<br><strong>Wirez R Us</strong><br>Phone: 1300 WIREZ US</p>
-          </div>
-        `,
+        html: autoForm9Html,
       };
 
       if (pdfBase64) {

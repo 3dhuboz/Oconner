@@ -91,7 +91,7 @@ export function Purchase() {
       <div className="bg-slate-900 text-white py-6 px-4">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img src="/logo.png" alt="Wirez R Us" className="w-10 h-10 object-contain" />
+            <img src="/logo-icon.png" alt="Wirez R Us" className="w-10 h-10 object-contain" />
             <span className="text-xl font-bold tracking-tight">Wirez R Us</span>
           </div>
           <div className="flex items-center gap-4">
@@ -235,7 +235,7 @@ export function Purchase() {
       <footer className="bg-slate-900 text-slate-400 py-8 px-4 mt-16">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <img src="/logo.png" alt="Wirez R Us" className="w-8 h-8 object-contain" />
+            <img src="/logo-icon.png" alt="Wirez R Us" className="w-8 h-8 object-contain" />
             <span className="font-bold text-white">Wirez R Us</span>
             <span className="text-sm">Field Management System</span>
           </div>

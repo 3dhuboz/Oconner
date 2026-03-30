@@ -4,11 +4,11 @@ import { Job, Material, TimeEntry, CatalogPart } from '../types';
 import {
   MapPin, Clock, Camera, Plus, Trash2, CheckCircle2, FileText,
   Navigation, Play, Square, Coffee, Package, Search, Loader2,
-  ChevronDown, ChevronUp, DollarSign, X, AlertCircle,
+  ChevronDown, ChevronUp, DollarSign, X, AlertCircle, Mail, QrCode, CreditCard, Send,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { cn } from '../utils';
-import { uploadsApi, partsCatalogApi } from '../services/api';
+import { uploadsApi, partsCatalogApi, stripeApi, apiFetch } from '../services/api';
 import toast from 'react-hot-toast';
 import jsPDF from 'jspdf';
 
@@ -85,7 +85,7 @@ function msToHours(ms: number): number {
 }
 
 // ─── Invoice PDF generator ────────────────────────────────────
-function generateInvoicePDF(job: Job, materials: Material[], timeEntries: TimeEntry[]): jsPDF {
+function generateInvoicePDF(job: Job, materials: Material[], timeEntries: TimeEntry[], logoDataUrl?: string): jsPDF {
   const doc = new jsPDF();
   const hourlyRate = job.hourlyRate ?? 95;
   const workedMs = calcWorkedMs(timeEntries);
@@ -98,43 +98,75 @@ function generateInvoicePDF(job: Job, materials: Material[], timeEntries: TimeEn
   const invoiceNo = `INV-${job.id.slice(-8).toUpperCase()}`;
   const dateStr = new Date().toLocaleDateString('en-AU');
 
-  // ── Header bar ──
-  doc.setFillColor(26, 26, 46); // #1a1a2e
-  doc.rect(0, 0, 210, 30, 'F');
-  doc.setFontSize(22);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(245, 166, 35); // amber
-  doc.text('WIREZ R US', 15, 19);
-  doc.setFontSize(10);
-  doc.setTextColor(255, 255, 255);
-  doc.text('Licensed Electrical Contractor', 15, 25);
+  // ── Header: white background with dark left accent + amber bottom stripe ──
+  doc.setFillColor(255, 255, 255);
+  doc.rect(0, 0, 210, 42, 'F');
+
+  // Dark left accent bar
+  doc.setFillColor(26, 26, 46);
+  doc.rect(0, 0, 5, 42, 'F');
+
+  // Logo on white background (always readable) or text fallback
+  if (logoDataUrl) {
+    try {
+      doc.addImage(logoDataUrl, 'PNG', 10, 5, 54, 30);
+    } catch {
+      doc.setFontSize(18);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(26, 26, 46);
+      doc.text('WIREZ R US', 12, 18);
+      doc.setFontSize(7);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(245, 166, 35);
+      doc.text('ELECTRICAL & SMOKE ALARMS', 12, 24);
+    }
+  } else {
+    doc.setFontSize(18);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(26, 26, 46);
+    doc.text('WIREZ R US', 12, 18);
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(245, 166, 35);
+    doc.text('ELECTRICAL & SMOKE ALARMS', 12, 24);
+  }
+
+  // Company info — right aligned
+  doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');
-  doc.text('QLD Licence No. XXXXX', 115, 19);
-  doc.text('ABN: XX XXX XXX XXX', 115, 25);
+  doc.setTextColor(71, 85, 105);
+  doc.text('Licensed Electrical Contractor', 195, 13, { align: 'right' });
+  doc.text('QLD Licence No. XXXXX  |  ABN: XX XXX XXX XXX', 195, 20, { align: 'right' });
+  doc.text('admin@wirezapp.au  |  wirezapp.au', 195, 27, { align: 'right' });
+
+  // Amber bottom accent stripe
+  doc.setFillColor(245, 166, 35);
+  doc.rect(0, 42, 210, 2.5, 'F');
 
   // ── Invoice title & number ──
   doc.setTextColor(30, 41, 59);
-  doc.setFontSize(18);
+  doc.setFontSize(17);
   doc.setFont('helvetica', 'bold');
-  doc.text('TAX INVOICE', 105, 45, { align: 'center' });
+  doc.text('TAX INVOICE', 105, 57, { align: 'center' });
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
-  doc.text(`Invoice No: ${invoiceNo}`, 140, 53);
-  doc.text(`Date: ${dateStr}`, 140, 59);
-  doc.text(`Due: On completion`, 140, 65);
+  doc.text(`Invoice No: ${invoiceNo}`, 140, 65);
+  doc.text(`Date: ${dateStr}`, 140, 71);
+  doc.text(`Due: On completion`, 140, 77);
 
   // ── Bill To ──
   doc.setFont('helvetica', 'bold');
-  doc.text('Bill To:', 15, 53);
+  doc.text('Bill To:', 15, 65);
   doc.setFont('helvetica', 'normal');
-  doc.text(job.tenantName || '—', 15, 59);
+  doc.text(job.tenantName || '—', 15, 71);
   const addrLines = doc.splitTextToSize(job.propertyAddress || '—', 70);
-  doc.text(addrLines, 15, 65);
-  if (job.tenantPhone) doc.text(`Ph: ${job.tenantPhone}`, 15, 65 + addrLines.length * 5 + 2);
-  if (job.tenantEmail) doc.text(`Email: ${job.tenantEmail}`, 15, 65 + addrLines.length * 5 + 8);
+  doc.text(addrLines, 15, 77);
+  let billY = 77 + addrLines.length * 5;
+  if (job.tenantPhone) { doc.text(`Ph: ${job.tenantPhone}`, 15, billY + 2); billY += 6; }
+  if (job.tenantEmail) { doc.text(`Email: ${job.tenantEmail}`, 15, billY + 2); }
 
   // ── Job description ──
-  let y = 83;
+  let y = 96;
   doc.setFillColor(241, 245, 249);
   doc.roundedRect(13, y - 5, 184, 18, 2, 2, 'F');
   doc.setFont('helvetica', 'bold');
@@ -239,6 +271,14 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const prevJobIdRef = useRef<string | undefined>(undefined);
 
+  // Invoice / payment state
+  const [emailModalOpen, setEmailModalOpen] = useState(false);
+  const [emailTo, setEmailTo] = useState('');
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const [paymentLink, setPaymentLink] = useState<string | null>(null);
+  const [paymentLinkLoading, setPaymentLinkLoading] = useState(false);
+  const [logoDataUrl, setLogoDataUrl] = useState<string | undefined>(undefined);
+
   // Self-fetch parts catalog — don't rely solely on the prop (may be empty on first render)
   const [localParts, setLocalParts] = useState<CatalogPart[]>(partsCatalog);
   useEffect(() => {
@@ -252,6 +292,20 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
       if (Array.isArray(data) && data.length > 0) setLocalParts(data);
     }).catch(() => {});
   }, [partsCatalog]);
+
+  // Pre-load Wirez logo as base64 for PDF embedding (use logo-black for white header)
+  useEffect(() => {
+    fetch('/logo-black.png')
+      .then(r => r.blob())
+      .then(blob => new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      }))
+      .then(dataUrl => setLogoDataUrl(dataUrl))
+      .catch(() => {/* fallback to text in PDF */});
+  }, []);
 
   // Derive job from props — no hook
   const job = jobs.find(j => j.id === id);
@@ -385,10 +439,62 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
   };
 
   const handleDownloadInvoice = () => {
-    const doc = generateInvoicePDF(job, materials, timeEntries);
+    const doc = generateInvoicePDF(job, materials, timeEntries, logoDataUrl);
     doc.save(`Invoice-${job.id.slice(-8).toUpperCase()}.pdf`);
     setInvoiceGenerated(true);
     toast.success('Invoice downloaded');
+  };
+
+  const handleOpenEmailModal = () => {
+    setEmailTo(job.tenantEmail || job.propertyManagerEmail || '');
+    setEmailModalOpen(true);
+  };
+
+  const handleSendInvoiceEmail = async () => {
+    if (!emailTo.trim()) { toast.error('Please enter an email address'); return; }
+    setSendingEmail(true);
+    try {
+      const doc = generateInvoicePDF(job, materials, timeEntries, logoDataUrl);
+      const pdfBase64 = doc.output('datauristring').split(',')[1];
+      const invoiceNo = `INV-${job.id.slice(-8).toUpperCase()}`;
+      await apiFetch(`/jobs/${job.id}/send-invoice`, {
+        method: 'POST',
+        body: JSON.stringify({
+          pdfBase64,
+          invoiceNumber: invoiceNo,
+          totalAmount: total,
+          paymentLinkUrl: paymentLink ?? undefined,
+          recipientEmail: emailTo.trim(),
+        }),
+      });
+      toast.success(`Invoice emailed to ${emailTo.trim()}`);
+      setEmailModalOpen(false);
+      setInvoiceGenerated(true);
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to send invoice');
+    }
+    setSendingEmail(false);
+  };
+
+  const handleCreatePaymentLink = async () => {
+    setPaymentLinkLoading(true);
+    try {
+      const result = await stripeApi.createPaymentLink({
+        jobId: job.id,
+        amount: Math.round(total * 100), // cents
+        description: job.title || 'Electrical Work',
+        customerEmail: job.tenantEmail || undefined,
+      });
+      if (result?.url) {
+        setPaymentLink(result.url);
+        toast.success('Payment link created');
+      } else {
+        throw new Error(result?.error || 'No payment link URL returned');
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to create payment link');
+    }
+    setPaymentLinkLoading(false);
   };
 
   const handleFinishJob = async () => {
@@ -959,14 +1065,68 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
               </div>
             )}
 
-            {/* Download Invoice */}
-            <button
-              onClick={handleDownloadInvoice}
-              className="w-full bg-amber-500 hover:bg-amber-600 text-white rounded-2xl py-4 font-bold text-base flex items-center justify-center gap-2 shadow"
-            >
-              <FileText className="w-5 h-5" />
-              Download Invoice PDF
-            </button>
+            {/* Action buttons */}
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={handleDownloadInvoice}
+                className="flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-600 text-white rounded-2xl py-4 font-bold text-sm shadow"
+              >
+                <FileText className="w-4 h-4" />
+                Download PDF
+              </button>
+              <button
+                onClick={handleOpenEmailModal}
+                className="flex items-center justify-center gap-2 bg-[#1a1a2e] hover:bg-[#2a2a42] text-white rounded-2xl py-4 font-bold text-sm shadow"
+              >
+                <Mail className="w-4 h-4" />
+                Email Invoice
+              </button>
+            </div>
+
+            {/* Take Payment */}
+            {!paymentLink ? (
+              <button
+                onClick={handleCreatePaymentLink}
+                disabled={paymentLinkLoading}
+                className="w-full flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-60 text-white rounded-2xl py-4 font-bold text-base shadow"
+              >
+                {paymentLinkLoading ? (
+                  <><Loader2 className="w-5 h-5 animate-spin" /> Creating Payment Link…</>
+                ) : (
+                  <><CreditCard className="w-5 h-5" /> Create Payment Link (Stripe)</>
+                )}
+              </button>
+            ) : (
+              <div className="bg-white rounded-2xl border border-emerald-200 shadow-sm overflow-hidden">
+                <div className="bg-emerald-500 px-4 py-3 flex items-center gap-2">
+                  <CreditCard className="w-4 h-4 text-white" />
+                  <p className="text-sm font-bold text-white">Payment Link Ready — ${total.toFixed(2)}</p>
+                </div>
+                <div className="p-4 flex flex-col items-center gap-3">
+                  {/* QR code via free API */}
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(paymentLink)}`}
+                    alt="Payment QR Code"
+                    className="w-48 h-48 rounded-xl border border-slate-200"
+                  />
+                  <p className="text-xs text-slate-500 text-center">Show QR code to customer or share link below</p>
+                  <a
+                    href={paymentLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-emerald-600 underline break-all text-center"
+                  >
+                    {paymentLink}
+                  </a>
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(paymentLink); toast.success('Link copied'); }}
+                    className="w-full bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-xl py-2.5 text-sm font-semibold"
+                  >
+                    Copy Payment Link
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Finish Job */}
             {job.status !== 'REVIEW' && job.status !== 'CLOSED' && clockStatus === 'clocked_off' && (
@@ -987,6 +1147,53 @@ export function FieldPortal({ jobs, updateJob, partsCatalog = [] }: FieldPortalP
                 <p className="text-xs text-emerald-600 mt-1">Admin has been notified for review</p>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── Email Invoice Modal ── */}
+        {emailModalOpen && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-end justify-center p-4">
+            <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-slate-800 text-lg">Email Invoice</h3>
+                <button onClick={() => setEmailModalOpen(false)} className="p-1.5 rounded-lg hover:bg-slate-100">
+                  <X className="w-5 h-5 text-slate-400" />
+                </button>
+              </div>
+              <p className="text-sm text-slate-500">
+                Send invoice <span className="font-mono font-bold text-slate-700">INV-{job.id.slice(-8).toUpperCase()}</span> for <span className="font-bold text-amber-600">${total.toFixed(2)}</span>
+              </p>
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide block mb-1.5">To</label>
+                <input
+                  type="email"
+                  value={emailTo}
+                  onChange={e => setEmailTo(e.target.value)}
+                  placeholder="customer@email.com"
+                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 ring-amber-400"
+                />
+              </div>
+              {paymentLink && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3">
+                  <p className="text-xs text-emerald-700 font-semibold">✓ Payment link will be included in the email</p>
+                </div>
+              )}
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setEmailModalOpen(false)}
+                  className="flex-1 py-3 rounded-xl border border-slate-200 text-slate-600 font-semibold text-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSendInvoiceEmail}
+                  disabled={sendingEmail || !emailTo.trim()}
+                  className="flex-1 py-3 rounded-xl bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white font-bold text-sm flex items-center justify-center gap-2"
+                >
+                  {sendingEmail ? <><Loader2 className="w-4 h-4 animate-spin" /> Sending…</> : <><Send className="w-4 h-4" /> Send</>}
+                </button>
+              </div>
+            </div>
           </div>
         )}
 

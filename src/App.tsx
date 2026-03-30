@@ -304,7 +304,7 @@ function AppContent() {
       } />
       <Route path="/stocktake" element={
         <AdminRoute>
-          <Stocktake electricians={electricians} partsCatalog={partsCatalog} />
+          <Stocktake electricians={electricians} partsCatalog={partsCatalog} refreshCatalog={async () => { try { const data = await partsCatalogApi.list(); setPartsCatalog(data); } catch {} }} />
         </AdminRoute>
       } />
 

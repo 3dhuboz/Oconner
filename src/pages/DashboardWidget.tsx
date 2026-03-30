@@ -55,7 +55,7 @@ export function DashboardWidget({ jobs, electricians }: DashboardWidgetProps) {
     return (
       <div className="w-screen bg-gradient-to-r from-slate-800 to-slate-900 text-white px-3 py-1.5 flex items-center justify-between shadow-lg border-b border-slate-700 cursor-pointer hover:from-slate-700 hover:to-slate-800 transition-all" onClick={() => setMinimized(false)}>
         <div className="flex items-center gap-2">
-          <img src="/logo.png" alt="Wirez R Us" className="w-4 h-4 object-contain" />
+          <img src="/logo-icon.png" alt="Wirez R Us" className="w-4 h-4 object-contain" />
           <span className="text-[10px] font-semibold">Wirez</span>
           <span className="text-[9px] text-slate-400">•</span>
           <span className="text-[9px] text-slate-300">{totalActive} / {actionRequired.length}</span>
@@ -72,7 +72,7 @@ export function DashboardWidget({ jobs, electricians }: DashboardWidgetProps) {
         <div className="px-3 py-2 flex items-center justify-between">
           <div className="flex items-center gap-2 flex-1 min-w-0">
             <GripVertical className="w-4 h-4 text-slate-500 cursor-move flex-shrink-0" title="Drag to dock" />
-            <img src="/logo.png" alt="Wirez R Us" className="w-6 h-6 object-contain flex-shrink-0" />
+            <img src="/logo-icon.png" alt="Wirez R Us" className="w-6 h-6 object-contain flex-shrink-0" />
             <span className="text-xs font-bold truncate">Wirez R Us</span>
           </div>
           <div className="flex items-center gap-1 ml-2 flex-shrink-0">

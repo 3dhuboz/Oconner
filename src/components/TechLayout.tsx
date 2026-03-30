@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ClipboardList, Calendar, User, Zap, LogOut, Wifi, WifiOff, CloudOff, RefreshCw, MapPin } from 'lucide-react';
+import { ClipboardList, Calendar, User, Zap, LogOut, Wifi, WifiOff, CloudOff, RefreshCw, MapPin, Navigation } from 'lucide-react';
 import { cn } from '../utils';
 import { useAuth } from '../context/AuthContext';
 import { useSyncStatus } from '../hooks/useOfflineSync';
 import { forceSyncNow } from '../services/syncService';
+import { techLocationsApi } from '../services/api';
 
 interface TechLayoutProps {
   children: React.ReactNode;
@@ -14,6 +15,45 @@ export function TechLayout({ children }: TechLayoutProps) {
   const location = useLocation();
   const { user, logout } = useAuth();
   const { isOnline, pendingCount, isSyncing } = useSyncStatus();
+  const [locSharing, setLocSharing] = useState<'off' | 'active' | 'denied'>('off');
+  const watchIdRef = useRef<number | null>(null);
+  const lastUploadRef = useRef<number>(0);
+
+  // ── Live location broadcasting ────────────────────────────
+  useEffect(() => {
+    if (!user || !navigator.geolocation) return;
+
+    const upload = (pos: GeolocationPosition) => {
+      const now = Date.now();
+      // Upload at most every 30 seconds
+      if (now - lastUploadRef.current < 30000) return;
+      lastUploadRef.current = now;
+      techLocationsApi.upsert({
+        uid: user.uid,
+        technicianName: user.displayName || user.email,
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude,
+        accuracy: Math.round(pos.coords.accuracy),
+        updatedAt: new Date().toISOString(),
+      }).catch(() => {});
+    };
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => { setLocSharing('active'); upload(pos); },
+      () => setLocSharing('denied'),
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (pos) => { setLocSharing('active'); upload(pos); },
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 15000 }
+    );
+
+    return () => {
+      if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current);
+    };
+  }, [user]);
 
   if (!user) return null;
 
@@ -30,7 +70,7 @@ export function TechLayout({ children }: TechLayoutProps) {
       <header className="bg-[#1a1a2e] text-white px-4 py-3 flex items-center justify-between shrink-0 safe-top">
         <div className="flex items-center gap-2.5">
           <img
-            src="/logo.png"
+            src="/logo-icon.png"
             alt="Wirez R Us"
             className="w-10 h-10 object-contain"
             style={{ filter: 'drop-shadow(0 0 8px #F5A623) drop-shadow(0 0 3px #F5A623)' }}
@@ -41,6 +81,13 @@ export function TechLayout({ children }: TechLayoutProps) {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* GPS location indicator */}
+          {locSharing === 'active' && (
+            <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold">
+              <Navigation className="w-3 h-3 animate-pulse" />
+              GPS
+            </div>
+          )}
           {/* Online/Offline indicator */}
           <button
             onClick={() => { if (isOnline && pendingCount > 0) forceSyncNow(); }}
