@@ -79,53 +79,52 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Look up user profile from D1 via API
     (async () => {
       try {
-        const profile = await userProfilesApi.get(clerkUser.id);
-        setUser({
-          email,
-          name: profile.displayName || clerkUser.fullName || 'User',
-          role: (profile.role as UserRole) || 'user',
-          uid: clerkUser.id,
-          tenantId: profile.tenantId,
-          licenseId: profile.licenseId,
-        });
-
-        if (profile.tenantId) {
-          // Tenant info is included in profile response or fetch separately
-          // For now set basic license info
-          setLicense({
-            status: 'Active',
-            plan: 'Professional',
-            type: profile.role === 'admin' ? 'admin' : 'technician',
-          });
-        } else {
-          setLicense({ status: 'No License', plan: 'None' });
+        let profile: any = null;
+        try {
+          profile = await userProfilesApi.get(clerkUser.id);
+        } catch {
+          // Not found — create a new profile
+          const newProfile = {
+            uid: clerkUser.id,
+            email,
+            displayName: clerkUser.fullName || email.split('@')[0],
+            role: 'user',
+            createdAt: new Date().toISOString(),
+            isActive: true,
+          };
+          try {
+            profile = await userProfilesApi.upsert(newProfile);
+          } catch { /* swallow — API may not be reachable yet */ }
+          if (!profile) {
+            profile = newProfile;
+          }
         }
 
-        // Update last login
-        await userProfilesApi.update(clerkUser.id, { lastLogin: new Date().toISOString() });
-      } catch {
-        // New user — create profile
-        const newProfile = {
-          uid: clerkUser.id,
-          email,
-          displayName: clerkUser.fullName || 'New User',
-          role: 'user',
-          createdAt: new Date().toISOString(),
-          isActive: true,
-        };
-        try {
-          await userProfilesApi.upsert(newProfile);
-        } catch { /* swallow — may fail if API not ready */ }
-
         setUser({
           email,
-          name: clerkUser.fullName || 'New User',
-          role: 'user',
+          name: profile.displayName || clerkUser.fullName || email.split('@')[0],
+          role: (profile.role as UserRole) || 'user',
           uid: clerkUser.id,
+          tenantId: profile.tenantId || undefined,
+          licenseId: profile.licenseId || undefined,
         });
+
+        setLicense(
+          profile.tenantId
+            ? { status: 'Active', plan: 'Professional', type: profile.role === 'admin' ? 'admin' : 'technician' }
+            : { status: 'No License', plan: 'None' }
+        );
+
+        // Fire-and-forget last login update
+        userProfilesApi.update(clerkUser.id, { lastLogin: new Date().toISOString() }).catch(() => {});
+      } catch (err) {
+        console.error('[AuthContext] Unexpected profile load error:', err);
+        // Fallback — let user in as basic user so they at least see the pending screen
+        setUser({ email, name: clerkUser.fullName || 'User', role: 'user', uid: clerkUser.id });
         setLicense({ status: 'No License', plan: 'None' });
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     })();
   }, [isLoaded, isSignedIn, clerkUser]);
 

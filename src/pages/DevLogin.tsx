@@ -27,7 +27,6 @@ export function DevLogin() {
           }}
           routing="path"
           path="/dev/login"
-          signUpUrl="/register"
           forceRedirectUrl="/admin"
         />
         <div className="mt-6 text-center space-y-2">

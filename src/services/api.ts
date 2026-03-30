@@ -1,5 +1,12 @@
-// Base URL: in dev use '/api' (Vite proxies to Worker), in prod the Worker serves both
-const API_BASE = import.meta.env.VITE_API_URL || '/api';
+// Base URL: explicit env var → production domain detection → dev proxy fallback
+function resolveApiBase(): string {
+  if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
+  if (typeof window !== 'undefined' && window.location.hostname === 'wirezapp.au') {
+    return 'https://api.wirezapp.au';
+  }
+  return '/api'; // Dev: Vite proxies to localhost:8787
+}
+const API_BASE = resolveApiBase();
 
 // All fetch calls include Clerk session token
 export async function apiFetch(path: string, options: RequestInit = {}) {

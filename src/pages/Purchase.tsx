@@ -219,8 +219,7 @@ export function Purchase() {
                   footerActionLink: 'text-[#E8862A] hover:text-[#F5A623]',
                 },
               }}
-              routing="path"
-              path="/purchase"
+              routing="virtual"
               signInUrl="/login"
               forceRedirectUrl="/"
             />

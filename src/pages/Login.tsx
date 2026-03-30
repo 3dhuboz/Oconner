@@ -30,7 +30,7 @@ export function Login() {
             }}
             routing="path"
             path="/login"
-            signUpUrl="/register"
+            signUpUrl="/purchase"
             forceRedirectUrl="/"
           />
         </div>
