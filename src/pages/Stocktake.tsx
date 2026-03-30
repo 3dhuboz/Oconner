@@ -166,14 +166,30 @@ export function Stocktake({ electricians, partsCatalog, refreshCatalog }: Stockt
 
   // ─── Derived data ───────────────────────────────────────────
   const hqStock = useMemo(() => {
-    return stock.filter(s => s.technicianId === HQ_ID && s.quantity > 0)
-      .filter(s => {
+    return partsCatalog
+      .filter(p => {
         if (!search) return true;
         const q = search.toLowerCase();
-        return s.partName.toLowerCase().includes(q) || (s.barcode || '').toLowerCase().includes(q);
+        return p.name.toLowerCase().includes(q) || (p.barcode || '').toLowerCase().includes(q);
+      })
+      .map(p => {
+        const stockKey = `${HQ_ID}_${p.id}`;
+        const existing = stock.find(s => s.id === stockKey);
+        return existing ?? ({
+          id: stockKey,
+          partId: p.id,
+          partName: p.name,
+          barcode: p.barcode,
+          technicianId: HQ_ID,
+          technicianName: HQ_NAME,
+          quantity: 0,
+          sellPrice: p.sellPrice ?? p.defaultCost,
+          costPrice: p.costPrice ?? p.defaultCost,
+          lastUpdated: '',
+        } as StockItem);
       })
       .sort((a, b) => a.partName.localeCompare(b.partName));
-  }, [stock, search]);
+  }, [stock, partsCatalog, search]);
 
   const techStockGrouped = useMemo(() => {
     const map = new Map<string, { tech: Electrician | null; items: StockItem[]; totalValue: number; totalCost: number }>();
@@ -288,7 +304,23 @@ export function Stocktake({ electricians, partsCatalog, refreshCatalog }: Stockt
 
   const handleAdjust = async (item: StockItem, delta: number) => {
     const newQty = Math.max(0, item.quantity + delta);
-    await techStockApi.update(item.id, { quantity: newQty, lastUpdated: new Date().toISOString() });
+    const existsInDb = item.lastUpdated !== '';
+    if (existsInDb) {
+      await techStockApi.update(item.id, { quantity: newQty, lastUpdated: new Date().toISOString() });
+    } else {
+      await techStockApi.upsert({
+        id: item.id,
+        partId: item.partId,
+        partName: item.partName,
+        barcode: item.barcode || null,
+        technicianId: item.technicianId,
+        technicianName: item.technicianName,
+        quantity: newQty,
+        sellPrice: item.sellPrice,
+        costPrice: item.costPrice,
+        lastUpdated: new Date().toISOString(),
+      });
+    }
     await stockMovementsApi.create({
       partId: item.partId, partName: item.partName, barcode: item.barcode || null,
       technicianId: item.technicianId,
@@ -432,14 +464,16 @@ export function Stocktake({ electricians, partsCatalog, refreshCatalog }: Stockt
       <span className="text-sm font-bold text-slate-600 w-20 text-right shrink-0">
         ${(item.sellPrice * item.quantity).toFixed(2)}
       </span>
-      <button
-        onClick={() => handleDelete(item)}
-        disabled={deletingId === item.id}
-        className="w-7 h-7 rounded-lg bg-rose-50 text-rose-500 hover:bg-rose-100 hover:text-rose-700 flex items-center justify-center disabled:opacity-40 transition-colors ml-1"
-        title="Remove from stock"
-      >
-        {deletingId === item.id ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-      </button>
+      {item.lastUpdated !== '' && (
+        <button
+          onClick={() => handleDelete(item)}
+          disabled={deletingId === item.id}
+          className="w-7 h-7 rounded-lg bg-rose-50 text-rose-500 hover:bg-rose-100 hover:text-rose-700 flex items-center justify-center disabled:opacity-40 transition-colors ml-1"
+          title="Remove from stock"
+        >
+          {deletingId === item.id ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+        </button>
+      )}
     </div>
   );
 
@@ -759,8 +793,8 @@ export function Stocktake({ electricians, partsCatalog, refreshCatalog }: Stockt
           {hqStock.length === 0 ? (
             <div className="text-center py-12 bg-white rounded-2xl border border-slate-200">
               <Warehouse className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-              <p className="text-slate-600 font-semibold">{search ? 'No matching HQ stock' : 'HQ warehouse is empty'}</p>
-              <p className="text-sm text-slate-400 mt-1">Use "Receive Delivery" to add stock to HQ.</p>
+              <p className="text-slate-600 font-semibold">No matching parts</p>
+              <p className="text-sm text-slate-400 mt-1">Add parts to the catalogue first.</p>
             </div>
           ) : (
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm divide-y divide-slate-50 overflow-hidden">
