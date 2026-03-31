@@ -32,12 +32,19 @@ app.post('/', async (c) => {
   if (caller.role !== 'admin') return c.json({ error: 'Forbidden' }, 403);
   const body = await c.req.json<typeof users.$inferInsert>();
   const now = Date.now();
-  await db.insert(users).values({ 
+  await db.insert(users).values({
     id: body.id,
     email: body.email,
     name: body.name,
     role: body.role,
     active: body.active ?? true,
+    phone: body.phone ?? null,
+    address: body.address ?? null,
+    vehicleInfo: body.vehicleInfo ?? null,
+    registrationNumber: body.registrationNumber ?? null,
+    licenseNumber: body.licenseNumber ?? null,
+    nextOfKin: body.nextOfKin ?? null,
+    zones: body.zones ?? '[]',
     createdAt: now,
     updatedAt: now
   });
