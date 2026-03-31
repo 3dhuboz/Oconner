@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/d1';
 import { eq, asc } from 'drizzle-orm';
-import { products, stockMovements, auditLog } from '@butcher/db';
+import { products, stockMovements, auditLog, deliveryDayStock } from '@butcher/db';
 import type { Env, AuthUser } from '../types';
 
 const app = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
@@ -110,6 +110,8 @@ app.delete('/:id', async (c) => {
   if (!before) return c.json({ error: 'Not found' }, 404);
 
   if (hard === 'true') {
+    await db.delete(stockMovements).where(eq(stockMovements.productId, productId));
+    await db.delete(deliveryDayStock).where(eq(deliveryDayStock.productId, productId));
     await db.delete(products).where(eq(products.id, productId));
   } else {
     await db.update(products).set({ active: false, updatedAt: Date.now() }).where(eq(products.id, productId));
