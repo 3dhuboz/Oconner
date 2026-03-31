@@ -182,7 +182,7 @@ export default function DriversPage() {
   const handleDelete = async () => {
     if (!deleteConfirm) return;
     try {
-      await api.users.update(deleteConfirm.id, { active: false });
+      await api.delete(`/api/users/${deleteConfirm.id}`);
       setDrivers((prev) => prev.filter((d) => d.id !== deleteConfirm.id));
       setDeleteConfirm(null);
       toast('Driver removed');

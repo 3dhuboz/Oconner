@@ -45,6 +45,7 @@ app.post('/', async (c) => {
     licenseNumber: body.licenseNumber ?? null,
     nextOfKin: body.nextOfKin ?? null,
     zones: body.zones ?? '[]',
+    startAddress: body.startAddress ?? null,
     createdAt: now,
     updatedAt: now
   });
@@ -59,6 +60,18 @@ app.patch('/:id', async (c) => {
   }
   const body = await c.req.json<Partial<typeof users.$inferInsert>>();
   await db.update(users).set({ ...body, updatedAt: Date.now() }).where(eq(users.id, c.req.param('id')));
+  return c.json({ ok: true });
+});
+
+app.delete('/:id', async (c) => {
+  const db = drizzle(c.env.DB);
+  const caller = c.get('user');
+  if (caller.role !== 'admin') return c.json({ error: 'Forbidden' }, 403);
+  const id = c.req.param('id');
+  if (id === caller.id) return c.json({ error: 'Cannot delete yourself' }, 400);
+  const [target] = await db.select().from(users).where(eq(users.id, id)).limit(1);
+  if (!target) return c.json({ error: 'Not found' }, 404);
+  await db.delete(users).where(eq(users.id, id));
   return c.json({ ok: true });
 });
 

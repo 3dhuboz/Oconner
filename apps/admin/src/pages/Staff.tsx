@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '@butcher/shared';
-import { Plus, X, Save, ShieldCheck, ShieldOff, Send } from 'lucide-react';
+import { Plus, X, Save, ShieldCheck, ShieldOff, Send, Trash2 } from 'lucide-react';
 import { toast } from '../lib/toast';
 
 interface StaffUser {
@@ -100,6 +100,7 @@ export default function StaffPage() {
     }
   };
 
+  const [deleteConfirm, setDeleteConfirm] = useState<StaffUser | null>(null);
   const [inviting, setInviting] = useState<string | null>(null);
 
   const sendInvite = async (u: StaffUser) => {
@@ -121,6 +122,18 @@ export default function StaffPage() {
       toast(`${u.name} ${u.active ? 'deactivated' : 'activated'}`);
     } catch (e: any) {
       toast(e.message ?? 'Failed to update', 'error');
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteConfirm) return;
+    try {
+      await api.delete(`/api/users/${deleteConfirm.id}`);
+      setStaff((prev) => prev.filter((u) => u.id !== deleteConfirm.id));
+      setDeleteConfirm(null);
+      toast(`${deleteConfirm.name} removed`);
+    } catch (e: any) {
+      toast(e?.message ?? 'Failed to remove staff member', 'error');
     }
   };
 
@@ -183,6 +196,9 @@ export default function StaffPage() {
                     <button onClick={() => toggleActive(u)} title={u.active ? 'Deactivate' : 'Activate'} className="text-gray-400 hover:text-gray-700">
                       {u.active ? <ShieldOff className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
                     </button>
+                    <button onClick={() => setDeleteConfirm(u)} title="Remove" className="text-gray-400 hover:text-red-500">
+                      <Trash2 className="h-4 w-4" />
+                    </button>
                   </div>
                 </td>
               </tr>
@@ -216,6 +232,24 @@ export default function StaffPage() {
               className="flex items-center gap-2 px-4 py-2 text-sm bg-brand text-white rounded-lg hover:bg-brand-mid disabled:opacity-60">
               <Save className="h-3.5 w-3.5" />{saving ? 'Adding…' : 'Add to Team'}
             </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* Delete confirm modal */}
+      {deleteConfirm && (
+        <Modal title="Remove Staff Member" onClose={() => setDeleteConfirm(null)}>
+          <div className="text-center">
+            <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-3">
+              <Trash2 className="h-6 w-6 text-red-500" />
+            </div>
+            <p className="text-sm text-gray-500">
+              Permanently remove <strong>{deleteConfirm.name}</strong> ({deleteConfirm.email}) from the team?
+            </p>
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button onClick={() => setDeleteConfirm(null)} className="flex-1 border py-2 rounded-lg text-sm">Cancel</button>
+            <button onClick={handleDelete} className="flex-1 bg-red-500 text-white py-2 rounded-lg text-sm font-medium">Remove</button>
           </div>
         </Modal>
       )}

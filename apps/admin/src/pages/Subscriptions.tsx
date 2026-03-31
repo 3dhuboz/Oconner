@@ -31,8 +31,8 @@ const STATUS_STYLE: Record<string, string> = {
 const FREQUENCIES = ['weekly', 'fortnightly', 'monthly'];
 const EMPTY_FORM: {
   email: string; name: string; phone: string; address: string; suburb: string; postcode: string;
-  boxId: string; boxName: string; frequency: string; status: Subscription['status'];
-} = { email: '', name: '', phone: '', address: '', suburb: '', postcode: '', boxId: '', boxName: '', frequency: 'monthly', status: 'active' };
+  boxId: string; boxName: string; alternateBoxId: string; alternateBoxName: string; frequency: string; status: Subscription['status'];
+} = { email: '', name: '', phone: '', address: '', suburb: '', postcode: '', boxId: '', boxName: '', alternateBoxId: '', alternateBoxName: '', frequency: 'monthly', status: 'active' };
 
 function BoxPlanCard({ product, onSaved }: { product: Product & { imageUrl?: string }; onSaved: (id: string, url: string) => void }) {
   const [url, setUrl] = useState(product.imageUrl ?? '');
@@ -168,6 +168,8 @@ export default function SubscriptionsPage() {
         email: form.email, name: form.name, phone: form.phone,
         address: form.address, suburb: form.suburb, postcode: form.postcode,
         boxId: form.boxId, boxName: form.boxName,
+        alternateBoxId: form.alternateBoxId || null,
+        alternateBoxName: form.alternateBoxName || null,
         frequency: form.frequency, status: form.status,
       }) as { id: string };
       setSubs((prev) => [{ id: result.id, ...form, createdAt: Date.now() }, ...prev]);
@@ -303,6 +305,16 @@ export default function SubscriptionsPage() {
                         <X className="h-3.5 w-3.5" /> Cancel
                       </button>
                     )}
+                    <button onClick={async () => {
+                      if (!confirm(`Delete subscription for ${s.customerName || s.email}?`)) return;
+                      try {
+                        await api.delete(`/api/subscriptions/${s.id}`);
+                        setSubs((prev) => prev.filter((x) => x.id !== s.id));
+                        toast('Subscription deleted');
+                      } catch { toast('Failed to delete', 'error'); }
+                    }} className="flex items-center gap-1 bg-red-50 text-red-600 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-red-100">
+                      <Trash2 className="h-3.5 w-3.5" /> Delete
+                    </button>
                   </div>
                 </div>
               );
@@ -609,6 +621,21 @@ export default function SubscriptionsPage() {
                 {selectedBox?.imageUrl && (
                   <img src={selectedBox.imageUrl} alt={selectedBox.name}
                     className="mt-2 w-full h-28 object-cover rounded-lg" />
+                )}
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Alternate Box (optional)</label>
+                <select value={form.alternateBoxId}
+                  onChange={(e) => {
+                    const p = boxProducts.find((bp) => bp.id === e.target.value);
+                    setForm((f) => ({ ...f, alternateBoxId: e.target.value, alternateBoxName: p?.name ?? '' }));
+                  }}
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
+                  <option value="">No alternate — same box every time</option>
+                  {boxProducts.filter((p) => p.id !== form.boxId).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+                {form.alternateBoxId && (
+                  <p className="text-xs text-gray-400 mt-1">Customer will alternate between <strong>{form.boxName}</strong> and <strong>{form.alternateBoxName}</strong> each delivery.</p>
                 )}
               </div>
               <div>

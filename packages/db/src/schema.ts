@@ -15,6 +15,7 @@ export const users = sqliteTable('users', {
   licenseNumber: text('license_number'),
   nextOfKin: text('next_of_kin'),         // JSON: { name, phone }
   zones: text('zones').notNull().default('[]'), // JSON: string[] of postcode prefixes
+  startAddress: text('start_address'),        // route starting point for drivers
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull(),
 });
