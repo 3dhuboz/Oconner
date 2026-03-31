@@ -487,43 +487,20 @@ app.post('/api/images/generate', requireAuth, async (c) => {
   if (!prompt) return c.json({ error: 'Prompt required' }, 400);
   try {
     let imageBytes: Uint8Array;
-    if (c.env.OPENROUTER_API_KEY) {
-      const res = await fetch('https://openrouter.ai/api/v1/images/generations', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${c.env.OPENROUTER_API_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: 'black-forest-labs/flux-1-schnell', prompt, n: 1 }),
-      });
-      if (!res.ok) {
-        const err = await res.text();
-        throw new Error(`OpenRouter ${res.status}: ${err}`);
-      }
-      const data = await res.json() as { data: Array<{ url?: string; b64_json?: string }> };
-      const item = data.data?.[0];
-      if (!item) throw new Error('No image in OpenRouter response');
-      if (item.b64_json) {
-        const binary = atob(item.b64_json);
-        imageBytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) imageBytes[i] = binary.charCodeAt(i);
-      } else if (item.url) {
-        imageBytes = new Uint8Array(await (await fetch(item.url)).arrayBuffer());
-      } else {
-        throw new Error('No image data in OpenRouter response');
-      }
+    // Use Cloudflare Workers AI (Flux 1 Schnell) — always available via the AI binding
+    const result = await c.env.AI.run('@cf/black-forest-labs/flux-1-schnell', { prompt }) as { image: string } | ReadableStream;
+    if (result && typeof result === 'object' && 'image' in result) {
+      const binary = atob(result.image);
+      imageBytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) imageBytes[i] = binary.charCodeAt(i);
     } else {
-      const result = await c.env.AI.run('@cf/black-forest-labs/flux-1-schnell', { prompt }) as { image: string } | ReadableStream;
-      if (result && typeof result === 'object' && 'image' in result) {
-        const binary = atob(result.image);
-        imageBytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) imageBytes[i] = binary.charCodeAt(i);
-      } else {
-        const reader = (result as ReadableStream).getReader();
-        const chunks: Uint8Array[] = [];
-        while (true) { const { done, value } = await reader.read(); if (done) break; if (value) chunks.push(value); }
-        const total = chunks.reduce((s, ch) => s + ch.length, 0);
-        imageBytes = new Uint8Array(total);
-        let off = 0;
-        for (const chunk of chunks) { imageBytes.set(chunk, off); off += chunk.length; }
-      }
+      const reader = (result as ReadableStream).getReader();
+      const chunks: Uint8Array[] = [];
+      while (true) { const { done, value } = await reader.read(); if (done) break; if (value) chunks.push(value); }
+      const total = chunks.reduce((s, ch) => s + ch.length, 0);
+      imageBytes = new Uint8Array(total);
+      let off = 0;
+      for (const chunk of chunks) { imageBytes.set(chunk, off); off += chunk.length; }
     }
     const key = `${crypto.randomUUID()}.png`;
     await c.env.IMAGES.put(key, imageBytes, { httpMetadata: { contentType: 'image/png' } });
