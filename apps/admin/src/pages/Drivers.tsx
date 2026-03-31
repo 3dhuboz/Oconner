@@ -6,7 +6,12 @@ import MapPage from './Map';
 import { ZoneAutocomplete } from '../components/ZoneAutocomplete';
 
 
-const EMPTY_FORM = { name: '', email: '', sendInvite: true };
+const EMPTY_FORM = {
+  name: '', email: '', sendInvite: true,
+  phone: '', address: '', startAddress: '',
+  vehicleInfo: '', registrationNumber: '', licenseNumber: '',
+  nextOfKinName: '', nextOfKinPhone: '', zones: '',
+};
 const EMPTY_EDIT = {
   name: '', email: '', phone: '', address: '', startAddress: '',
   vehicleInfo: '', registrationNumber: '', licenseNumber: '',
@@ -72,9 +77,24 @@ export default function DriversPage() {
       // Not in Clerk yet — use UUID, they can log in after signing up
     }
     const id = clerkId ?? crypto.randomUUID();
+    const zonesArr = form.zones.split(',').map((z) => z.trim()).filter(Boolean);
+    const nextOfKin = form.nextOfKinName || form.nextOfKinPhone
+      ? JSON.stringify({ name: form.nextOfKinName, phone: form.nextOfKinPhone })
+      : null;
     try {
-      await api.users.create({ id, name: form.name, email: form.email, role: 'driver', active: true });
-      const newDriver: DriverUser = { id, name: form.name, email: form.email, role: 'driver', active: true };
+      await api.users.create({
+        id, name: form.name, email: form.email, role: 'driver', active: true,
+        phone: form.phone || null, address: form.address || null,
+        startAddress: form.startAddress || null,
+        vehicleInfo: form.vehicleInfo || null, registrationNumber: form.registrationNumber || null,
+        licenseNumber: form.licenseNumber || null, nextOfKin, zones: JSON.stringify(zonesArr),
+      });
+      const newDriver: DriverUser = {
+        id, name: form.name, email: form.email, role: 'driver', active: true,
+        phone: form.phone || null, address: form.address || null,
+        vehicleInfo: form.vehicleInfo || null, registrationNumber: form.registrationNumber || null,
+        licenseNumber: form.licenseNumber || null, nextOfKin, zones: JSON.stringify(zonesArr),
+      };
       setDrivers((prev) => [...prev, newDriver]);
       setForm(EMPTY_FORM);
       setShowForm(false);
@@ -287,49 +307,108 @@ export default function DriversPage() {
       </div>
 
       {showForm && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-sm p-6">
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl w-full max-w-lg p-6 my-8">
             <div className="flex items-center justify-between mb-5">
               <h2 className="font-semibold text-lg flex items-center gap-2">
                 <Truck className="h-5 w-5 text-brand" /> Add Driver
               </h2>
               <button onClick={() => setShowForm(false)}><X className="h-5 w-5 text-gray-400" /></button>
             </div>
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs text-gray-500 mb-1 block">Full Name</label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <input
-                    placeholder="e.g. John Smith"
-                    value={form.name}
+            <div className="space-y-4">
+              {/* Personal */}
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Personal</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Full Name *</label>
+                  <input placeholder="e.g. John Smith" value={form.name}
                     onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                    className="w-full border rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
-                  />
+                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Email *</label>
+                  <input type="email" placeholder="driver@example.com" value={form.email}
+                    onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block flex items-center gap-1"><Phone className="h-3 w-3" /> Phone</label>
+                  <input placeholder="04xx xxx xxx" value={form.phone}
+                    onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block flex items-center gap-1"><MapPin className="h-3 w-3" /> Address</label>
+                  <input placeholder="Home address" value={form.address}
+                    onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
+                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
                 </div>
               </div>
               <div>
-                <label className="text-xs text-gray-500 mb-1 block">Email</label>
-                <input
-                  type="email"
-                  placeholder="driver@example.com"
-                  value={form.email}
-                  onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
-                />
+                <label className="text-xs text-gray-500 mb-1 block flex items-center gap-1"><MapPin className="h-3 w-3" /> Route Start Point</label>
+                <input placeholder="e.g. 123 Main St, Rockhampton QLD 4700" value={form.startAddress}
+                  onChange={(e) => setForm((f) => ({ ...f, startAddress: e.target.value }))}
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                <p className="text-xs text-gray-400 mt-1">Used as the starting point for route optimisation</p>
               </div>
+
+              {/* Vehicle */}
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider pt-2">Vehicle</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block flex items-center gap-1"><Car className="h-3 w-3" /> Vehicle</label>
+                  <input placeholder="e.g. Toyota HiLux 2022" value={form.vehicleInfo}
+                    onChange={(e) => setForm((f) => ({ ...f, vehicleInfo: e.target.value }))}
+                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Registration</label>
+                  <input placeholder="ABC 123" value={form.registrationNumber}
+                    onChange={(e) => setForm((f) => ({ ...f, registrationNumber: e.target.value }))}
+                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                </div>
+              </div>
+
+              {/* License & Emergency */}
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider pt-2">License & Emergency</p>
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block flex items-center gap-1"><Shield className="h-3 w-3" /> Driver License Number</label>
+                <input placeholder="License number" value={form.licenseNumber}
+                  onChange={(e) => setForm((f) => ({ ...f, licenseNumber: e.target.value }))}
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block flex items-center gap-1"><Heart className="h-3 w-3" /> Next of Kin Name</label>
+                  <input placeholder="Emergency contact" value={form.nextOfKinName}
+                    onChange={(e) => setForm((f) => ({ ...f, nextOfKinName: e.target.value }))}
+                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Next of Kin Phone</label>
+                  <input placeholder="04xx xxx xxx" value={form.nextOfKinPhone}
+                    onChange={(e) => setForm((f) => ({ ...f, nextOfKinPhone: e.target.value }))}
+                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                </div>
+              </div>
+
+              {/* Zones */}
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider pt-2">Delivery Zones</p>
+              <ZoneAutocomplete value={form.zones} onChange={(v) => setForm((f) => ({ ...f, zones: v }))} label="Assigned Areas" hint="Search for suburbs to add delivery zones for this driver." />
+
+              {/* Invite */}
               <label className="flex items-center gap-3 cursor-pointer p-3 bg-brand/5 border border-brand/20 rounded-lg">
-                <input
-                  type="checkbox"
-                  checked={form.sendInvite}
+                <input type="checkbox" checked={form.sendInvite}
                   onChange={(e) => setForm((f) => ({ ...f, sendInvite: e.target.checked }))}
-                  className="accent-brand w-4 h-4"
-                />
+                  className="accent-brand w-4 h-4" />
                 <div>
                   <p className="text-sm font-medium text-brand">Send invite email</p>
                   <p className="text-xs text-gray-500">Email the driver a link to the app with install instructions</p>
                 </div>
               </label>
+
               {error && <p className="text-red-600 text-sm bg-red-50 rounded-lg p-3">{error}</p>}
             </div>
             <div className="flex gap-3 mt-5">
