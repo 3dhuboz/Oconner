@@ -1,0 +1,14 @@
+{
+  "name": "wires-sync",
+  "version": "1.0.0",
+  "description": "Session sync tool for Steve and Cassie",
+  "main": "sync.js",
+  "scripts": {
+    "start": "node sync.js"
+  },
+  "dependencies": {
+    "inquirer": "^8.2.6",
+    "chalk": "^4.1.2",
+    "simple-git": "^3.22.0"
+  }
+}
