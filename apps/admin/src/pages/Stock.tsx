@@ -20,13 +20,12 @@ export default function StockPage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    Promise.all([
-      api.products.list() as Promise<Product[]>,
-      api.get<StockMovement[]>('/api/stock/movements'),
-    ]).then(([prods, movs]) => {
-      setProducts(prods.sort((a, b) => a.name.localeCompare(b.name)));
-      setMovements(movs);
-    }).catch(() => {});
+    (api.products.list() as Promise<Product[]>)
+      .then((prods) => setProducts(prods.sort((a, b) => a.name.localeCompare(b.name))))
+      .catch(() => {});
+    api.get<StockMovement[]>('/api/stock/movements')
+      .then((movs) => setMovements(movs))
+      .catch(() => {});
   }, []);
 
   const openAdjust = (p: Product, direction: 1 | -1) =>
