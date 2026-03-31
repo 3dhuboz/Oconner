@@ -139,7 +139,7 @@ app.post('/', async (c) => {
     internalNotes: body.internalNotes ?? '',
     fulfillmentType: (body as any).fulfillmentType ?? 'delivery',
     promoCode: (body as any).promoId ?? null,
-    promoDiscount: discount || null,
+    promoDiscount: discount ?? 0,
     createdAt: now,
     updatedAt: now,
   });

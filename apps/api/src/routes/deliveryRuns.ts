@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/d1';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, inArray } from 'drizzle-orm';
 import { deliveryRuns, stops, users } from '@butcher/db';
 import type { Env, AuthUser } from '../types';
 
@@ -20,7 +20,7 @@ app.get('/', async (c) => {
   const driverIds = runs.map((r) => r.driverUid).filter(Boolean) as string[];
   const drivers = driverIds.length
     ? await db.select({ id: users.id, name: users.name, email: users.email })
-        .from(users).all()
+        .from(users).where(inArray(users.id, driverIds)).all()
     : [];
 
   const allStops = await db.select({ id: stops.id, runId: stops.runId, status: stops.status })
