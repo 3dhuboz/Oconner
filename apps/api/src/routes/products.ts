@@ -103,7 +103,30 @@ app.delete('/:id', async (c) => {
   const db = drizzle(c.env.DB);
   const user = c.get('user');
   if (user.role !== 'admin') return c.json({ error: 'Forbidden' }, 403);
-  await db.update(products).set({ active: false, updatedAt: Date.now() }).where(eq(products.id, c.req.param('id')));
+  const productId = c.req.param('id');
+  const { hard } = c.req.query();
+
+  const [before] = await db.select().from(products).where(eq(products.id, productId)).limit(1);
+  if (!before) return c.json({ error: 'Not found' }, 404);
+
+  if (hard === 'true') {
+    await db.delete(products).where(eq(products.id, productId));
+  } else {
+    await db.update(products).set({ active: false, updatedAt: Date.now() }).where(eq(products.id, productId));
+  }
+
+  await db.insert(auditLog).values({
+    id: crypto.randomUUID(),
+    action: hard === 'true' ? 'delete' : 'soft_delete',
+    entity: 'products',
+    entityId: productId,
+    before: JSON.stringify(before),
+    after: null,
+    adminUid: user.id,
+    adminEmail: user.email,
+    timestamp: Date.now(),
+  });
+
   return c.json({ ok: true });
 });
 
