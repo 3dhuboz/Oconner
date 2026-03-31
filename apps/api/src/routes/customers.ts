@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/d1';
 import { eq, desc } from 'drizzle-orm';
-import { customers, orders } from '@butcher/db';
+import { customers, orders, subscriptions, stops, pushSubscriptions } from '@butcher/db';
 import type { Env, AuthUser } from '../types';
 
 const app = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
@@ -51,10 +51,15 @@ app.patch('/:id', async (c) => {
   return c.json({ ok: true });
 });
 
-// Delete customer
+// Delete customer (cascade through FK tables)
 app.delete('/:id', async (c) => {
   const db = drizzle(c.env.DB);
-  await db.delete(customers).where(eq(customers.id, c.req.param('id')));
+  const id = c.req.param('id');
+  await db.delete(pushSubscriptions).where(eq(pushSubscriptions.customerId, id));
+  await db.delete(subscriptions).where(eq(subscriptions.customerId, id));
+  await db.delete(stops).where(eq(stops.customerId, id));
+  await db.delete(orders).where(eq(orders.customerId, id));
+  await db.delete(customers).where(eq(customers.id, id));
   return c.json({ ok: true });
 });
 
