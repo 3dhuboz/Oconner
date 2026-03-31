@@ -1,0 +1,11 @@
+name = "butcher-storefront"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = ".vercel/output/static"
+
+[build]
+command = "pnpm install --shamefully-hoist && cd apps/storefront && pnpm run build:cf"
+
+[vars]
+NEXT_PUBLIC_API_URL = "https://oconner-api.steve-700.workers.dev"
+NEXT_PUBLIC_VAPID_PUBLIC_KEY = "BDayIYbvg7SUn2MHDo7Z4Wo5l8mk6p7V2L3W49wET6tIABFWMevzXDTTs-8sp8N0uYOvl4xXQUYpPx4zev3ZjPM"

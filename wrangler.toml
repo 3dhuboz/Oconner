@@ -1,45 +1,36 @@
-name = "wirez-r-us-api"
-main = "worker/index.ts"
-compatibility_date = "2024-12-01"
+name = "butcher-workers"
+compatibility_date = "2024-09-01"
 
-# Custom domain — routes api.wirezapp.au directly to this Worker
-[[routes]]
-pattern = "api.wirezapp.au"
-custom_domain = true
+# GPS Relay Worker (deprecated — proxies to main API)
+[[workers]]
+name = "butcher-gps-relay"
+main = "workers/gps-relay/src/index.ts"
+compatibility_date = "2024-09-01"
 
-[vars]
-ENVIRONMENT = "production"
+[workers.vars]
+API_URL = "https://oconner-api.steve-700.workers.dev"
 
-# D1 Database
-[[d1_databases]]
-binding = "DB"
-database_name = "wirez-r-us-db"
-database_id = "4e54dda5-f1e0-417e-b0ce-145fddadc15c"
-migrations_dir = "worker/migrations"
+# Payment Handler Worker (deprecated — proxies to main API)
+[[workers]]
+name = "butcher-payment-handler"
+main = "workers/payment-handler/src/index.ts"
+compatibility_date = "2024-09-01"
 
-# R2 Bucket for photos/files
-[[r2_buckets]]
-binding = "STORAGE"
-bucket_name = "wirez-r-us-uploads"
+[workers.vars]
+API_URL = "https://oconner-api.steve-700.workers.dev"
 
-# Email routing — send capability (for forwarding if needed)
-[[send_email]]
-name = "EMAIL"
+# Route Proxy Worker
+[[workers]]
+name = "butcher-route-proxy"
+main = "workers/route-proxy/src/index.ts"
+compatibility_date = "2024-09-01"
 
-# Environment-specific secrets (set via `wrangler secret put`)
-# CLERK_SECRET_KEY
-# CLERK_PUBLISHABLE_KEY
-# STRIPE_SECRET_KEY
-# STRIPE_WEBHOOK_SECRET
-# STRIPE_SETUP_FEE_PRICE_ID
-# STRIPE_BASE_SUBSCRIPTION_PRICE_ID
-# STRIPE_ADDITIONAL_TECH_PRICE_ID
-# TWILIO_ACCOUNT_SID
-# TWILIO_AUTH_TOKEN
-# TWILIO_PHONE_NUMBER
-# XERO_CLIENT_ID
-# XERO_CLIENT_SECRET
-# OPENROUTER_API_KEY
-# RESEND_API_KEY
-# RESEND_FROM_EMAIL  e.g. "Wirez R Us <jobs@wirezapp.au>" — must be a verified Resend domain
-# GOOGLE_MAPS_API_KEY
+[[workers.kv_namespaces]]
+binding = "GEOCODE_KV"
+id = ""
+
+# PDF Generator Worker
+[[workers]]
+name = "butcher-pdf-generator"
+main = "workers/pdf-generator/src/index.ts"
+compatibility_date = "2024-09-01"

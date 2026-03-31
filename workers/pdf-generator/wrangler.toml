@@ -1,0 +1,9 @@
+name = "butcher-pdf-generator"
+main = "src/index.ts"
+compatibility_date = "2024-09-01"
+
+[vars]
+API_URL = "https://oconner-api.steve-700.workers.dev"
+
+[dev]
+port = 8789

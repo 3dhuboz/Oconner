@@ -1,0 +1,6 @@
+name = "butcher-driver"
+compatibility_date = "2024-09-23"
+pages_build_output_dir = "dist"
+
+[build]
+command = "pnpm install --shamefully-hoist && cd apps/driver && pnpm run build"

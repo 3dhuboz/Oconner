@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__Claude_Preview__preview_start",
+      "Bash(where pnpm:*)",
+      "Bash(where npm:*)",
+      "Bash(where npx:*)",
+      "Bash(node -e \"console.log\\(process.execPath\\)\")",
+      "Bash(node -e \"console.log\\(require\\(''which''\\).sync\\(''pnpm''\\)\\)\")",
+      "Bash(node -e \"const {execSync} = require\\(''child_process''\\); console.log\\(execSync\\(''where pnpm''\\).toString\\(\\).trim\\(\\)\\)\")",
+      "Bash(node -e \"const {execSync}=require\\(''''child_process''''\\); console.log\\(execSync\\(''''pnpm --filter @butcher/storefront dev --help'''', {timeout:5000}\\).toString\\(\\)\\)\")",
+      "Bash(pnpm install:*)",
+      "Bash(pnpm approve-builds:*)",
+      "Bash(npx pnpm:*)",
+      "Bash(xargs grep:*)",
+      "Bash(xargs wc:*)",
+      "Bash(find /c/Users/Steve/Desktop/GitHub/Oconner/.claude/worktrees/friendly-bhaskara -type f \\\\\\(-name *.json -o -name *.tsx -o -name *.ts \\\\\\) ! -path */node_modules/* ! -path */.next/* ! -path */.vercel/*)",
+      "WebFetch(domain:www.oconnoragriculture.com.au)",
+      "Bash(gh pr:*)",
+      "Bash(wc -l /c/Users/Steve/Desktop/GitHub/Oconner/.claude/worktrees/friendly-bhaskara/apps/storefront/src/app/page.tsx /c/Users/Steve/Desktop/GitHub/Oconner/.claude/worktrees/friendly-bhaskara/apps/admin/src/pages/*.tsx /c/Users/Steve/Desktop/GitHub/Oconner/.claude/worktrees/friendly-bhaskara/apps/api/src/routes/*.ts)",
+      "Bash(npx tsc:*)"
+    ]
+  }
+}

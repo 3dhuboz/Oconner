@@ -1,0 +1,37 @@
+name = "oconner-api"
+main = "src/index.ts"
+compatibility_date = "2024-09-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "oconner-db"
+database_id = "8bdf5c09-1509-438f-b93d-d4b7c136ca77"
+
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "oconner-images"
+
+[vars]
+ENVIRONMENT = "production"
+STOREFRONT_URL = "https://oconnoragriculture.com.au"
+DRIVER_APP_URL = "https://driver.oconnoragriculture.com.au"
+FROM_EMAIL = "O'Connor Agriculture <orders@oconnoragriculture.com.au>"
+
+# Secrets — set via: npx wrangler secret put KEY_NAME
+# CLERK_SECRET_KEY
+# RESEND_API_KEY
+# STRIPE_SECRET_KEY
+# STRIPE_WEBHOOK_SECRET
+# GOOGLE_MAPS_API_KEY
+# OPENROUTER_API_KEY
+# ZERNIO_API_KEY
+
+[ai]
+binding = "AI"
+
+[triggers]
+crons = ["0 8 * * *"]
+
+[dev]
+port = 8787

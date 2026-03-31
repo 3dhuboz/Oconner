@@ -1,0 +1,17 @@
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-heading: 'Barlow Condensed', sans-serif;
+  --font-body: 'Inter', sans-serif;
+}
+
+@layer base {
+  html { @apply h-full; }
+  body { @apply h-full font-sans bg-gray-50 text-gray-900; font-family: var(--font-body); }
+  #root { @apply h-full; }
+  h1, h2, h3 { font-family: var(--font-heading); letter-spacing: 0.01em; }
+}

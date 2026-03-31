@@ -1,0 +1,2 @@
+# NOT USED — this project deploys to Cloudflare Pages, not Netlify.
+# See apps/storefront/wrangler.toml for Pages config.

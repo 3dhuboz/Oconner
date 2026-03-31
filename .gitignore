@@ -1,11 +1,38 @@
+# Dependencies
 node_modules/
-build/
+.pnpm-store/
+
+# Build outputs
 dist/
-coverage/
-.DS_Store
-*.log
-.env*
-!.env.example
-.wrangler/
+build/
+.next/
+out/
+.vercel/
+
+# Environment
+.env
+.env.local
+.env.*.local
 .dev.vars
-.claude/
+
+# Turborepo
+.turbo/
+
+# Cloudflare
+.wrangler/
+worker-configuration.d.ts
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
