@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { api, formatCurrency } from '@butcher/shared';
 import type { Product } from '@butcher/shared';
-import { Plus, Pencil, X, Upload, Sparkles, Image } from 'lucide-react';
+import { Plus, Pencil, X, Upload, Sparkles, Image, Trash2 } from 'lucide-react';
 import { toast } from '../lib/toast';
 
 const CATEGORIES = ['beef', 'lamb', 'pork', 'chicken', 'seafood', 'deli', 'pack', 'other'];
@@ -16,6 +16,8 @@ export default function ProductsPage() {
   const [imgGenerating, setImgGenerating] = useState(false);
   const [imgLoading, setImgLoading] = useState(false);
   const [imgError, setImgError] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<Product | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -55,6 +57,21 @@ export default function ProductsPage() {
   const toggleActive = async (product: Product) => {
     await api.products.update(product.id!, { active: !product.active });
     setProducts((prev) => prev.map((p) => p.id === product.id ? { ...p, active: !p.active } : p));
+  };
+
+  const handleDelete = async () => {
+    if (!deleteConfirm) return;
+    setDeleting(true);
+    try {
+      await api.delete(`/api/products/${deleteConfirm.id}?hard=true`);
+      setProducts((prev) => prev.filter((p) => p.id !== deleteConfirm.id));
+      setDeleteConfirm(null);
+      toast('Product deleted');
+    } catch {
+      toast('Failed to delete product', 'error');
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const f = <K extends keyof Product>(k: K) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
@@ -152,21 +169,47 @@ export default function ProductsPage() {
                   </button>
                 </td>
                 <td className="px-4 py-3 text-right">
-                  <button onClick={() => {
-                    const url = (p as any).imageUrl ?? '';
-                    const stale = isStaleUrl(url);
-                    setEditing({ ...p });
-                    setImgLoading(!stale && !!url);
-                    setImgError(stale && !!url);
-                  }} className="text-brand hover:underline text-xs font-medium">
-                    <Pencil className="h-3.5 w-3.5" />
-                  </button>
+                  <div className="flex items-center justify-end gap-1">
+                    <button onClick={() => {
+                      const url = (p as any).imageUrl ?? '';
+                      const stale = isStaleUrl(url);
+                      setEditing({ ...p });
+                      setImgLoading(!stale && !!url);
+                      setImgError(stale && !!url);
+                    }} className="p-1.5 text-gray-400 hover:text-brand rounded-lg hover:bg-brand/5" title="Edit">
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    <button onClick={() => setDeleteConfirm(p)} className="p-1.5 text-gray-400 hover:text-red-500 rounded-lg hover:bg-red-50" title="Delete">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      {/* Delete Confirm Modal */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6 text-center">
+            <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Trash2 className="h-6 w-6 text-red-500" />
+            </div>
+            <h2 className="font-semibold text-lg mb-2">Delete Product?</h2>
+            <p className="text-sm text-gray-500 mb-5">
+              Permanently delete <strong>{deleteConfirm.name}</strong>? This cannot be undone.
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setDeleteConfirm(null)} className="flex-1 border py-2 rounded-lg text-sm">Cancel</button>
+              <button onClick={handleDelete} disabled={deleting} className="flex-1 bg-red-500 text-white py-2 rounded-lg text-sm font-medium disabled:opacity-50">
+                {deleting ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {editing && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
