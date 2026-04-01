@@ -482,6 +482,48 @@ Output ONLY the post text, nothing else. No commentary, no "Here is your post:",
   }
 });
 
+// ── Google Places autocomplete proxy (no auth needed for storefront checkout) ──
+app.get('/api/address/autocomplete', async (c) => {
+  const input = c.req.query('input');
+  if (!input || input.length < 3) return c.json({ predictions: [] });
+  const key = c.env.GOOGLE_MAPS_API_KEY;
+  if (!key) return c.json({ error: 'Google Maps API key not configured' }, 500);
+  const params = new URLSearchParams({
+    input,
+    key,
+    components: 'country:au',
+    types: 'address',
+  });
+  const res = await fetch(`https://maps.googleapis.com/maps/api/place/autocomplete/json?${params}`);
+  const data = await res.json() as any;
+  return c.json({ predictions: (data.predictions ?? []).map((p: any) => ({ placeId: p.place_id, description: p.description })) });
+});
+
+app.get('/api/address/details', async (c) => {
+  const placeId = c.req.query('placeId');
+  if (!placeId) return c.json({ error: 'placeId required' }, 400);
+  const key = c.env.GOOGLE_MAPS_API_KEY;
+  if (!key) return c.json({ error: 'Google Maps API key not configured' }, 500);
+  const params = new URLSearchParams({
+    place_id: placeId,
+    key,
+    fields: 'address_components,formatted_address',
+  });
+  const res = await fetch(`https://maps.googleapis.com/maps/api/place/details/json?${params}`);
+  const data = await res.json() as any;
+  const comps = data.result?.address_components ?? [];
+  const get = (type: string) => comps.find((c: any) => c.types.includes(type))?.long_name ?? '';
+  const getShort = (type: string) => comps.find((c: any) => c.types.includes(type))?.short_name ?? '';
+  return c.json({
+    streetNumber: get('street_number'),
+    street: get('route'),
+    suburb: get('locality') || get('sublocality_level_1') || get('neighborhood'),
+    state: getShort('administrative_area_level_1'),
+    postcode: get('postal_code'),
+    formatted: data.result?.formatted_address ?? '',
+  });
+});
+
 app.post('/api/images/generate', requireAuth, async (c) => {
   const { prompt } = await c.req.json<{ prompt: string }>();
   if (!prompt) return c.json({ error: 'Prompt required' }, 400);
