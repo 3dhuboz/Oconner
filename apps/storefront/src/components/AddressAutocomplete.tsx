@@ -16,15 +16,50 @@ interface Props {
   className?: string;
 }
 
-interface Prediction {
-  placeId: string;
-  description: string;
+interface NominatimResult {
+  display_name?: string;
+  address?: {
+    house_number?: string;
+    road?: string;
+    street?: string;
+    suburb?: string;
+    city?: string;
+    town?: string;
+    village?: string;
+    hamlet?: string;
+    city_district?: string;
+    state?: string;
+    postcode?: string;
+  };
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
+interface Suggestion {
+  line1: string;
+  suburb: string;
+  state: string;
+  postcode: string;
+  detail: string;
+}
+
+const AU_STATE_MAP: Record<string, string> = {
+  Queensland: 'QLD',
+  'New South Wales': 'NSW',
+  Victoria: 'VIC',
+  'South Australia': 'SA',
+  'Western Australia': 'WA',
+  Tasmania: 'TAS',
+  'Northern Territory': 'NT',
+  'Australian Capital Territory': 'ACT',
+};
+
+function extractSuburb(addr: NominatimResult['address']): string {
+  if (!addr) return '';
+  // Nominatim returns AU suburbs in various fields depending on area
+  return addr.suburb || addr.city_district || addr.town || addr.village || addr.hamlet || addr.city || '';
+}
 
 export default function AddressAutocomplete({ value, onChange, className }: Props) {
-  const [suggestions, setSuggestions] = useState<Prediction[]>([]);
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [query, setQuery] = useState('');
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
@@ -41,19 +76,47 @@ export default function AddressAutocomplete({ value, onChange, className }: Prop
   }, []);
 
   const search = (q: string) => {
-    if (q.length < 3) { setSuggestions([]); setShowDropdown(false); return; }
+    if (q.length < 4) { setSuggestions([]); setShowDropdown(false); return; }
     clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
       try {
-        const res = await fetch(`${API_URL}/api/address/autocomplete?input=${encodeURIComponent(q)}`);
-        const data = await res.json() as { predictions: Prediction[] };
-        setSuggestions(data.predictions ?? []);
-        setShowDropdown((data.predictions ?? []).length > 0);
+        // Search with structured query for better AU results
+        const params = new URLSearchParams({
+          q: q + ', Australia',
+          format: 'json',
+          addressdetails: '1',
+          countrycodes: 'au',
+          limit: '6',
+          'accept-language': 'en',
+        });
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
+          headers: { 'User-Agent': 'OConnorAgriculture/1.0' },
+        });
+        const data = await res.json() as NominatimResult[];
+
+        const results: Suggestion[] = data
+          .filter((r) => r.address && (r.address.road || r.address.street))
+          .map((r) => {
+            const addr = r.address!;
+            const streetNum = addr.house_number ?? '';
+            const street = addr.road || addr.street || '';
+            const line1 = `${streetNum} ${street}`.trim();
+            const suburb = extractSuburb(addr);
+            const stateCode = AU_STATE_MAP[addr.state ?? ''] ?? '';
+            const postcode = addr.postcode ?? '';
+            const detail = [suburb, stateCode, postcode].filter(Boolean).join(' ');
+            return { line1, suburb, state: stateCode, postcode, detail };
+          })
+          // Deduplicate by line1 + suburb
+          .filter((s, i, arr) => arr.findIndex((x) => x.line1 === s.line1 && x.suburb === s.suburb) === i);
+
+        setSuggestions(results);
+        setShowDropdown(results.length > 0);
       } catch {
         setSuggestions([]);
         setShowDropdown(false);
       }
-    }, 300);
+    }, 400);
   };
 
   const handleInputChange = (val: string) => {
@@ -62,28 +125,17 @@ export default function AddressAutocomplete({ value, onChange, className }: Prop
     search(val);
   };
 
-  const selectSuggestion = async (prediction: Prediction) => {
+  const selectSuggestion = (s: Suggestion) => {
+    onChange({
+      line1: s.line1,
+      line2: value.line2,
+      suburb: s.suburb,
+      state: s.state || value.state,
+      postcode: s.postcode,
+    });
+    setQuery(s.line1);
     setShowDropdown(false);
     setSuggestions([]);
-    try {
-      const res = await fetch(`${API_URL}/api/address/details?placeId=${encodeURIComponent(prediction.placeId)}`);
-      const data = await res.json() as {
-        streetNumber: string; street: string; suburb: string; state: string; postcode: string;
-      };
-      const line1 = `${data.streetNumber} ${data.street}`.trim();
-      onChange({
-        line1: line1 || prediction.description.split(',')[0],
-        line2: value.line2,
-        suburb: data.suburb,
-        state: data.state || value.state,
-        postcode: data.postcode,
-      });
-      setQuery(line1 || prediction.description.split(',')[0]);
-    } catch {
-      // Fallback: just use description
-      onChange({ ...value, line1: prediction.description.split(',')[0] });
-      setQuery(prediction.description.split(',')[0]);
-    }
   };
 
   const cls = className ?? 'w-full border rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand text-sm';
@@ -107,22 +159,17 @@ export default function AddressAutocomplete({ value, onChange, className }: Prop
 
         {showDropdown && suggestions.length > 0 && (
           <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
-            {suggestions.map((p) => {
-              const parts = p.description.split(',');
-              const line = parts[0]?.trim() ?? '';
-              const detail = parts.slice(1).join(',').trim();
-              return (
-                <button
-                  key={p.placeId}
-                  type="button"
-                  onClick={() => selectSuggestion(p)}
-                  className="w-full text-left px-3 py-2.5 hover:bg-brand/5 transition-colors border-b border-gray-50 last:border-0"
-                >
-                  <p className="text-sm font-medium text-gray-800">{line}</p>
-                  <p className="text-xs text-gray-400">{detail}</p>
-                </button>
-              );
-            })}
+            {suggestions.map((s, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => selectSuggestion(s)}
+                className="w-full text-left px-3 py-2.5 hover:bg-brand/5 transition-colors border-b border-gray-50 last:border-0"
+              >
+                <p className="text-sm font-medium text-gray-800">{s.line1}</p>
+                <p className="text-xs text-gray-400">{s.detail}</p>
+              </button>
+            ))}
           </div>
         )}
       </div>
