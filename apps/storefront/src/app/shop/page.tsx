@@ -336,32 +336,25 @@ function ProductCard({
             >
               <Phone className="h-4 w-4" /> Enquire
             </Link>
-          ) : qty > 0 ? (
-            <div className="flex items-center gap-0 rounded-lg overflow-hidden border-2 border-brand">
+          ) : (
+            <div className={`flex items-center gap-0 rounded-lg overflow-hidden border-2 ${qty > 0 ? 'border-brand' : 'border-gray-200'} ${outOfStock ? 'opacity-40 pointer-events-none' : ''}`}>
               <button
                 onClick={(e) => { e.stopPropagation(); onDecrement(); }}
-                className="flex items-center justify-center w-9 h-9 bg-brand/10 text-brand hover:bg-brand/20 transition-colors"
+                disabled={qty <= 0}
+                className="flex items-center justify-center w-9 h-9 bg-gray-50 text-gray-500 hover:bg-brand/10 hover:text-brand transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
               >
                 <Minus className="h-4 w-4" />
               </button>
-              <span className="w-9 h-9 flex items-center justify-center text-sm font-bold text-brand bg-white">
+              <span className={`w-9 h-9 flex items-center justify-center text-sm font-bold bg-white ${qty > 0 ? 'text-brand' : 'text-gray-400'}`}>
                 {qty}
               </span>
               <button
-                onClick={(e) => { e.stopPropagation(); onIncrement(); }}
+                onClick={(e) => { e.stopPropagation(); qty === 0 ? onAdd() : onIncrement(); }}
                 className="flex items-center justify-center w-9 h-9 bg-brand text-white hover:bg-brand-mid transition-colors"
               >
                 <Plus className="h-4 w-4" />
               </button>
             </div>
-          ) : (
-            <button
-              onClick={onAdd}
-              disabled={product.stockOnHand <= 0}
-              className="flex items-center gap-1 bg-brand text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-mid transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              <ShoppingCart className="h-4 w-4" /> Add
-            </button>
           )}
         </div>
       </div>
