@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/d1';
 import { eq } from 'drizzle-orm';
-import { users } from '@butcher/db';
+import { users, driverSessions, deliveryRuns, deliveryDays } from '@butcher/db';
 import type { Env, AuthUser } from '../types';
 
 const app = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
@@ -71,6 +71,10 @@ app.delete('/:id', async (c) => {
   if (id === caller.id) return c.json({ error: 'Cannot delete yourself' }, 400);
   const [target] = await db.select().from(users).where(eq(users.id, id)).limit(1);
   if (!target) return c.json({ error: 'Not found' }, 404);
+  // Cascade: clear FK references before deleting user
+  await db.delete(driverSessions).where(eq(driverSessions.driverUid, id));
+  await db.update(deliveryRuns).set({ driverUid: null }).where(eq(deliveryRuns.driverUid, id));
+  await db.update(deliveryDays).set({ driverUid: null }).where(eq(deliveryDays.driverUid, id));
   await db.delete(users).where(eq(users.id, id));
   return c.json({ ok: true });
 });
