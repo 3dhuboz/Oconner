@@ -23,7 +23,7 @@ export default function ShopPage() {
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<Product | null>(null);
   const [modalQty, setModalQty] = useState(1);
-  const { addItem, items } = useCart();
+  const { addItem, removeItem, updateQuantity, items } = useCart();
 
   useEffect(() => {
     setLoading(true);
@@ -38,6 +38,11 @@ export default function ShopPage() {
   const getItemQty = (productId: string) => {
     const item = items.find((i) => i.productId === productId);
     return item?.quantity ?? 0;
+  };
+
+  const getItemWeight = (productId: string) => {
+    const item = items.find((i) => i.productId === productId);
+    return item?.weight;
   };
 
   return (
@@ -90,6 +95,20 @@ export default function ShopPage() {
                     fixedPrice: product.fixedPrice,
                     lineTotal: product.isMeatPack ? (product.fixedPrice ?? 0) : Math.round((product.pricePerKg ?? 0) * minKg),
                   });
+                }}
+                onIncrement={() => {
+                  const w = getItemWeight(product.id!);
+                  const currentQty = getItemQty(product.id!);
+                  updateQuantity(product.id!, currentQty + 1, w);
+                }}
+                onDecrement={() => {
+                  const w = getItemWeight(product.id!);
+                  const currentQty = getItemQty(product.id!);
+                  if (currentQty <= 1) {
+                    removeItem(product.id!, w);
+                  } else {
+                    updateQuantity(product.id!, currentQty - 1, w);
+                  }
                 }}
               />
             ))}
@@ -238,11 +257,15 @@ function ProductCard({
   qty,
   onAdd,
   onOpen,
+  onIncrement,
+  onDecrement,
 }: {
   product: Product;
   qty: number;
   onAdd: () => void;
   onOpen: () => void;
+  onIncrement: () => void;
+  onDecrement: () => void;
 }) {
   const isBulkShare = BULK_IDS.includes(product.id ?? '');
   const minKg = BULK_MIN_KG[product.id ?? ''];
@@ -313,14 +336,31 @@ function ProductCard({
             >
               <Phone className="h-4 w-4" /> Enquire
             </Link>
+          ) : qty > 0 ? (
+            <div className="flex items-center gap-0 rounded-lg overflow-hidden border-2 border-brand">
+              <button
+                onClick={(e) => { e.stopPropagation(); onDecrement(); }}
+                className="flex items-center justify-center w-9 h-9 bg-brand/10 text-brand hover:bg-brand/20 transition-colors"
+              >
+                <Minus className="h-4 w-4" />
+              </button>
+              <span className="w-9 h-9 flex items-center justify-center text-sm font-bold text-brand bg-white">
+                {qty}
+              </span>
+              <button
+                onClick={(e) => { e.stopPropagation(); onIncrement(); }}
+                className="flex items-center justify-center w-9 h-9 bg-brand text-white hover:bg-brand-mid transition-colors"
+              >
+                <Plus className="h-4 w-4" />
+              </button>
+            </div>
           ) : (
             <button
               onClick={onAdd}
               disabled={product.stockOnHand <= 0}
               className="flex items-center gap-1 bg-brand text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-mid transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              <ShoppingCart className="h-4 w-4" />
-              {qty > 0 ? `Add (${qty})` : 'Add'}
+              <ShoppingCart className="h-4 w-4" /> Add
             </button>
           )}
         </div>
