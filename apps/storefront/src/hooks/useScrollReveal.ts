@@ -12,13 +12,24 @@ export function useScrollReveal() {
           }
         });
       },
-      { threshold: 0.15, rootMargin: '0px 0px -40px 0px' }
+      { threshold: 0.1, rootMargin: '0px 0px -20px 0px' }
     );
 
-    document.querySelectorAll('.reveal, .reveal-left, .reveal-right, .reveal-scale').forEach((el) => {
-      observer.observe(el);
-    });
+    function observe() {
+      document.querySelectorAll('.reveal:not(.visible), .reveal-left:not(.visible), .reveal-right:not(.visible), .reveal-scale:not(.visible)').forEach((el) => {
+        observer.observe(el);
+      });
+    }
 
-    return () => observer.disconnect();
+    // Observe immediately and again after content loads
+    observe();
+    const t1 = setTimeout(observe, 500);
+    const t2 = setTimeout(observe, 1500);
+
+    return () => {
+      observer.disconnect();
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
   }, []);
 }
