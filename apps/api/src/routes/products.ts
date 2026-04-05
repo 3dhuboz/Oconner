@@ -123,7 +123,7 @@ app.delete('/:id', async (c) => {
     entity: 'products',
     entityId: productId,
     before: JSON.stringify(before),
-    after: null,
+    after: '{}',
     adminUid: user.id,
     adminEmail: user.email,
     timestamp: Date.now(),
