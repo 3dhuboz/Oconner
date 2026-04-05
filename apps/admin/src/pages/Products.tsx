@@ -42,8 +42,8 @@ export default function ProductsPage() {
         setProducts((prev) => prev.map((p) => p.id === id ? { ...p, ...data } as Product : p));
         toast('Product updated');
       } else {
-        const created = await api.products.create({ ...data, displayOrder: products.length }) as Product;
-        setProducts((prev) => [...prev, created]);
+        const result = await api.products.create({ ...data, displayOrder: products.length }) as { id: string };
+        setProducts((prev) => [...prev, { ...data, id: result.id, displayOrder: products.length } as Product]);
         toast('Product created');
       }
       setEditing(null);
@@ -296,15 +296,36 @@ export default function ProductsPage() {
               <select value={editing.category ?? 'beef'} onChange={f('category')} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
                 {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
+
+              {/* Pricing type toggle */}
+              <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                <label className="text-xs font-medium text-gray-600">Pricing type:</label>
+                <div className="flex gap-1 bg-white rounded-lg border p-0.5">
+                  <button type="button" onClick={() => setEditing((prev) => prev ? { ...prev, isMeatPack: false } : prev)}
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${!editing.isMeatPack ? 'bg-brand text-white' : 'text-gray-500 hover:text-gray-700'}`}>
+                    Per kg
+                  </button>
+                  <button type="button" onClick={() => setEditing((prev) => prev ? { ...prev, isMeatPack: true } : prev)}
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${editing.isMeatPack ? 'bg-brand text-white' : 'text-gray-500 hover:text-gray-700'}`}>
+                    Fixed price (box/pack)
+                  </button>
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs text-gray-500 mb-1 block">Price per kg (cents)</label>
-                  <input type="number" value={editing.pricePerKg ?? 0} onChange={f('pricePerKg')} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
-                </div>
-                <div>
-                  <label className="text-xs text-gray-500 mb-1 block">Fixed price (cents)</label>
-                  <input type="number" value={editing.fixedPrice ?? 0} onChange={f('fixedPrice')} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
-                </div>
+                {editing.isMeatPack ? (
+                  <div className="col-span-2">
+                    <label className="text-xs text-gray-500 mb-1 block">Fixed price (cents)</label>
+                    <input type="number" value={editing.fixedPrice ?? 0} onChange={f('fixedPrice')} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                    <p className="text-xs text-gray-400 mt-1">e.g. 29000 = $290.00 per box</p>
+                  </div>
+                ) : (
+                  <div className="col-span-2">
+                    <label className="text-xs text-gray-500 mb-1 block">Price per kg (cents)</label>
+                    <input type="number" value={editing.pricePerKg ?? 0} onChange={f('pricePerKg')} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                    <p className="text-xs text-gray-400 mt-1">e.g. 1500 = $15.00/kg</p>
+                  </div>
+                )}
                 <div>
                   <label className="text-xs text-gray-500 mb-1 block">Stock on hand</label>
                   <input type="number" value={editing.stockOnHand ?? 0} onChange={f('stockOnHand')} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
