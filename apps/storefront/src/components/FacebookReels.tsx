@@ -58,14 +58,31 @@ function ReelModal({ reel, onClose }: { reel: ReelItem; onClose: () => void }) {
           <X className="h-5 w-5 text-white" />
         </button>
 
-        {/* Facebook embed iframe */}
-        <div className="rounded-2xl overflow-hidden bg-black" style={{ aspectRatio: '9/16' }}>
-          <iframe
-            src={buildFbEmbedSrc(reel.fbUrl)}
-            className="w-full h-full border-0"
-            allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
-            allowFullScreen
-          />
+        {/* Reel thumbnail + watch button */}
+        <div className="rounded-2xl overflow-hidden bg-black relative" style={{ aspectRatio: '9/16' }}>
+          {reel.thumbnail ? (
+            <img src={reel.thumbnail} alt={reel.label} className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full bg-gradient-to-br from-brand to-brand-dark" />
+          )}
+          <div className="absolute inset-0 bg-black/30 flex flex-col items-center justify-center gap-4">
+            <a
+              href={reel.fbUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-20 h-20 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center hover:bg-white/30 hover:scale-110 transition-all"
+            >
+              <Play className="h-10 w-10 text-white fill-white ml-1" />
+            </a>
+            <a
+              href={reel.fbUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-3 rounded-full text-sm flex items-center gap-2 transition-colors shadow-lg"
+            >
+              <ExternalLink className="h-4 w-4" /> Watch on Facebook
+            </a>
+          </div>
         </div>
 
         {/* Footer */}
