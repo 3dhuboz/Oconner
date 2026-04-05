@@ -144,9 +144,9 @@ export default function HomePage() {
 
         {/* ═══ HERO — Full viewport parallax ═══ */}
         <section
-          className="parallax-hero min-h-screen flex items-center justify-center relative overflow-hidden"
-          style={{ backgroundImage: `url(${hero.heroImageUrl})` }}
+          className="min-h-screen flex items-center justify-center relative overflow-hidden bg-brand"
         >
+          <img src={hero.heroImageUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
           <div className="absolute inset-0 bg-gradient-to-b from-brand/80 via-brand/60 to-brand-dark/90" />
           <div className="max-w-4xl mx-auto text-center relative z-10 px-4 py-20">
             <div className="hero-text-reveal">
