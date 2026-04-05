@@ -12,7 +12,7 @@ import { formatCurrency, formatWeight } from '@butcher/shared';
 import { ShoppingCart, Phone, X, Plus, Minus, Star, Package } from 'lucide-react';
 import Link from 'next/link';
 
-const CATEGORIES = ['All', 'packs', 'beef', 'lamb', 'pork', 'chicken', 'other'];
+const CATEGORIES = ['All', 'packs', 'beef', 'other'];
 
 const BULK_IDS = ['prod-quarter-share', 'prod-half-share'];
 const BULK_MIN_KG: Record<string, number> = { 'prod-sausages-mince': 5 };
@@ -34,6 +34,8 @@ export default function ShopPage() {
   }, []);
 
   const filtered = category === 'All' ? products : products.filter((p) => p.category === category);
+  const boxes = filtered.filter((p) => p.isMeatPack || p.category === 'packs');
+  const cuts = filtered.filter((p) => !p.isMeatPack && p.category !== 'packs');
 
   const getItemQty = (productId: string) => {
     const item = items.find((i) => i.productId === productId);
@@ -44,6 +46,35 @@ export default function ShopPage() {
     const item = items.find((i) => i.productId === productId);
     return item?.weight;
   };
+
+  const renderCard = (product: Product) => (
+    <ProductCard
+      key={product.id}
+      product={product}
+      qty={getItemQty(product.id!)}
+      onOpen={() => { setModal(product); setModalQty(1); }}
+      onAdd={() => {
+        const minKg = BULK_MIN_KG[product.id!] ?? 1;
+        const weightG = product.isMeatPack ? undefined : minKg * 1000;
+        addItem({
+          productId: product.id!, productName: product.name, category: product.category,
+          isMeatPack: product.isMeatPack, weight: weightG, quantity: 1,
+          pricePerKg: product.pricePerKg, fixedPrice: product.fixedPrice,
+          lineTotal: product.isMeatPack ? (product.fixedPrice ?? 0) : Math.round((product.pricePerKg ?? 0) * minKg),
+        });
+      }}
+      onIncrement={() => {
+        const w = getItemWeight(product.id!);
+        updateQuantity(product.id!, getItemQty(product.id!) + 1, w);
+      }}
+      onDecrement={() => {
+        const w = getItemWeight(product.id!);
+        const currentQty = getItemQty(product.id!);
+        if (currentQty <= 1) removeItem(product.id!, w);
+        else updateQuantity(product.id!, currentQty - 1, w);
+      }}
+    />
+  );
 
   return (
     <>
@@ -74,45 +105,31 @@ export default function ShopPage() {
         ) : filtered.length === 0 ? (
           <div className="text-center py-16 text-gray-500">No products found in this category.</div>
         ) : (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filtered.map((product) => (
-              <ProductCard
-                key={product.id}
-                product={product}
-                qty={getItemQty(product.id!)}
-                onOpen={() => { setModal(product); setModalQty(1); }}
-                onAdd={() => {
-                  const minKg = BULK_MIN_KG[product.id!] ?? 1;
-                  const weightG = product.isMeatPack ? undefined : minKg * 1000;
-                  addItem({
-                    productId: product.id!,
-                    productName: product.name,
-                    category: product.category,
-                    isMeatPack: product.isMeatPack,
-                    weight: weightG,
-                    quantity: 1,
-                    pricePerKg: product.pricePerKg,
-                    fixedPrice: product.fixedPrice,
-                    lineTotal: product.isMeatPack ? (product.fixedPrice ?? 0) : Math.round((product.pricePerKg ?? 0) * minKg),
-                  });
-                }}
-                onIncrement={() => {
-                  const w = getItemWeight(product.id!);
-                  const currentQty = getItemQty(product.id!);
-                  updateQuantity(product.id!, currentQty + 1, w);
-                }}
-                onDecrement={() => {
-                  const w = getItemWeight(product.id!);
-                  const currentQty = getItemQty(product.id!);
-                  if (currentQty <= 1) {
-                    removeItem(product.id!, w);
-                  } else {
-                    updateQuantity(product.id!, currentQty - 1, w);
-                  }
-                }}
-              />
-            ))}
-          </div>
+          <>
+            {boxes.length > 0 && (
+              <section className="mb-12">
+                <div className="flex items-center gap-3 mb-6">
+                  <Package className="h-6 w-6 text-brand" />
+                  <h2 className="text-2xl font-bold text-gray-800" style={{fontFamily:'var(--font-heading)'}}>Boxes & Packs</h2>
+                </div>
+                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {boxes.map((product) => renderCard(product))}
+                </div>
+              </section>
+            )}
+
+            {cuts.length > 0 && (
+              <section>
+                <div className="flex items-center gap-3 mb-6">
+                  <Star className="h-6 w-6 text-brand" />
+                  <h2 className="text-2xl font-bold text-gray-800" style={{fontFamily:'var(--font-heading)'}}>Individual Cuts</h2>
+                </div>
+                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {cuts.map((product) => renderCard(product))}
+                </div>
+              </section>
+            )}
+          </>
         )}
       </main>
       <Footer />
