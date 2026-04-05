@@ -12,6 +12,7 @@ interface Product {
   category: string;
   pricePerKg: number | null;
   fixedPrice: number | null;
+  isMeatPack?: boolean;
   active: boolean;
 }
 
@@ -107,7 +108,7 @@ export default function OrdersPage() {
   };
 
   const currentProduct = products.find((p) => p.id === selectedProduct);
-  const isWeightBased = !!(currentProduct && currentProduct.pricePerKg != null);
+  const isWeightBased = !!(currentProduct && !currentProduct.isMeatPack && currentProduct.pricePerKg);
 
   const addItem = () => {
     if (!currentProduct) return;
@@ -210,7 +211,7 @@ export default function OrdersPage() {
     setEditForm((f) => ({ ...f, address: { ...f.address, [k]: v } }));
 
   const editCurrentProduct = products.find((p) => p.id === editSelectedProduct);
-  const editIsWeightBased = !!(editCurrentProduct && editCurrentProduct.pricePerKg != null);
+  const editIsWeightBased = !!(editCurrentProduct && !editCurrentProduct.isMeatPack && editCurrentProduct.pricePerKg);
 
   const addEditItem = () => {
     if (!editCurrentProduct) return;
@@ -532,7 +533,7 @@ export default function OrdersPage() {
                       <option value="">Add product…</option>
                       {products.map((p) => (
                         <option key={p.id} value={p.id}>
-                          {p.name} — {p.pricePerKg != null ? `$${p.pricePerKg}/kg` : `$${p.fixedPrice} ea`}
+                          {p.name} — {p.isMeatPack ? formatCurrency(p.fixedPrice ?? 0) : `${formatCurrency(p.pricePerKg ?? 0)}/kg`}
                         </option>
                       ))}
                     </select>
@@ -680,7 +681,7 @@ export default function OrdersPage() {
                       <option value="">Select product…</option>
                       {products.map((p) => (
                         <option key={p.id} value={p.id}>
-                          {p.name} — {p.pricePerKg != null ? `$${p.pricePerKg}/kg` : `$${p.fixedPrice} ea`}
+                          {p.name} — {p.isMeatPack ? formatCurrency(p.fixedPrice ?? 0) : `${formatCurrency(p.pricePerKg ?? 0)}/kg`}
                         </option>
                       ))}
                     </select>
