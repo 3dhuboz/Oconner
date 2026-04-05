@@ -299,6 +299,19 @@ export const auditLog = sqliteTable('audit_log', {
   timestamp: integer('timestamp').notNull(),
 });
 
+// ── Reels (admin-managed Facebook reel embeds for storefront) ────────────────
+export const reels = sqliteTable('reels', {
+  id: text('id').primaryKey(),
+  title: text('title').notNull(),
+  subtitle: text('subtitle').notNull().default(''),
+  fbUrl: text('fb_url').notNull(),
+  thumbnailUrl: text('thumbnail_url'),
+  displayOrder: integer('display_order').notNull().default(0),
+  active: integer('active', { mode: 'boolean' }).notNull().default(true),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});
+
 // ── Config (key/value store for BusinessConfig, DeliveryZones, etc.) ──────────
 export const config = sqliteTable('config', {
   key: text('key').primaryKey(),

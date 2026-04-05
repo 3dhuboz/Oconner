@@ -4,7 +4,7 @@ import {
   LayoutDashboard, ShoppingBag, Package, CalendarDays,
   BarChart2, Users, FileText, LogOut, Menu, Settings, Sparkles,
   ExternalLink, Store, Truck, UserCog, RefreshCcw, ShieldCheck,
-  DollarSign, Tag,
+  DollarSign, Tag, Film,
 } from 'lucide-react';
 import { useState } from 'react';
 import Toaster from './Toaster';
@@ -47,6 +47,7 @@ const NAV_SECTIONS = [
   {
     heading: 'Tools',
     items: [
+      { to: '/reels', icon: Film, label: 'Reels' },
       { to: '/social-hub', icon: Sparkles, label: 'Social AI' },
       { to: '/settings', icon: Settings, label: 'Settings' },
     ],
