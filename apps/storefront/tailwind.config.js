@@ -14,6 +14,11 @@ module.exports = {
         sans: ['Inter', 'system-ui', 'sans-serif'],
         heading: ['Barlow Condensed', 'system-ui', 'sans-serif'],
       },
+      animation: {
+        'float': 'float 4s ease-in-out infinite',
+        'float-delay': 'float 4s ease-in-out 2s infinite',
+        'pulse-glow': 'pulse-glow 3s ease-in-out infinite',
+      },
     },
   },
   plugins: [],

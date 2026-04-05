@@ -176,6 +176,16 @@ export default function FacebookReels() {
       .catch(() => {});
   }, []);
 
+  // Fix back button — push state when modal opens, listen for popstate to close
+  useEffect(() => {
+    if (selected) {
+      history.pushState({ reelModal: true }, '');
+      const onPop = () => setSelected(null);
+      window.addEventListener('popstate', onPop);
+      return () => window.removeEventListener('popstate', onPop);
+    }
+  }, [selected]);
+
   return (
     <section className="py-16 bg-gradient-to-b from-[#1B3A2E] to-[#0f2419] overflow-hidden">
       <div className="max-w-6xl mx-auto px-4 text-center">
@@ -216,7 +226,7 @@ export default function FacebookReels() {
       </div>
 
       {/* Modal */}
-      {selected && <ReelModal reel={selected} onClose={() => setSelected(null)} />}
+      {selected && <ReelModal reel={selected} onClose={() => { if (history.state?.reelModal) history.back(); else setSelected(null); }} />}
     </section>
   );
 }
