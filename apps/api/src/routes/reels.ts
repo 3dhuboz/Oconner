@@ -68,4 +68,50 @@ app.delete('/:id', requireAuth, async (c) => {
   return c.json({ ok: true });
 });
 
+// Auto-sync reels from Facebook Graph API (called by cron or manually)
+app.post('/sync', async (c) => {
+  const token = c.env.FB_PAGE_ACCESS_TOKEN;
+  if (!token) return c.json({ error: 'FB_PAGE_ACCESS_TOKEN not set' }, 500);
+  const PAGE_ID = '655149441012938';
+  try {
+    const res = await fetch(
+      `https://graph.facebook.com/v21.0/${PAGE_ID}/videos?fields=id,title,description,picture,permalink_url,created_time&limit=6&access_token=${token}`
+    );
+    if (!res.ok) {
+      const err = await res.text();
+      return c.json({ error: `Facebook API ${res.status}: ${err}` }, 500);
+    }
+    const data = await res.json() as { data: Array<{ id: string; title?: string; description?: string; picture?: string; permalink_url?: string; created_time?: string }> };
+    if (!data.data?.length) return c.json({ synced: 0, message: 'No videos found' });
+
+    const db = drizzle(c.env.DB);
+    const now = Date.now();
+    let synced = 0;
+    for (const video of data.data) {
+      const fbUrl = video.permalink_url
+        ? `https://www.facebook.com${video.permalink_url}`
+        : `https://www.facebook.com/${PAGE_ID}/videos/${video.id}`;
+      const title = video.title || video.description?.split('\n')[0]?.slice(0, 50) || 'O\'Connor Agriculture';
+      const subtitle = video.created_time ? new Date(video.created_time).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+      const reelId = `fb-${video.id}`;
+
+      // Upsert: insert or update if exists
+      const [existing] = await db.select().from(reelsTable).where(eq(reelsTable.id, reelId)).limit(1);
+      if (existing) {
+        await db.update(reelsTable).set({ thumbnailUrl: video.picture ?? existing.thumbnailUrl, updatedAt: now }).where(eq(reelsTable.id, reelId));
+      } else {
+        await db.insert(reelsTable).values({
+          id: reelId, title, subtitle, fbUrl,
+          thumbnailUrl: video.picture ?? null,
+          displayOrder: synced, active: true, createdAt: now, updatedAt: now,
+        });
+        synced++;
+      }
+    }
+    return c.json({ synced, total: data.data.length });
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : 'Sync failed' }, 500);
+  }
+});
+
 export { app as reels };
