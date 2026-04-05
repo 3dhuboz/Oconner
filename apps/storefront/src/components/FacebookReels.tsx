@@ -31,7 +31,9 @@ function FbIcon({ className }: { className?: string }) {
 }
 
 function buildFbEmbedSrc(fbUrl: string) {
-  return `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(fbUrl)}&show_text=false&autoplay=1&mute=0&width=400`;
+  // Facebook video plugin doesn't support /reel/ URLs — convert to /videos/ format
+  const videoUrl = fbUrl.replace('/reel/', '/videos/');
+  return `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(videoUrl)}&show_text=false&autoplay=1&mute=0&width=400`;
 }
 
 // ── Modal with Facebook iframe embed ────────────────────────────────────────
