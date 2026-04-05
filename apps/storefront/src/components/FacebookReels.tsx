@@ -4,7 +4,7 @@ import { useRef, useState, useEffect } from 'react';
 import { Play, X, ExternalLink } from 'lucide-react';
 import { API_URL } from '@butcher/shared';
 
-const FB_PAGE_ID = '61574996320860';
+const FB_PAGE_ID = '655149441012938';
 const FB_REELS = `https://www.facebook.com/profile.php?id=${FB_PAGE_ID}&sk=reels_tab`;
 
 interface ReelItem {
