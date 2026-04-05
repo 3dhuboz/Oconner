@@ -34,8 +34,9 @@ export default function ShopPage() {
   }, []);
 
   const filtered = category === 'All' ? products : products.filter((p) => p.category === category);
-  const boxes = filtered.filter((p) => p.isMeatPack || p.category === 'packs');
-  const cuts = filtered.filter((p) => !p.isMeatPack && p.category !== 'packs');
+  const boxes = filtered.filter((p) => p.category === 'packs');
+  const cuts = filtered.filter((p) => p.category !== 'packs' && p.category !== 'other');
+  const other = filtered.filter((p) => p.category === 'other');
 
   const getItemQty = (productId: string) => {
     const item = items.find((i) => i.productId === productId);
@@ -119,13 +120,25 @@ export default function ShopPage() {
             )}
 
             {cuts.length > 0 && (
-              <section>
+              <section className="mb-12">
                 <div className="flex items-center gap-3 mb-6">
                   <Star className="h-6 w-6 text-brand" />
                   <h2 className="text-2xl font-bold text-gray-800" style={{fontFamily:'var(--font-heading)'}}>Individual Cuts</h2>
                 </div>
                 <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
                   {cuts.map((product) => renderCard(product))}
+                </div>
+              </section>
+            )}
+
+            {other.length > 0 && (
+              <section>
+                <div className="flex items-center gap-3 mb-6">
+                  <Phone className="h-6 w-6 text-brand" />
+                  <h2 className="text-2xl font-bold text-gray-800" style={{fontFamily:'var(--font-heading)'}}>Bulk & Share Orders</h2>
+                </div>
+                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {other.map((product) => renderCard(product))}
                 </div>
               </section>
             )}
