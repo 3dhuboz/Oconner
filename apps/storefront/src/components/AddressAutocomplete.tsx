@@ -16,23 +16,6 @@ interface Props {
   className?: string;
 }
 
-interface NominatimResult {
-  display_name?: string;
-  address?: {
-    house_number?: string;
-    road?: string;
-    street?: string;
-    suburb?: string;
-    city?: string;
-    town?: string;
-    village?: string;
-    hamlet?: string;
-    city_district?: string;
-    state?: string;
-    postcode?: string;
-  };
-}
-
 interface Suggestion {
   line1: string;
   suburb: string;
@@ -42,21 +25,15 @@ interface Suggestion {
 }
 
 const AU_STATE_MAP: Record<string, string> = {
-  Queensland: 'QLD',
-  'New South Wales': 'NSW',
-  Victoria: 'VIC',
-  'South Australia': 'SA',
-  'Western Australia': 'WA',
-  Tasmania: 'TAS',
-  'Northern Territory': 'NT',
-  'Australian Capital Territory': 'ACT',
+  Queensland: 'QLD', 'New South Wales': 'NSW', Victoria: 'VIC',
+  'South Australia': 'SA', 'Western Australia': 'WA', Tasmania: 'TAS',
+  'Northern Territory': 'NT', 'Australian Capital Territory': 'ACT',
 };
 
-function extractSuburb(addr: NominatimResult['address']): string {
-  if (!addr) return '';
-  // Nominatim returns AU suburbs in various fields depending on area
-  return addr.suburb || addr.city_district || addr.town || addr.village || addr.hamlet || addr.city || '';
-}
+// Photon geocoder — better AU data than Nominatim, biased to central QLD
+const PHOTON_URL = 'https://photon.komoot.io/api/';
+const QLD_LAT = -23.85; // Gladstone area
+const QLD_LON = 151.27;
 
 export default function AddressAutocomplete({ value, onChange, className }: Props) {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
@@ -76,38 +53,48 @@ export default function AddressAutocomplete({ value, onChange, className }: Prop
   }, []);
 
   const search = (q: string) => {
-    if (q.length < 4) { setSuggestions([]); setShowDropdown(false); return; }
+    if (q.length < 3) { setSuggestions([]); setShowDropdown(false); return; }
     clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
       try {
-        // Search with structured query for better AU results
         const params = new URLSearchParams({
-          q: q + ', Australia',
-          format: 'json',
-          addressdetails: '1',
-          countrycodes: 'au',
-          limit: '6',
-          'accept-language': 'en',
+          q: q + ' QLD Australia',
+          lat: String(QLD_LAT),
+          lon: String(QLD_LON),
+          limit: '8',
+          lang: 'en',
         });
-        const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
-          headers: { 'User-Agent': 'OConnorAgriculture/1.0' },
-        });
-        const data = await res.json() as NominatimResult[];
+        const res = await fetch(`${PHOTON_URL}?${params}`);
+        const data = await res.json() as {
+          features: Array<{
+            properties: {
+              housenumber?: string;
+              street?: string;
+              name?: string;
+              city?: string;
+              district?: string;
+              county?: string;
+              state?: string;
+              postcode?: string;
+              country?: string;
+            };
+          }>;
+        };
 
-        const results: Suggestion[] = data
-          .filter((r) => r.address && (r.address.road || r.address.street))
-          .map((r) => {
-            const addr = r.address!;
-            const streetNum = addr.house_number ?? '';
-            const street = addr.road || addr.street || '';
+        const results: Suggestion[] = data.features
+          .filter((f) => f.properties.country === 'Australia' && (f.properties.street || f.properties.name))
+          .map((f) => {
+            const p = f.properties;
+            const streetNum = p.housenumber ?? '';
+            const street = p.street ?? p.name ?? '';
             const line1 = `${streetNum} ${street}`.trim();
-            const suburb = extractSuburb(addr);
-            const stateCode = AU_STATE_MAP[addr.state ?? ''] ?? '';
-            const postcode = addr.postcode ?? '';
+            const suburb = p.city ?? p.district ?? p.county ?? '';
+            const stateCode = AU_STATE_MAP[p.state ?? ''] ?? p.state ?? '';
+            const postcode = p.postcode ?? '';
             const detail = [suburb, stateCode, postcode].filter(Boolean).join(' ');
             return { line1, suburb, state: stateCode, postcode, detail };
           })
-          // Deduplicate by line1 + suburb
+          .filter((s) => s.line1.length > 0)
           .filter((s, i, arr) => arr.findIndex((x) => x.line1 === s.line1 && x.suburb === s.suburb) === i);
 
         setSuggestions(results);
@@ -116,7 +103,7 @@ export default function AddressAutocomplete({ value, onChange, className }: Prop
         setSuggestions([]);
         setShowDropdown(false);
       }
-    }, 400);
+    }, 300);
   };
 
   const handleInputChange = (val: string) => {
