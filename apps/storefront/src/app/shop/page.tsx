@@ -12,7 +12,8 @@ import { formatCurrency, formatWeight } from '@butcher/shared';
 import { ShoppingCart, Phone, X, Plus, Minus, Star, Package } from 'lucide-react';
 import Link from 'next/link';
 
-const CATEGORIES = ['All', 'packs', 'beef', 'other'];
+const CATEGORIES = ['All', 'packs', 'beef', 'share/bulk'];
+const CATEGORY_MAP: Record<string, string> = { 'share/bulk': 'other' };
 
 const BULK_IDS = ['prod-quarter-share', 'prod-half-share'];
 const BULK_MIN_KG: Record<string, number> = { 'prod-sausages-mince': 5 };
@@ -33,7 +34,8 @@ export default function ShopPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const filtered = category === 'All' ? products : products.filter((p) => p.category === category);
+  const actualCategory = CATEGORY_MAP[category] ?? category;
+  const filtered = category === 'All' ? products : products.filter((p) => p.category === actualCategory);
   const boxes = filtered.filter((p) => p.category === 'packs');
   const cuts = filtered.filter((p) => p.category !== 'packs' && p.category !== 'other');
   const other = filtered.filter((p) => p.category === 'other');
