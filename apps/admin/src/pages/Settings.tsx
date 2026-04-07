@@ -51,6 +51,14 @@ interface StorefrontConfig {
     heroImageUrl: string;
   };
   features: Feature[];
+  story: {
+    subtitle: string;
+    headline: string;
+    body1: string;
+    body2: string;
+    established: string;
+    imageUrl: string;
+  };
   cta: {
     headline: string;
     subtext: string;
@@ -99,6 +107,14 @@ const DEFAULTS: StorefrontConfig = {
     { icon: '🚚', title: 'Free Delivery', description: 'Temperature-controlled delivery straight to your door. All prices include delivery.' },
     { icon: '👨‍👩‍👧', title: 'Family Owned', description: 'First generation family farm from Calliope and the Boyne Valley, QLD.' },
   ],
+  story: {
+    subtitle: 'Our Story',
+    headline: 'From Paddock\nto Your Plate',
+    body1: "O'Connor Agriculture is a first-generation family farm nestled in the Boyne Valley, QLD. We practice regenerative farming — focusing on soil health, biodiversity, and animal welfare to produce beef that's better for the land and better for you.",
+    body2: 'Every cut is grass-fed, free-range, and delivered fresh to your door. No feedlots, no hormones, no shortcuts — just honest farming done right.',
+    established: '2020',
+    imageUrl: '/hero-cows.jpg',
+  },
   cta: {
     headline: 'Ready to Order?',
     subtext: 'Browse our beef boxes — BBQ Box, Family Box, Double, and Value Box.',
@@ -319,6 +335,9 @@ export default function SettingsPage() {
   const setHero = (key: keyof StorefrontConfig['hero'], val: string) =>
     setConfig((c) => ({ ...c, hero: { ...c.hero, [key]: val } }));
 
+  const setStory = (key: keyof StorefrontConfig['story'], val: string) =>
+    setConfig((c) => ({ ...c, story: { ...c.story, [key]: val } }));
+
   const setCta = (key: keyof StorefrontConfig['cta'], val: string) =>
     setConfig((c) => ({ ...c, cta: { ...c.cta, [key]: val } }));
 
@@ -466,6 +485,37 @@ export default function SettingsPage() {
         >
           <Save className="h-3.5 w-3.5" />
           {saving ? 'Saving...' : 'Save Feature Cards'}
+        </button>
+      </Section>
+
+      <Section title="Our Story (homepage section)" icon={BookOpen}>
+        <Field label="Subtitle" hint="Small text above the headline">
+          <input className={inputCls} value={config.story.subtitle} onChange={(e) => setStory('subtitle', e.target.value)} />
+        </Field>
+        <Field label="Headline" hint="Use a new line to break into two lines">
+          <input className={inputCls} value={config.story.headline.replace('\n', ' / ')} onChange={(e) => setStory('headline', e.target.value.replace(' / ', '\n'))} placeholder="From Paddock / to Your Plate" />
+        </Field>
+        <Field label="Paragraph 1">
+          <textarea className={textareaCls} rows={3} value={config.story.body1} onChange={(e) => setStory('body1', e.target.value)} />
+        </Field>
+        <Field label="Paragraph 2">
+          <textarea className={textareaCls} rows={3} value={config.story.body2} onChange={(e) => setStory('body2', e.target.value)} />
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Established year">
+            <input className={inputCls} value={config.story.established} onChange={(e) => setStory('established', e.target.value)} placeholder="2020" />
+          </Field>
+          <Field label="Image URL">
+            <input className={inputCls} value={config.story.imageUrl} onChange={(e) => setStory('imageUrl', e.target.value)} placeholder="/hero-cows.jpg" />
+          </Field>
+        </div>
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="flex items-center gap-1.5 px-4 py-2 text-sm text-white bg-brand rounded-lg hover:bg-brand-mid transition-colors disabled:opacity-60 font-medium mt-2"
+        >
+          <Save className="h-3.5 w-3.5" />
+          {saving ? 'Saving...' : 'Save Story'}
         </button>
       </Section>
 
