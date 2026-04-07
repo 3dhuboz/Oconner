@@ -11,7 +11,7 @@ import Footer from '@/components/Footer';
 import { formatCurrency } from '@butcher/shared';
 
 const GST_RATE = 0.1;
-const DELIVERY_FEE = 1500;
+const DELIVERY_FEE = 0; // was 1500 — re-enable when delivery fees return
 
 export default function CartPage() {
   const { items, removeItem, updateQuantity, total } = useCart();
@@ -85,7 +85,8 @@ export default function CartPage() {
                 <span>Subtotal</span><span>{formatCurrency(subtotal)}</span>
               </div>
               <div className="flex justify-between">
-                <span>Delivery</span><span>{formatCurrency(DELIVERY_FEE)}</span>
+                <span>Delivery</span>
+                <span className={DELIVERY_FEE === 0 ? 'text-green-600 font-medium' : ''}>{DELIVERY_FEE === 0 ? 'FREE' : formatCurrency(DELIVERY_FEE)}</span>
               </div>
               <div className="flex justify-between text-gray-500">
                 <span>GST (inc.)</span><span>{formatCurrency(gst)}</span>

@@ -33,7 +33,11 @@ interface OrderItem {
   pricePerKg?: number;
   fixedPrice?: number;
   lineTotal: number;
+  includeSoupBones?: boolean;
+  includeOffal?: boolean;
 }
+
+const BULK_SHARE_IDS = ['prod-quarter-share', 'prod-half-share'];
 
 const STATUSES: OrderStatus[] = ['pending_payment', 'confirmed', 'preparing', 'packed', 'out_for_delivery', 'delivered', 'cancelled', 'refunded'];
 const AU_STATES = ['QLD', 'NSW', 'VIC', 'SA', 'WA', 'TAS', 'NT', 'ACT'];
@@ -70,6 +74,8 @@ export default function OrdersPage() {
   const [selectedProduct, setSelectedProduct] = useState('');
   const [itemWeight, setItemWeight] = useState('');
   const [itemQty, setItemQty] = useState('1');
+  const [itemSoupBones, setItemSoupBones] = useState(false);
+  const [itemOffal, setItemOffal] = useState(false);
   const [creating, setCreating] = useState(false);
 
   // Edit state
@@ -79,6 +85,8 @@ export default function OrdersPage() {
   const [editSelectedProduct, setEditSelectedProduct] = useState('');
   const [editItemWeight, setEditItemWeight] = useState('');
   const [editItemQty, setEditItemQty] = useState('1');
+  const [editItemSoupBones, setEditItemSoupBones] = useState(false);
+  const [editItemOffal, setEditItemOffal] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // Delete state
@@ -124,15 +132,19 @@ export default function OrdersPage() {
       if (!quantity || quantity <= 0) return;
       lineTotal = quantity * (currentProduct.fixedPrice ?? 0);
     }
+    const isBulk = BULK_SHARE_IDS.includes(currentProduct.id);
     setItems((prev) => [...prev, {
       productId: currentProduct.id,
       productName: currentProduct.name,
       ...(isWeightBased ? { weightKg, pricePerKg: currentProduct.pricePerKg ?? 0 } : { quantity, fixedPrice: currentProduct.fixedPrice ?? 0 }),
       lineTotal,
+      ...(isBulk ? { includeSoupBones: itemSoupBones, includeOffal: itemOffal } : {}),
     }]);
     setSelectedProduct('');
     setItemWeight('');
     setItemQty('1');
+    setItemSoupBones(false);
+    setItemOffal(false);
   };
 
   const subtotal = items.reduce((s, i) => s + i.lineTotal, 0);
@@ -227,15 +239,19 @@ export default function OrdersPage() {
       if (!quantity || quantity <= 0) return;
       lineTotal = quantity * (editCurrentProduct.fixedPrice ?? 0);
     }
+    const isBulk = BULK_SHARE_IDS.includes(editCurrentProduct.id);
     setEditItems((prev) => [...prev, {
       productId: editCurrentProduct.id,
       productName: editCurrentProduct.name,
       ...(editIsWeightBased ? { weightKg, pricePerKg: editCurrentProduct.pricePerKg ?? 0 } : { quantity, fixedPrice: editCurrentProduct.fixedPrice ?? 0 }),
       lineTotal,
+      ...(isBulk ? { includeSoupBones: editItemSoupBones, includeOffal: editItemOffal } : {}),
     }]);
     setEditSelectedProduct('');
     setEditItemWeight('');
     setEditItemQty('1');
+    setEditItemSoupBones(false);
+    setEditItemOffal(false);
   };
 
   const editSubtotal = editItems.reduce((s, i) => s + i.lineTotal, 0);
@@ -527,7 +543,7 @@ export default function OrdersPage() {
                   <div className="flex gap-2 mb-2">
                     <select
                       value={editSelectedProduct}
-                      onChange={(e) => { setEditSelectedProduct(e.target.value); setEditItemWeight(''); setEditItemQty('1'); }}
+                      onChange={(e) => { setEditSelectedProduct(e.target.value); setEditItemWeight(''); setEditItemQty('1'); setEditItemSoupBones(false); setEditItemOffal(false); }}
                       className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
                     >
                       <option value="">Add product…</option>
@@ -555,6 +571,18 @@ export default function OrdersPage() {
                         : `$${editCurrentProduct.fixedPrice} each${editItemQty ? ` → ${formatCurrency(parseInt(editItemQty || '1') * (editCurrentProduct.fixedPrice ?? 0))}` : ''}`}
                     </p>
                   )}
+                  {editCurrentProduct && BULK_SHARE_IDS.includes(editCurrentProduct.id) && (
+                    <div className="flex gap-4 mb-2">
+                      <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
+                        <input type="checkbox" className="accent-brand w-3.5 h-3.5" checked={editItemSoupBones} onChange={(e) => setEditItemSoupBones(e.target.checked)} />
+                        Include soup bones
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
+                        <input type="checkbox" className="accent-brand w-3.5 h-3.5" checked={editItemOffal} onChange={(e) => setEditItemOffal(e.target.checked)} />
+                        Include offal
+                      </label>
+                    </div>
+                  )}
                   {editItems.length > 0 ? (
                     <div className="border rounded-lg overflow-hidden divide-y">
                       {editItems.map((item, i) => (
@@ -563,6 +591,8 @@ export default function OrdersPage() {
                             <p className="text-sm font-medium">{item.productName}</p>
                             <p className="text-xs text-gray-400">
                               {item.weightKg ? `${item.weightKg}kg${item.pricePerKg ? ` @ $${item.pricePerKg}/kg` : ''}` : `${item.quantity ?? 1}x${item.fixedPrice ? ` @ $${item.fixedPrice} ea` : ''}`}
+                              {item.includeSoupBones && ' · Soup bones'}
+                              {item.includeOffal && ' · Offal'}
                             </p>
                           </div>
                           <div className="flex items-center gap-3">
@@ -675,7 +705,7 @@ export default function OrdersPage() {
                   <div className="flex gap-2 mb-2">
                     <select
                       value={selectedProduct}
-                      onChange={(e) => { setSelectedProduct(e.target.value); setItemWeight(''); setItemQty('1'); }}
+                      onChange={(e) => { setSelectedProduct(e.target.value); setItemWeight(''); setItemQty('1'); setItemSoupBones(false); setItemOffal(false); }}
                       className="flex-1 border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
                     >
                       <option value="">Select product…</option>
@@ -703,6 +733,18 @@ export default function OrdersPage() {
                         : `$${currentProduct.fixedPrice} each${itemQty ? ` → ${formatCurrency(parseInt(itemQty || '1') * (currentProduct.fixedPrice ?? 0))}` : ''}`}
                     </p>
                   )}
+                  {currentProduct && BULK_SHARE_IDS.includes(currentProduct.id) && (
+                    <div className="flex gap-4 mb-2">
+                      <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
+                        <input type="checkbox" className="accent-brand w-3.5 h-3.5" checked={itemSoupBones} onChange={(e) => setItemSoupBones(e.target.checked)} />
+                        Include soup bones
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
+                        <input type="checkbox" className="accent-brand w-3.5 h-3.5" checked={itemOffal} onChange={(e) => setItemOffal(e.target.checked)} />
+                        Include offal
+                      </label>
+                    </div>
+                  )}
                   {items.length > 0 ? (
                     <div className="border rounded-lg overflow-hidden divide-y">
                       {items.map((item, i) => (
@@ -711,6 +753,8 @@ export default function OrdersPage() {
                             <p className="text-sm font-medium">{item.productName}</p>
                             <p className="text-xs text-gray-400">
                               {item.weightKg ? `${item.weightKg}kg${item.pricePerKg ? ` @ $${item.pricePerKg}/kg` : ''}` : `${item.quantity ?? 1}x${item.fixedPrice ? ` @ $${item.fixedPrice} ea` : ''}`}
+                              {item.includeSoupBones && ' · Soup bones'}
+                              {item.includeOffal && ' · Offal'}
                             </p>
                           </div>
                           <div className="flex items-center gap-3">

@@ -41,6 +41,10 @@ export interface OrderItem {
   fixedPrice?: number;
   /** cents */
   lineTotal: number;
+  /** bulk share: include soup bones */
+  includeSoupBones?: boolean;
+  /** bulk share: include offal */
+  includeOffal?: boolean;
 }
 
 export interface Order {
