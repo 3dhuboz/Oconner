@@ -3,6 +3,7 @@
 export const runtime = 'edge';
 
 import { useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { Mail, MapPin, Facebook, Send, CheckCircle } from 'lucide-react';
@@ -10,7 +11,12 @@ import { toast } from '@/lib/toast';
 import { API_URL } from '@butcher/shared';
 
 export default function ContactPage() {
-  const [form, setForm] = useState({ name: '', email: '', subject: '', message: '' });
+  const searchParams = useSearchParams();
+  const [form, setForm] = useState({
+    name: '', email: '',
+    subject: searchParams.get('subject') ?? '',
+    message: searchParams.get('message') ?? '',
+  });
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
 
   const handleSubmit = async (e: React.FormEvent) => {
