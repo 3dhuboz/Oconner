@@ -3,7 +3,7 @@ import { notifyCustomer } from './push';
 import { drizzle } from 'drizzle-orm/d1';
 import { eq, asc, gte, and } from 'drizzle-orm';
 import { deliveryDays, orders, stops, notifications, subscriptions, customers, users, deliveryRuns, products, deliveryDayStock } from '@butcher/db';
-import { deductStock } from '../lib/stock';
+import { deductStock, getStockDayId } from '../lib/stock';
 import { sendEmail, buildOrderEmail, getSubject } from '../lib/email';
 import type { Env, AuthUser } from '../types';
 
@@ -375,23 +375,37 @@ app.post('/:id/send-reminders', async (c) => {
 app.get('/:id/stock', async (c) => {
   const db = drizzle(c.env.DB);
   const dayId = c.req.param('id');
-  const rows = await db.select().from(deliveryDayStock).where(eq(deliveryDayStock.deliveryDayId, dayId));
-  return c.json(rows);
+  const stockDayId = await getStockDayId(db, dayId);
+  const rows = await db.select().from(deliveryDayStock).where(eq(deliveryDayStock.deliveryDayId, stockDayId));
+
+  // Find sibling days sharing this pool
+  const poolDays = stockDayId !== dayId
+    ? await db.select({ id: deliveryDays.id, date: deliveryDays.date }).from(deliveryDays).where(eq(deliveryDays.stockPoolId, stockDayId))
+    : await db.select({ id: deliveryDays.id, date: deliveryDays.date }).from(deliveryDays).where(eq(deliveryDays.stockPoolId, dayId));
+
+  // Include the source day itself in the pool list
+  if (stockDayId !== dayId) {
+    const [source] = await db.select({ id: deliveryDays.id, date: deliveryDays.date }).from(deliveryDays).where(eq(deliveryDays.id, stockDayId)).limit(1);
+    if (source) poolDays.unshift(source);
+  }
+
+  return c.json({ allocations: rows, poolSourceId: stockDayId !== dayId ? stockDayId : null, poolDays: poolDays.length > 0 ? poolDays : undefined });
 });
 
 app.put('/:id/stock', async (c) => {
   const db = drizzle(c.env.DB);
   const dayId = c.req.param('id');
+  const stockDayId = await getStockDayId(db, dayId);
   const body = await c.req.json<{ allocations: { productId: string; productName: string; allocated: number }[] }>();
   const now = Date.now();
 
-  // Delete existing allocations for this day, then insert fresh
-  await db.delete(deliveryDayStock).where(eq(deliveryDayStock.deliveryDayId, dayId));
+  // Write to the pool source day (or self if not pooled)
+  await db.delete(deliveryDayStock).where(eq(deliveryDayStock.deliveryDayId, stockDayId));
 
   if (body.allocations.length > 0) {
     const values = body.allocations.map((a) => ({
       id: crypto.randomUUID(),
-      deliveryDayId: dayId,
+      deliveryDayId: stockDayId,
       productId: a.productId,
       productName: a.productName,
       allocated: a.allocated,
@@ -401,6 +415,25 @@ app.put('/:id/stock', async (c) => {
     await db.insert(deliveryDayStock).values(values);
   }
 
+  return c.json({ ok: true });
+});
+
+// ── Stock Pool Management ───────────────────────────────────────────────────
+
+app.put('/:id/stock-pool', async (c) => {
+  const db = drizzle(c.env.DB);
+  const dayId = c.req.param('id');
+  const { poolSourceId } = await c.req.json<{ poolSourceId: string | null }>();
+
+  if (poolSourceId) {
+    // Validate source exists and is not itself pooled (no chaining)
+    const [source] = await db.select().from(deliveryDays).where(eq(deliveryDays.id, poolSourceId)).limit(1);
+    if (!source) return c.json({ error: 'Source day not found' }, 404);
+    if ((source as any).stockPoolId) return c.json({ error: 'Cannot chain pools — source day is already linked to another pool' }, 400);
+    if (poolSourceId === dayId) return c.json({ error: 'Cannot link a day to itself' }, 400);
+  }
+
+  await db.update(deliveryDays).set({ stockPoolId: poolSourceId }).where(eq(deliveryDays.id, dayId));
   return c.json({ ok: true });
 });
 

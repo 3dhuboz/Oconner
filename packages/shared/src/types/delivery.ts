@@ -38,6 +38,7 @@ export interface DeliveryDay {
   driverUid?: string;
   runStartedAt?: number;
   runCompletedAt?: number;
+  stockPoolId?: string | null;
   createdAt: number;
 }
 

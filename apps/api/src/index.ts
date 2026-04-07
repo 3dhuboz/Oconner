@@ -5,7 +5,7 @@ import { requireAuth, requireRole, verifyClerkToken } from './middleware/auth';
 import { drizzle } from 'drizzle-orm/d1';
 import { eq, desc, asc, and, gte } from 'drizzle-orm';
 import { orders as ordersTable, customers as customersTable, products as productsTable, deliveryDays as deliveryDaysTable, subscriptions as subscriptionsTable } from '@butcher/db';
-import { deductStock } from './lib/stock';
+import { deductStock, getStockDayId } from './lib/stock';
 import ordersRouter from './routes/orders';
 import productsRouter from './routes/products';
 import deliveryDaysRouter from './routes/deliveryDays';
@@ -173,9 +173,37 @@ app.post('/api/orders', async (c) => {
       });
     }
   }
+  // ── Pool-aware stock validation ──
+  const { deliveryDayStock } = await import('@butcher/db');
+  const stockDayId = await getStockDayId(db, body.deliveryDayId);
+  const dayAllocations = await db.select().from(deliveryDayStock).where(eq(deliveryDayStock.deliveryDayId, stockDayId));
+  if (dayAllocations.length > 0) {
+    for (const item of (body.items as any[])) {
+      const alloc = dayAllocations.find((a: any) => a.productId === item.productId);
+      if (alloc) {
+        const qty = item.weight ? item.weight / 1000 : (item.weightKg ?? item.quantity ?? 1);
+        if (alloc.sold + qty > alloc.allocated) {
+          return c.json({ error: `${item.productName} is sold out for this delivery day` }, 400);
+        }
+      }
+    }
+  }
+
   await db.insert(ordersTable).values({ ...body, id: orderId, customerId, items: JSON.stringify(body.items), deliveryAddress: JSON.stringify(body.deliveryAddress), createdAt: now, updatedAt: now });
   // Deduct stock for each item
   await deductStock(db, body.items as any[], orderId, now);
+
+  // ── Update pool-aware day stock sold counts ──
+  if (dayAllocations.length > 0) {
+    for (const item of (body.items as any[])) {
+      const alloc = dayAllocations.find((a: any) => a.productId === item.productId);
+      if (alloc) {
+        const qty = item.weight ? item.weight / 1000 : (item.weightKg ?? item.quantity ?? 1);
+        await db.update(deliveryDayStock).set({ sold: alloc.sold + qty }).where(eq(deliveryDayStock.id, alloc.id));
+      }
+    }
+  }
+
   const [day] = await db.select().from(deliveryDaysTable).where(eq(deliveryDaysTable.id, body.deliveryDayId)).limit(1);
   if (day) await db.update(deliveryDaysTable).set({ orderCount: day.orderCount + 1 }).where(eq(deliveryDaysTable.id, day.id));
   const [cust] = await db.select().from(customersTable).where(eq(customersTable.id, customerId)).limit(1);

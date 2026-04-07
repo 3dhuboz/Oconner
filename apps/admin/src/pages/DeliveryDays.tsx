@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '@butcher/shared';
 import type { DeliveryDay } from '@butcher/shared';
-import { Plus, X, CalendarDays, ClipboardList, RefreshCw, AlertTriangle, Pencil, MapPin, Save, Trash2, Store, BarChart3 } from 'lucide-react';
+import { Plus, X, CalendarDays, ClipboardList, RefreshCw, AlertTriangle, Pencil, MapPin, Save, Trash2, Store, BarChart3, Link2 } from 'lucide-react';
 import { toast } from '../lib/toast';
 import { useNavigate } from 'react-router-dom';
 import { ZoneAutocomplete } from '../components/ZoneAutocomplete';
@@ -189,6 +189,11 @@ export default function DeliveryDaysPage() {
                     {(day as any).type === 'pickup' && (
                       <span className="inline-flex items-center gap-1 text-xs font-medium bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">
                         <Store className="h-3 w-3" /> Market Day
+                      </span>
+                    )}
+                    {((day as any).stockPoolId || days.some((d) => (d as any).stockPoolId === day.id)) && (
+                      <span className="inline-flex items-center gap-1 text-xs font-medium bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+                        <Link2 className="h-3 w-3" /> Shared Stock
                       </span>
                     )}
                   </p>
