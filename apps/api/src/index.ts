@@ -352,6 +352,19 @@ app.post('/api/orders/:id/payment-link', async (c) => {
   }
 });
 
+// ── Public: mark order as paid (called by success page after Square redirect) ──
+app.post('/api/orders/:id/mark-paid', async (c) => {
+  const db = drizzle(c.env.DB);
+  const orderId = c.req.param('id');
+  const [order] = await db.select().from(ordersTable).where(eq(ordersTable.id, orderId)).limit(1);
+  if (!order) return c.json({ error: 'Order not found' }, 404);
+  // Only update if currently pending — don't downgrade a confirmed order
+  if (order.paymentStatus === 'pending_payment' || order.paymentStatus === 'awaiting_payment') {
+    await db.update(ordersTable).set({ paymentStatus: 'paid', status: 'confirmed', updatedAt: Date.now() }).where(eq(ordersTable.id, orderId));
+  }
+  return c.json({ ok: true });
+});
+
 // ── Public: read single config key (storefront/about page) ──
 app.get('/api/config/:key', async (c) => {
   const { drizzle } = await import('drizzle-orm/d1');
