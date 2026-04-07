@@ -88,7 +88,10 @@ export default function HomePage() {
 
   useEffect(() => {
     api.config.get('storefront')
-      .then((data) => { if (data) setCfg({ ...DEFAULTS, ...(data as Partial<Config>) }); })
+      .then((data) => {
+        const val = (data as any)?.value ?? data;
+        if (val) setCfg({ ...DEFAULTS, ...val, features: val.features ?? DEFAULTS.features });
+      })
       .catch(() => {});
     api.config.get('rewards')
       .then((data) => { const r = (data as any)?.value ?? data; if (r?.enabled) setRewards(r as RewardsConfig); })
