@@ -352,6 +352,17 @@ app.post('/api/orders/:id/payment-link', async (c) => {
   }
 });
 
+// ── Public: read single config key (storefront/about page) ──
+app.get('/api/config/:key', async (c) => {
+  const { drizzle } = await import('drizzle-orm/d1');
+  const { eq } = await import('drizzle-orm');
+  const { config } = await import('@butcher/db');
+  const db = drizzle(c.env.DB);
+  const [row] = await db.select().from(config).where(eq(config.key, c.req.param('key'))).limit(1);
+  if (!row) return c.json({ error: 'Not found' }, 404);
+  return c.json({ key: row.key, value: JSON.parse(row.value) });
+});
+
 app.use('/api/*', requireAuth);
 
 app.route('/api/orders', ordersRouter);
@@ -479,16 +490,6 @@ app.get('/api/config', requireAuth, requireRole('admin'), async (c) => {
   const result: Record<string, unknown> = {};
   for (const row of rows) result[row.key] = JSON.parse(row.value);
   return c.json(result);
-});
-
-app.get('/api/config/:key', async (c) => {
-  const { drizzle } = await import('drizzle-orm/d1');
-  const { eq } = await import('drizzle-orm');
-  const { config } = await import('@butcher/db');
-  const db = drizzle(c.env.DB);
-  const [row] = await db.select().from(config).where(eq(config.key, c.req.param('key'))).limit(1);
-  if (!row) return c.json({ error: 'Not found' }, 404);
-  return c.json({ key: row.key, value: JSON.parse(row.value) });
 });
 
 app.put('/api/config', requireAuth, requireRole('admin'), async (c) => {
