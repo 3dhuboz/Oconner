@@ -454,6 +454,14 @@ export default function SettingsPage() {
             </Field>
           </div>
         ))}
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="flex items-center gap-1.5 px-4 py-2 text-sm text-white bg-brand rounded-lg hover:bg-brand-mid transition-colors disabled:opacity-60 font-medium mt-2"
+        >
+          <Save className="h-3.5 w-3.5" />
+          {saving ? 'Saving...' : 'Save Feature Cards'}
+        </button>
       </Section>
 
       <Section title="Call to Action (bottom section)" icon={Type}>
