@@ -10,6 +10,7 @@ export const metadata: Metadata = {
 };
 
 export const runtime = 'edge';
+export const dynamic = 'force-dynamic';
 
 const DEFAULTS = {
   heroTagline: 'Locally Raised · Grass Fed · Naturally Healthy',
