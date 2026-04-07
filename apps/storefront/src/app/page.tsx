@@ -23,6 +23,7 @@ interface Feature { icon: string; title: string; description: string }
 interface Config {
   hero: { badge: string; headline: string; headlineLine2: string; body: string; tagline: string; primaryCta: string; secondaryCta: string; heroImageUrl: string };
   features: Feature[];
+  story: { subtitle: string; headline: string; body1: string; body2: string; established: string; imageUrl: string };
   cta: { headline: string; subtext: string; note: string; buttonText: string };
   contact: { email: string; social: string; location: string };
 }
@@ -49,6 +50,14 @@ const DEFAULTS: Config = {
     { icon: '🚚', title: 'Free Delivery', description: 'Temperature-controlled delivery straight to your door. All prices include delivery.' },
     { icon: '👨‍👩‍👧', title: 'Family Owned', description: 'First generation family farm from Calliope and the Boyne Valley, QLD.' },
   ],
+  story: {
+    subtitle: 'Our Story',
+    headline: 'From Paddock\nto Your Plate',
+    body1: "O'Connor Agriculture is a first-generation family farm nestled in the Boyne Valley, QLD. We practice regenerative farming — focusing on soil health, biodiversity, and animal welfare to produce beef that's better for the land and better for you.",
+    body2: 'Every cut is grass-fed, free-range, and delivered fresh to your door. No feedlots, no hormones, no shortcuts — just honest farming done right.',
+    established: '2020',
+    imageUrl: '/hero-cows.jpg',
+  },
   cta: { headline: "Ready to Order?", subtext: 'Browse our beef boxes — BBQ Box, Family Box, Double, and Value Box.', note: 'All prices include free delivery to your door.', buttonText: 'View Beef Boxes' },
   contact: { email: 'orders@oconnoragriculture.com.au', social: 'https://www.facebook.com/profile.php?id=655149441012938', location: 'Calliope & Boyne Valley, QLD' },
 };
@@ -91,7 +100,7 @@ export default function HomePage() {
     api.config.get('storefront')
       .then((data) => {
         const val = (data as any)?.value ?? data;
-        if (val) setCfg({ ...DEFAULTS, ...val, features: val.features ?? DEFAULTS.features });
+        if (val) setCfg({ ...DEFAULTS, ...val, features: val.features ?? DEFAULTS.features, story: { ...DEFAULTS.story, ...(val.story ?? {}) } });
       })
       .catch(() => {});
     api.config.get('rewards')
@@ -254,28 +263,26 @@ export default function HomePage() {
         <section className="py-20 px-4 bg-white overflow-hidden">
           <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-12 items-center">
             <div className="reveal-left">
-              <p className="text-brand text-sm font-semibold tracking-[0.15em] uppercase mb-3">Our Story</p>
+              <p className="text-brand text-sm font-semibold tracking-[0.15em] uppercase mb-3">{cfg.story.subtitle}</p>
               <h2 className="text-4xl md:text-5xl font-black uppercase tracking-wide text-gray-900 mb-6" style={{ fontFamily: 'var(--font-heading)' }}>
-                From Paddock<br />to Your Plate
+                {cfg.story.headline.split('\n').map((line, i) => <span key={i}>{i > 0 && <br />}{line}</span>)}
               </h2>
-              <p className="text-gray-600 leading-relaxed mb-4">
-                O&apos;Connor Agriculture is a first-generation family farm nestled in the Boyne Valley, QLD. We practice regenerative farming — focusing on soil health, biodiversity, and animal welfare to produce beef that&apos;s better for the land and better for you.
-              </p>
-              <p className="text-gray-600 leading-relaxed mb-6">
-                Every cut is grass-fed, free-range, and delivered fresh to your door. No feedlots, no hormones, no shortcuts — just honest farming done right.
-              </p>
+              <p className="text-gray-600 leading-relaxed mb-4">{cfg.story.body1}</p>
+              <p className="text-gray-600 leading-relaxed mb-6">{cfg.story.body2}</p>
               <Link href="/about" className="inline-flex items-center gap-2 text-brand font-semibold hover:text-brand-mid transition-colors">
                 Read Our Full Story <ArrowRight className="h-4 w-4" />
               </Link>
             </div>
             <div className="reveal-right relative">
               <div className="rounded-2xl overflow-hidden shadow-2xl">
-                <img src={hero.heroImageUrl} alt="O'Connor Agriculture Farm" className="w-full h-[400px] object-cover" loading="lazy" />
+                <img src={cfg.story.imageUrl || hero.heroImageUrl} alt="O'Connor Agriculture Farm" className="w-full h-[400px] object-cover" loading="lazy" />
               </div>
-              <div className="absolute -bottom-4 -left-4 bg-brand text-white rounded-xl px-5 py-3 shadow-lg animate-float">
-                <p className="text-xs uppercase tracking-wider text-brand-light">Established</p>
-                <p className="text-2xl font-black" style={{ fontFamily: 'var(--font-heading)' }}>2020</p>
-              </div>
+              {cfg.story.established && (
+                <div className="absolute -bottom-4 -left-4 bg-brand text-white rounded-xl px-5 py-3 shadow-lg animate-float">
+                  <p className="text-xs uppercase tracking-wider text-brand-light">Established</p>
+                  <p className="text-2xl font-black" style={{ fontFamily: 'var(--font-heading)' }}>{cfg.story.established}</p>
+                </div>
+              )}
             </div>
           </div>
         </section>
