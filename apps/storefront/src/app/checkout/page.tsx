@@ -32,6 +32,11 @@ export default function CheckoutPage() {
   const [promoApplied, setPromoApplied] = useState<{ promoId: string; code: string; discount: number; label: string } | null>(null);
   const [promoError, setPromoError] = useState('');
   const [promoLoading, setPromoLoading] = useState(false);
+  const [wantSoupBones, setWantSoupBones] = useState(false);
+  const [wantOffal, setWantOffal] = useState(false);
+
+  const BULK_IDS = ['prod-quarter-share', 'prod-half-share'];
+  const hasBulkItem = items.some((i) => BULK_IDS.includes(i.productId));
 
   const selectedDay = deliveryDays.find((d) => d.id === selectedDayId);
   const isPickup = (selectedDay as any)?.type === 'pickup';
@@ -83,7 +88,9 @@ export default function CheckoutPage() {
         deliveryAddress: isPickup
           ? { line1: (selectedDay as any)?.marketLocation ?? 'Market Pickup', suburb: '', state: 'QLD', postcode: '' }
           : { line1: form.line1, line2: form.line2, suburb: form.suburb, state: form.state, postcode: form.postcode },
-        items,
+        items: items.map((item) => BULK_IDS.includes(item.productId)
+          ? { ...item, includeSoupBones: wantSoupBones, includeOffal: wantOffal }
+          : item),
         subtotal,
         deliveryFee: deliveryFee,
         gst,
@@ -161,6 +168,39 @@ export default function CheckoutPage() {
             </section>
 
             <textarea placeholder="Delivery notes (optional)" value={form.notes} onChange={f('notes')} rows={3} className="w-full border rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand text-sm resize-none" />
+
+            {hasBulkItem && (
+              <section>
+                <h2 className="text-lg font-semibold mb-3">Bulk Share Options</h2>
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
+                  <p className="text-xs text-amber-700">Your order includes a beef share. Would you like to include the following?</p>
+                  <label className="flex items-center justify-between cursor-pointer group">
+                    <span className="text-sm text-gray-700 group-hover:text-brand transition-colors font-medium">Include soup bones</span>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={wantSoupBones}
+                      onClick={() => setWantSoupBones((v) => !v)}
+                      className={`relative w-11 h-6 rounded-full transition-colors ${wantSoupBones ? 'bg-brand' : 'bg-gray-300'}`}
+                    >
+                      <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${wantSoupBones ? 'translate-x-5' : ''}`} />
+                    </button>
+                  </label>
+                  <label className="flex items-center justify-between cursor-pointer group">
+                    <span className="text-sm text-gray-700 group-hover:text-brand transition-colors font-medium">Include offal</span>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={wantOffal}
+                      onClick={() => setWantOffal((v) => !v)}
+                      className={`relative w-11 h-6 rounded-full transition-colors ${wantOffal ? 'bg-brand' : 'bg-gray-300'}`}
+                    >
+                      <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${wantOffal ? 'translate-x-5' : ''}`} />
+                    </button>
+                  </label>
+                </div>
+              </section>
+            )}
 
             {/* Promo Code */}
             <section>

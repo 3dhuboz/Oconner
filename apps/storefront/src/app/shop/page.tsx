@@ -9,8 +9,7 @@ import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import type { Product } from '@butcher/shared';
 import { formatCurrency, formatWeight } from '@butcher/shared';
-import { ShoppingCart, Phone, X, Plus, Minus, Star, Package } from 'lucide-react';
-import Link from 'next/link';
+import { ShoppingCart, X, Plus, Minus, Star, Package, Phone } from 'lucide-react';
 
 const CATEGORIES = ['All', 'packs', 'beef', 'share/bulk'];
 const CATEGORY_MAP: Record<string, string> = { 'share/bulk': 'other' };
@@ -24,8 +23,6 @@ export default function ShopPage() {
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<Product | null>(null);
   const [modalQty, setModalQty] = useState(1);
-  const [wantSoupBones, setWantSoupBones] = useState(false);
-  const [wantOffal, setWantOffal] = useState(false);
   const { addItem, removeItem, updateQuantity, items } = useCart();
 
   useEffect(() => {
@@ -52,22 +49,26 @@ export default function ShopPage() {
     return item?.weight;
   };
 
+  const addProductToCart = (product: Product, qty = 1) => {
+    const minKg = BULK_MIN_KG[product.id!] ?? 1;
+    const weightG = product.isMeatPack ? undefined : minKg * 1000;
+    for (let i = 0; i < qty; i++) {
+      addItem({
+        productId: product.id!, productName: product.name, category: product.category,
+        isMeatPack: product.isMeatPack, weight: weightG, quantity: 1,
+        pricePerKg: product.pricePerKg, fixedPrice: product.fixedPrice,
+        lineTotal: product.isMeatPack ? (product.fixedPrice ?? 0) : Math.round((product.pricePerKg ?? 0) * minKg),
+      });
+    }
+  };
+
   const renderCard = (product: Product) => (
     <ProductCard
       key={product.id}
       product={product}
       qty={getItemQty(product.id!)}
-      onOpen={() => { setModal(product); setModalQty(1); setWantSoupBones(false); setWantOffal(false); }}
-      onAdd={() => {
-        const minKg = BULK_MIN_KG[product.id!] ?? 1;
-        const weightG = product.isMeatPack ? undefined : minKg * 1000;
-        addItem({
-          productId: product.id!, productName: product.name, category: product.category,
-          isMeatPack: product.isMeatPack, weight: weightG, quantity: 1,
-          pricePerKg: product.pricePerKg, fixedPrice: product.fixedPrice,
-          lineTotal: product.isMeatPack ? (product.fixedPrice ?? 0) : Math.round((product.pricePerKg ?? 0) * minKg),
-        });
-      }}
+      onOpen={() => { setModal(product); setModalQty(1); }}
+      onAdd={() => addProductToCart(product)}
       onIncrement={() => {
         const w = getItemWeight(product.id!);
         updateQuantity(product.id!, getItemQty(product.id!) + 1, w);
@@ -138,7 +139,7 @@ export default function ShopPage() {
             {other.length > 0 && (
               <section>
                 <div className="flex items-center gap-3 mb-6">
-                  <Phone className="h-6 w-6 text-brand" />
+                  <Package className="h-6 w-6 text-brand" />
                   <h2 className="text-2xl font-bold text-gray-800" style={{fontFamily:'var(--font-heading)'}}>Bulk & Share Orders</h2>
                 </div>
                 <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -208,35 +209,10 @@ export default function ShopPage() {
                 </p>
               )}
 
-              {/* Bulk share options */}
               {BULK_IDS.includes(modal.id ?? '') && (
-                <div className="mb-4 space-y-3">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Customise your share</p>
-                  <label className="flex items-center justify-between cursor-pointer group">
-                    <span className="text-sm text-gray-700 group-hover:text-brand transition-colors">Include soup bones</span>
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={wantSoupBones}
-                      onClick={() => setWantSoupBones((v) => !v)}
-                      className={`relative w-11 h-6 rounded-full transition-colors ${wantSoupBones ? 'bg-brand' : 'bg-gray-300'}`}
-                    >
-                      <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${wantSoupBones ? 'translate-x-5' : ''}`} />
-                    </button>
-                  </label>
-                  <label className="flex items-center justify-between cursor-pointer group">
-                    <span className="text-sm text-gray-700 group-hover:text-brand transition-colors">Include offal</span>
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={wantOffal}
-                      onClick={() => setWantOffal((v) => !v)}
-                      className={`relative w-11 h-6 rounded-full transition-colors ${wantOffal ? 'bg-brand' : 'bg-gray-300'}`}
-                    >
-                      <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${wantOffal ? 'translate-x-5' : ''}`} />
-                    </button>
-                  </label>
-                </div>
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4">
+                  You can choose to include offal and soup bones at checkout.
+                </p>
               )}
 
               <div className="flex items-end justify-between gap-4">
@@ -251,59 +227,34 @@ export default function ShopPage() {
                   )}
                 </div>
 
-                {!BULK_IDS.includes(modal.id ?? '') && (
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2 bg-gray-100 rounded-xl px-2 py-1">
-                      <button
-                        onClick={() => setModalQty((q) => Math.max(1, q - 1))}
-                        className="w-7 h-7 rounded-lg bg-white shadow flex items-center justify-center text-brand hover:bg-brand hover:text-white transition-colors"
-                      >
-                        <Minus className="h-3.5 w-3.5" />
-                      </button>
-                      <span className="w-8 text-center font-bold text-brand">{modalQty}</span>
-                      <button
-                        onClick={() => setModalQty((q) => q + 1)}
-                        className="w-7 h-7 rounded-lg bg-white shadow flex items-center justify-center text-brand hover:bg-brand hover:text-white transition-colors"
-                      >
-                        <Plus className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 bg-gray-100 rounded-xl px-2 py-1">
                     <button
-                      disabled={modal.stockOnHand <= 0}
-                      onClick={() => {
-                        const minKg = BULK_MIN_KG[modal.id ?? ''] ?? 1;
-                        const weightG = modal.isMeatPack ? undefined : minKg * 1000;
-                        for (let i = 0; i < modalQty; i++) {
-                          addItem({
-                            productId: modal.id!,
-                            productName: modal.name,
-                            category: modal.category,
-                            isMeatPack: modal.isMeatPack,
-                            weight: weightG,
-                            quantity: 1,
-                            pricePerKg: modal.pricePerKg,
-                            fixedPrice: modal.fixedPrice,
-                            lineTotal: modal.isMeatPack ? (modal.fixedPrice ?? 0) : Math.round((modal.pricePerKg ?? 0) * minKg),
-                          });
-                        }
-                        setModal(null);
-                      }}
-                      className="flex items-center gap-2 bg-brand text-white px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-brand/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-brand/30"
+                      onClick={() => setModalQty((q) => Math.max(1, q - 1))}
+                      className="w-7 h-7 rounded-lg bg-white shadow flex items-center justify-center text-brand hover:bg-brand hover:text-white transition-colors"
                     >
-                      <ShoppingCart className="h-4 w-4" />
-                      Add {modalQty > 1 ? `(${modalQty}) ` : ''}to Cart
+                      <Minus className="h-3.5 w-3.5" />
+                    </button>
+                    <span className="w-8 text-center font-bold text-brand">{modalQty}</span>
+                    <button
+                      onClick={() => setModalQty((q) => q + 1)}
+                      className="w-7 h-7 rounded-lg bg-white shadow flex items-center justify-center text-brand hover:bg-brand hover:text-white transition-colors"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
                     </button>
                   </div>
-                )}
-
-                {BULK_IDS.includes(modal.id ?? '') && (
-                  <Link
-                    href={`/contact?subject=${encodeURIComponent(`${modal.name} Enquiry`)}&message=${encodeURIComponent(`Hi, I'm interested in the ${modal.name}.\n\nSoup bones: ${wantSoupBones ? 'Yes please' : 'No thanks'}\nOffal: ${wantOffal ? 'Yes please' : 'No thanks'}\n\nPlease let me know the next available cutting date.`)}`}
-                    className="flex items-center gap-2 bg-brand text-white px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-brand/90 transition-colors"
+                  <button
+                    disabled={modal.stockOnHand <= 0}
+                    onClick={() => {
+                      addProductToCart(modal, modalQty);
+                      setModal(null);
+                    }}
+                    className="flex items-center gap-2 bg-brand text-white px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-brand/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-brand/30"
                   >
-                    <Phone className="h-4 w-4" /> Enquire
-                  </Link>
-                )}
+                    <ShoppingCart className="h-4 w-4" />
+                    Add {modalQty > 1 ? `(${modalQty}) ` : ''}to Cart
+                  </button>
+                </div>
               </div>
 
               {!modal.isMeatPack && (BULK_MIN_KG[modal.id ?? ''] ?? 0) > 0 && (
@@ -334,7 +285,7 @@ function ProductCard({
 }) {
   const isBulkShare = BULK_IDS.includes(product.id ?? '');
   const minKg = BULK_MIN_KG[product.id ?? ''];
-  const outOfStock = !isBulkShare && product.stockOnHand <= 0;
+  const outOfStock = product.stockOnHand <= 0;
 
   return (
     <div className={`bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow flex flex-col group ${outOfStock ? 'opacity-75' : ''}`}>
@@ -390,37 +341,28 @@ function ProductCard({
                 <span className="text-sm font-normal text-gray-500">/kg</span>
               </span>
             )}
-            {!isBulkShare && product.stockOnHand > 0 && product.stockOnHand <= (product.minThreshold ?? 0) + 2 && (
+            {product.stockOnHand > 0 && product.stockOnHand <= (product.minThreshold ?? 0) + 2 && (
               <p className="text-xs text-accent font-medium">Low stock</p>
             )}
           </div>
-          {isBulkShare ? (
-            <Link
-              href="/contact"
-              className="flex items-center gap-1.5 bg-brand text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-mid transition-colors"
+          <div className={`flex items-center gap-0 rounded-lg overflow-hidden border-2 ${qty > 0 ? 'border-brand' : 'border-gray-200'} ${outOfStock ? 'opacity-40 pointer-events-none' : ''}`}>
+            <button
+              onClick={(e) => { e.stopPropagation(); onDecrement(); }}
+              disabled={qty <= 0}
+              className="flex items-center justify-center w-9 h-9 bg-gray-50 text-gray-500 hover:bg-brand/10 hover:text-brand transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
             >
-              <Phone className="h-4 w-4" /> Enquire
-            </Link>
-          ) : (
-            <div className={`flex items-center gap-0 rounded-lg overflow-hidden border-2 ${qty > 0 ? 'border-brand' : 'border-gray-200'} ${outOfStock ? 'opacity-40 pointer-events-none' : ''}`}>
-              <button
-                onClick={(e) => { e.stopPropagation(); onDecrement(); }}
-                disabled={qty <= 0}
-                className="flex items-center justify-center w-9 h-9 bg-gray-50 text-gray-500 hover:bg-brand/10 hover:text-brand transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-              >
-                <Minus className="h-4 w-4" />
-              </button>
-              <span className={`w-9 h-9 flex items-center justify-center text-sm font-bold bg-white ${qty > 0 ? 'text-brand' : 'text-gray-400'}`}>
-                {qty}
-              </span>
-              <button
-                onClick={(e) => { e.stopPropagation(); qty === 0 ? onAdd() : onIncrement(); }}
-                className="flex items-center justify-center w-9 h-9 bg-brand text-white hover:bg-brand-mid transition-colors"
-              >
-                <Plus className="h-4 w-4" />
-              </button>
-            </div>
-          )}
+              <Minus className="h-4 w-4" />
+            </button>
+            <span className={`w-9 h-9 flex items-center justify-center text-sm font-bold bg-white ${qty > 0 ? 'text-brand' : 'text-gray-400'}`}>
+              {qty}
+            </span>
+            <button
+              onClick={(e) => { e.stopPropagation(); qty === 0 ? onAdd() : onIncrement(); }}
+              className="flex items-center justify-center w-9 h-9 bg-brand text-white hover:bg-brand-mid transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       </div>
     </div>
