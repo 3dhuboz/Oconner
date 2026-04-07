@@ -24,6 +24,8 @@ export default function ShopPage() {
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<Product | null>(null);
   const [modalQty, setModalQty] = useState(1);
+  const [wantSoupBones, setWantSoupBones] = useState(false);
+  const [wantOffal, setWantOffal] = useState(false);
   const { addItem, removeItem, updateQuantity, items } = useCart();
 
   useEffect(() => {
@@ -55,7 +57,7 @@ export default function ShopPage() {
       key={product.id}
       product={product}
       qty={getItemQty(product.id!)}
-      onOpen={() => { setModal(product); setModalQty(1); }}
+      onOpen={() => { setModal(product); setModalQty(1); setWantSoupBones(false); setWantOffal(false); }}
       onAdd={() => {
         const minKg = BULK_MIN_KG[product.id!] ?? 1;
         const weightG = product.isMeatPack ? undefined : minKg * 1000;
@@ -206,6 +208,37 @@ export default function ShopPage() {
                 </p>
               )}
 
+              {/* Bulk share options */}
+              {BULK_IDS.includes(modal.id ?? '') && (
+                <div className="mb-4 space-y-3">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Customise your share</p>
+                  <label className="flex items-center justify-between cursor-pointer group">
+                    <span className="text-sm text-gray-700 group-hover:text-brand transition-colors">Include soup bones</span>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={wantSoupBones}
+                      onClick={() => setWantSoupBones((v) => !v)}
+                      className={`relative w-11 h-6 rounded-full transition-colors ${wantSoupBones ? 'bg-brand' : 'bg-gray-300'}`}
+                    >
+                      <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${wantSoupBones ? 'translate-x-5' : ''}`} />
+                    </button>
+                  </label>
+                  <label className="flex items-center justify-between cursor-pointer group">
+                    <span className="text-sm text-gray-700 group-hover:text-brand transition-colors">Include offal</span>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={wantOffal}
+                      onClick={() => setWantOffal((v) => !v)}
+                      className={`relative w-11 h-6 rounded-full transition-colors ${wantOffal ? 'bg-brand' : 'bg-gray-300'}`}
+                    >
+                      <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${wantOffal ? 'translate-x-5' : ''}`} />
+                    </button>
+                  </label>
+                </div>
+              )}
+
               <div className="flex items-end justify-between gap-4">
                 <div>
                   <p className="text-xs text-gray-400 mb-0.5">Price</p>
@@ -265,7 +298,7 @@ export default function ShopPage() {
 
                 {BULK_IDS.includes(modal.id ?? '') && (
                   <Link
-                    href="/contact"
+                    href={`/contact?subject=${encodeURIComponent(`${modal.name} Enquiry`)}&message=${encodeURIComponent(`Hi, I'm interested in the ${modal.name}.\n\nSoup bones: ${wantSoupBones ? 'Yes please' : 'No thanks'}\nOffal: ${wantOffal ? 'Yes please' : 'No thanks'}\n\nPlease let me know the next available cutting date.`)}`}
                     className="flex items-center gap-2 bg-brand text-white px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-brand/90 transition-colors"
                   >
                     <Phone className="h-4 w-4" /> Enquire

@@ -112,6 +112,12 @@ export default function OrderDetailPage() {
                       {isSub && (
                         <span className="ml-2 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700">Subscription</span>
                       )}
+                      {(item as any).includeSoupBones && (
+                        <span className="ml-2 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">Soup bones</span>
+                      )}
+                      {(item as any).includeOffal && (
+                        <span className="ml-2 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">Offal</span>
+                      )}
                     </td>
                     <td className="py-2 text-right text-gray-500">
                       {(item.isMeatPack || item.quantity)
