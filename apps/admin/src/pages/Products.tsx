@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { api, formatCurrency } from '@butcher/shared';
 import type { Product } from '@butcher/shared';
-import { Plus, Pencil, X, Upload, Sparkles, Image, Trash2 } from 'lucide-react';
+import { Plus, Pencil, X, Upload, Sparkles, Image, Trash2, ChevronUp, ChevronDown } from 'lucide-react';
 import { toast } from '../lib/toast';
 
 const CATEGORIES = ['beef', 'packs', 'other'];
@@ -22,9 +22,31 @@ export default function ProductsPage() {
 
   useEffect(() => {
     api.products.list()
-      .then((data) => setProducts(data as Product[]))
+      .then((data) => setProducts((data as Product[]).sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))))
       .catch(() => {});
   }, []);
+
+  const moveProduct = async (product: Product, direction: 'up' | 'down') => {
+    const sorted = [...products].sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0));
+    const idx = sorted.findIndex((p) => p.id === product.id);
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= sorted.length) return;
+    const other = sorted[swapIdx];
+    const myOrder = product.displayOrder ?? idx;
+    const otherOrder = other.displayOrder ?? swapIdx;
+    try {
+      await Promise.all([
+        api.products.update(product.id!, { displayOrder: otherOrder }),
+        api.products.update(other.id!, { displayOrder: myOrder }),
+      ]);
+      setProducts((prev) => prev.map((p) =>
+        p.id === product.id ? { ...p, displayOrder: otherOrder } :
+        p.id === other.id ? { ...p, displayOrder: myOrder } : p
+      ).sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0)));
+    } catch {
+      toast('Failed to reorder', 'error');
+    }
+  };
 
   useEffect(() => {
     if (!imgLoading) return;
@@ -169,7 +191,13 @@ export default function ProductsPage() {
                   </button>
                 </td>
                 <td className="px-4 py-3 text-right">
-                  <div className="flex items-center justify-end gap-1">
+                  <div className="flex items-center justify-end gap-0.5">
+                    <button onClick={() => moveProduct(p, 'up')} className="p-1 text-gray-300 hover:text-brand rounded hover:bg-brand/5" title="Move up">
+                      <ChevronUp className="h-3.5 w-3.5" />
+                    </button>
+                    <button onClick={() => moveProduct(p, 'down')} className="p-1 text-gray-300 hover:text-brand rounded hover:bg-brand/5" title="Move down">
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    </button>
                     <button onClick={() => {
                       const url = (p as any).imageUrl ?? '';
                       const stale = isStaleUrl(url);
