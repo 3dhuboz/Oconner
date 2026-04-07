@@ -100,7 +100,7 @@ app.post('/', async (c) => {
   }
 
   const discountedSubtotal = Math.max(0, subtotal - discount);
-  const deliveryFee = (body.fulfillmentType === 'pickup') ? 0 : (discountedSubtotal >= 10000 ? 0 : 1000);
+  const deliveryFee = 0; // was: pickup ? 0 : (subtotal >= $100 ? 0 : $10) — re-enable when delivery fees return
   const gst = 0; // no GST on goods
   const total = discountedSubtotal + deliveryFee;
 

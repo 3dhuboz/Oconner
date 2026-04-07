@@ -13,7 +13,7 @@ import Footer from '@/components/Footer';
 import AddressAutocomplete from '@/components/AddressAutocomplete';
 
 const FREE_DELIVERY_THRESHOLD = 10000; // $100 in cents
-const DELIVERY_FEE_AMOUNT = 1000;      // $10 in cents
+const DELIVERY_FEE_AMOUNT = 0;         // was 1000 ($10) — re-enable when delivery fees return
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -233,9 +233,10 @@ export default function CheckoutPage() {
                     {deliveryFee === 0 ? 'FREE' : formatCurrency(deliveryFee)}
                   </span>
                 </div>
-                {!isPickup && subtotal < FREE_DELIVERY_THRESHOLD && (
+                {/* Re-enable when delivery fees return:
+                {!isPickup && DELIVERY_FEE_AMOUNT > 0 && subtotal < FREE_DELIVERY_THRESHOLD && (
                   <p className="text-xs text-green-600">Spend {formatCurrency(FREE_DELIVERY_THRESHOLD - subtotal)} more for free delivery!</p>
-                )}
+                )} */}
                 <hr className="my-2" />
                 <div className="flex justify-between font-bold text-base"><span>Total</span><span className="text-brand">{formatCurrency(grandTotal)}</span></div>
               </div>

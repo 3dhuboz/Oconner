@@ -70,8 +70,8 @@ About O'Connor Agriculture:
 - Website: oconnoragriculture.com.au
 
 Pricing:
-- Delivery: FREE on orders over $100, $10 delivery fee under $100
-- Market day pickups: no delivery fee
+- Delivery: FREE on all orders (delivery fees are currently waived)
+- Market day pickups: also available
 - No GST on goods
 ${liveContext}
 
