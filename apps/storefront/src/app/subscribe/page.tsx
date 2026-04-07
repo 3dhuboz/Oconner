@@ -2,13 +2,17 @@
 
 export const runtime = 'edge';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import Script from 'next/script';
 import { api, formatCurrency } from '@butcher/shared';
 import type { Product } from '@butcher/shared';
-import { CheckCircle, Package, RefreshCcw, Truck, Clock, Leaf, Star, ChevronRight, ArrowLeftRight } from 'lucide-react';
+import { CheckCircle, Package, RefreshCcw, Truck, Clock, Leaf, Star, ChevronRight, ArrowLeftRight, CreditCard, Lock } from 'lucide-react';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { useCart } from '@/lib/cart';
+
+const SQUARE_APP_ID = process.env.NEXT_PUBLIC_SQUARE_APP_ID ?? '';
+const SQUARE_LOCATION_ID = process.env.NEXT_PUBLIC_SQUARE_LOCATION_ID ?? '';
 
 const FREQUENCIES = [
   { id: 'weekly', label: 'Weekly', sub: 'Every week', deliveries: 52 },
@@ -40,7 +44,36 @@ export default function SubscribePage() {
   const [frequency, setFrequency] = useState('fortnightly');
   const [form, setForm] = useState({ name: '', email: '', phone: '', address: '', suburb: '', postcode: '', notes: '' });
   const [saving, setSaving] = useState(false);
+  const [payError, setPayError] = useState('');
+  const [squareReady, setSquareReady] = useState(false);
+  const cardRef = useRef<any>(null);
+  const cardContainerRef = useRef<HTMLDivElement>(null);
   const { items } = useCart();
+
+  // Initialize Square card form when step changes to 'details'
+  const initSquareCard = useCallback(async () => {
+    if (!SQUARE_APP_ID || !SQUARE_LOCATION_ID || cardRef.current) return;
+    try {
+      const payments = (window as any).Square?.payments(SQUARE_APP_ID, SQUARE_LOCATION_ID);
+      if (!payments) return;
+      const card = await payments.card();
+      if (cardContainerRef.current) {
+        await card.attach(cardContainerRef.current);
+        cardRef.current = card;
+        setSquareReady(true);
+      }
+    } catch (e) {
+      console.error('Square init failed:', e);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (step === 'details' && SQUARE_APP_ID) {
+      // Small delay to ensure DOM is ready
+      const t = setTimeout(initSquareCard, 300);
+      return () => clearTimeout(t);
+    }
+  }, [step, initSquareCard]);
 
   useEffect(() => {
     api.products.list(true).then((data) => {
@@ -67,17 +100,42 @@ export default function SubscribePage() {
     e.preventDefault();
     if (!box) return;
     setSaving(true);
+    setPayError('');
+
     try {
-      const result = await api.post<{ url: string }>('/api/subscriptions/checkout', {
+      let sourceId: string | undefined;
+
+      // Tokenize the card if Square SDK is ready
+      if (cardRef.current && squareReady) {
+        const tokenResult = await cardRef.current.tokenize();
+        if (tokenResult.status === 'OK') {
+          sourceId = tokenResult.token;
+        } else {
+          setPayError(tokenResult.errors?.[0]?.message ?? 'Card validation failed. Please check your details.');
+          setSaving(false);
+          return;
+        }
+      }
+
+      const result = await api.post<{ ok?: boolean; url?: string; cardLast4?: string }>('/api/subscriptions/checkout', {
         boxId: selectedBox,
         boxName: box.name,
         alternateBoxId: altBoxProduct?.id ?? undefined,
         alternateBoxName: altBoxProduct?.name ?? undefined,
         frequency,
         ...form,
+        sourceId,
       });
-      window.location.href = result.url;
-    } catch {
+
+      if (result.ok) {
+        // Payment processed inline — show success
+        setStep('done');
+      } else if (result.url) {
+        // Fallback: redirect to Square Payment Link
+        window.location.href = result.url;
+      }
+    } catch (err) {
+      setPayError(err instanceof Error ? err.message : 'Payment failed. Please try again.');
       setSaving(false);
     }
   };
@@ -389,13 +447,37 @@ export default function SubscribePage() {
                 />
               </div>
 
+              {/* Square card input */}
+              {SQUARE_APP_ID && (
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 mb-2 block flex items-center gap-1.5">
+                    <CreditCard className="h-3.5 w-3.5" /> Payment Details
+                  </label>
+                  <div
+                    ref={cardContainerRef}
+                    id="card-container"
+                    className="border rounded-xl p-3 min-h-[50px] bg-white"
+                  />
+                  <p className="text-xs text-gray-400 mt-1.5 flex items-center gap-1">
+                    <Lock className="h-3 w-3" /> Your card will be saved for automatic recurring payments. You can cancel anytime.
+                  </p>
+                </div>
+              )}
+
+              {payError && (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-700">
+                  {payError}
+                </div>
+              )}
+
               <button
                 type="submit"
-                disabled={saving}
+                disabled={saving || (SQUARE_APP_ID ? !squareReady : false)}
                 className="w-full bg-brand text-white py-4 rounded-xl font-black text-lg disabled:opacity-50 hover:bg-brand-mid transition-colors"
               >
-                {saving ? 'Redirecting to payment…' : 'Subscribe & Pay →'}
+                {saving ? 'Processing payment…' : `Subscribe & Pay ${box ? formatCurrency(box.fixedPrice ?? 0) : ''}`}
               </button>
+              <Script src="https://web.squareup.com/v1/square.js" strategy="lazyOnload" />
             </form>
           )}
         </div>

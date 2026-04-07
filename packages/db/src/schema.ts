@@ -34,6 +34,10 @@ export const customers = sqliteTable('customers', {
   blacklistReason: text('blacklist_reason'),
   notes: text('notes').notNull().default(''),
   clerkId: text('clerk_id').unique(),     // set when customer creates an account
+  squareCustomerId: text('square_customer_id'),   // Square customer ID for card-on-file payments
+  squareCardId: text('square_card_id'),           // saved card ID for recurring charges
+  squareCardLast4: text('square_card_last4'),     // last 4 digits for display
+  squareCardBrand: text('square_card_brand'),     // VISA, MASTERCARD, etc.
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull(),
 });

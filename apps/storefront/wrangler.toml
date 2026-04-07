@@ -9,3 +9,5 @@ command = "pnpm install --shamefully-hoist && cd apps/storefront && pnpm run bui
 [vars]
 NEXT_PUBLIC_API_URL = "https://oconner-api.steve-700.workers.dev"
 NEXT_PUBLIC_VAPID_PUBLIC_KEY = "BDayIYbvg7SUn2MHDo7Z4Wo5l8mk6p7V2L3W49wET6tIABFWMevzXDTTs-8sp8N0uYOvl4xXQUYpPx4zev3ZjPM"
+NEXT_PUBLIC_SQUARE_LOCATION_ID = "LMRR0D22RZ2Y3"
+# NEXT_PUBLIC_SQUARE_APP_ID — set in Cloudflare Pages env vars (get from Square Developer Dashboard)
