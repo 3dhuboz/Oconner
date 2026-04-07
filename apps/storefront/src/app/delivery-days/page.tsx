@@ -35,7 +35,7 @@ export default async function DeliveryDaysPage() {
             <h2 className="text-2xl font-bold text-brand mb-2 flex items-center gap-2">
               🏪 Upcoming Market Days
             </h2>
-            <p className="text-gray-500 mb-6">Come see us in person — no delivery fee on market day orders!</p>
+            <p className="text-gray-500 mb-6">Come see us in person — collect your order at the markets!</p>
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {marketDays.map((day: any) => {
                 const date = new Date(day.date);
