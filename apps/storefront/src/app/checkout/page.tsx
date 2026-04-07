@@ -302,7 +302,7 @@ export default function CheckoutPage() {
               >
                 {submitting ? 'Placing Order…' : `Place Order — ${formatCurrency(grandTotal)}`}
               </button>
-              <p className="text-xs text-center text-gray-400 mt-3">We'll confirm your order and arrange payment on delivery.</p>
+              <p className="text-xs text-center text-gray-400 mt-3">You'll be redirected to Square to complete payment securely.</p>
             </div>
           </div>
         </form>
