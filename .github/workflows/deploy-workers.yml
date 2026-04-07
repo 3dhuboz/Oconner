@@ -34,7 +34,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Deploy worker
-        run: pnpm --filter @butcher/worker-gps-relay deploy
+        run: pnpm --filter @butcher/worker-gps-relay run deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -58,7 +58,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Deploy worker
-        run: pnpm --filter @butcher/worker-payment-handler deploy
+        run: pnpm --filter @butcher/worker-payment-handler run deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -82,7 +82,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Deploy worker
-        run: pnpm --filter @butcher/worker-pdf-generator deploy
+        run: pnpm --filter @butcher/worker-pdf-generator run deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -106,7 +106,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Deploy worker
-        run: pnpm --filter @butcher/worker-route-proxy deploy
+        run: pnpm --filter @butcher/worker-route-proxy run deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -130,7 +130,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Deploy worker
-        run: pnpm --filter @butcher/worker-image-upload deploy
+        run: pnpm --filter @butcher/worker-image-upload run deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -154,7 +154,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Deploy API worker
-        run: pnpm --filter @butcher/api deploy
+        run: pnpm --filter @butcher/api run deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
