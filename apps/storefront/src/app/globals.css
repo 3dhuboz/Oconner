@@ -15,7 +15,14 @@
   h1, h2, h3 { font-family: var(--font-heading), system-ui, sans-serif; }
 }
 
-/* Scroll reveal handled via inline styles in useScrollReveal hook */
+/* ── Scroll Reveal (CSS initial state prevents flash on fast loads) ───────── */
+.reveal, .reveal-left, .reveal-right, .reveal-scale {
+  opacity: 0;
+}
+.reveal        { transform: translateY(32px); }
+.reveal-left   { transform: translateX(-48px); }
+.reveal-right  { transform: translateX(48px); }
+.reveal-scale  { transform: scale(0.92); }
 
 /* ── Hero Text Reveal ─────────────────────────────────────────────────────── */
 @keyframes hero-text-rise {
