@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { api } from '@butcher/shared';
-import { Save, RefreshCw, Image, Type, Phone, Layout, ChevronDown, ChevronUp, CreditCard, Mail, Bell, Send, Users, Radio, Plus, X, BookOpen, Upload } from 'lucide-react';
+import { Save, RefreshCw, Image, Type, Phone, Layout, ChevronDown, ChevronUp, CreditCard, Mail, Bell, Send, Users, Radio, Plus, X, BookOpen, Upload, Star, Trash2 } from 'lucide-react';
 import { toast } from '../lib/toast';
 
 interface Feature {
@@ -237,6 +237,10 @@ export default function SettingsPage() {
 
   const [subscriptionFrequencies, setSubscriptionFrequencies] = useState(['fortnightly', 'monthly']);
 
+  const [reviews, setReviews] = useState<{ name: string; location: string; text: string; rating: number }[]>([
+    { name: 'Sarah M.', location: 'Gladstone, QLD', text: 'The best beef we have ever had.', rating: 5 },
+  ]);
+
   const [about, setAbout] = useState({
     heroTagline: 'Locally Raised · Grass Fed · Naturally Healthy',
     heroTitle: "About O'Connor Agriculture",
@@ -277,6 +281,7 @@ export default function SettingsPage() {
         if (data?.about) setAbout((prev) => ({ ...prev, ...data.about }));
         if (data?.rewards) setRewards((prev) => ({ ...prev, ...data.rewards }));
         if (data?.subscriptionFrequencies) setSubscriptionFrequencies(data.subscriptionFrequencies);
+        if (data?.reviews) setReviews(data.reviews);
       })
       .catch((e: unknown) => console.error('Failed to load settings:', e))
       .finally(() => setLoading(false));
@@ -330,7 +335,7 @@ export default function SettingsPage() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await api.config.update({ storefront: config, payment, email, ticker, about, rewards, subscriptionFrequencies });
+      await api.config.update({ storefront: config, payment, email, ticker, about, rewards, subscriptionFrequencies, reviews });
       toast('Settings saved — storefront updated immediately');
     } catch (e) {
       console.error('Save failed:', e);
@@ -890,6 +895,60 @@ export default function SettingsPage() {
             </div>
           </div>
         </div>
+      </Section>
+
+      <Section title="Customer Reviews" icon={Star}>
+        <p className="text-xs text-gray-400 mb-3">Paste your best Facebook reviews here. They'll appear on the homepage.</p>
+        {reviews.map((r, i) => (
+          <div key={i} className="border border-gray-100 rounded-lg p-3 space-y-2 relative">
+            <button
+              onClick={() => setReviews((prev) => prev.filter((_, j) => j !== i))}
+              className="absolute top-2 right-2 p-1 text-gray-300 hover:text-red-500 rounded"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Review {i + 1}</p>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Name">
+                <input className={inputCls} value={r.name} onChange={(e) => setReviews((prev) => prev.map((rv, j) => j === i ? { ...rv, name: e.target.value } : rv))} placeholder="Sarah M." />
+              </Field>
+              <Field label="Location">
+                <input className={inputCls} value={r.location} onChange={(e) => setReviews((prev) => prev.map((rv, j) => j === i ? { ...rv, location: e.target.value } : rv))} placeholder="Gladstone, QLD" />
+              </Field>
+            </div>
+            <Field label="Review text">
+              <textarea className={textareaCls} rows={2} value={r.text} onChange={(e) => setReviews((prev) => prev.map((rv, j) => j === i ? { ...rv, text: e.target.value } : rv))} placeholder="Paste the review from Facebook..." />
+            </Field>
+            <Field label="Rating">
+              <div className="flex gap-1">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    type="button"
+                    onClick={() => setReviews((prev) => prev.map((rv, j) => j === i ? { ...rv, rating: star } : rv))}
+                    className={`p-0.5 ${star <= r.rating ? 'text-yellow-400' : 'text-gray-200'}`}
+                  >
+                    <Star className="h-5 w-5 fill-current" />
+                  </button>
+                ))}
+              </div>
+            </Field>
+          </div>
+        ))}
+        <button
+          onClick={() => setReviews((prev) => [...prev, { name: '', location: '', text: '', rating: 5 }])}
+          className="flex items-center gap-1.5 text-sm text-brand font-medium hover:underline mt-1"
+        >
+          <Plus className="h-3.5 w-3.5" /> Add review
+        </button>
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="flex items-center gap-1.5 px-4 py-2 text-sm text-white bg-brand rounded-lg hover:bg-brand-mid transition-colors disabled:opacity-60 font-medium mt-2"
+        >
+          <Save className="h-3.5 w-3.5" />
+          {saving ? 'Saving...' : 'Save Reviews'}
+        </button>
       </Section>
 
       <Section title="Contact Details" icon={Phone}>

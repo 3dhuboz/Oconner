@@ -82,6 +82,7 @@ export default function HomePage() {
   const [rewards, setRewards] = useState<RewardsConfig | null>(null);
   const [staffRole, setStaffRole] = useState<'admin' | 'driver' | null>(null);
   const [featuredProducts, setFeaturedProducts] = useState<Product[]>([]);
+  const [testimonials, setTestimonials] = useState(TESTIMONIALS);
   const { getToken, isSignedIn } = useAuth();
 
   useScrollReveal();
@@ -95,6 +96,9 @@ export default function HomePage() {
       .catch(() => {});
     api.config.get('rewards')
       .then((data) => { const r = (data as any)?.value ?? data; if (r?.enabled) setRewards(r as RewardsConfig); })
+      .catch(() => {});
+    api.config.get('reviews')
+      .then((data) => { const val = (data as any)?.value ?? data; if (Array.isArray(val) && val.length > 0) setTestimonials(val); })
       .catch(() => {});
     api.products.list(true)
       .then((data) => {
@@ -312,7 +316,7 @@ export default function HomePage() {
               </h2>
             </div>
             <div className="grid md:grid-cols-3 gap-8">
-              {TESTIMONIALS.map((review, i) => (
+              {testimonials.map((review, i) => (
                 <div key={review.name} className={`reveal stagger-${i + 1} bg-white rounded-2xl p-8 shadow-sm hover:shadow-lg transition-shadow`}>
                   <div className="flex gap-0.5 mb-4">
                     {Array.from({ length: review.rating }).map((_, j) => (
