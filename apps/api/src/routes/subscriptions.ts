@@ -45,6 +45,7 @@ async function createSubscriptionOrder(db: any, opts: {
   price: number; // cents
   subscriptionId: string;
   now: number;
+  env?: Env; // pass env to enable auto-charging
 }) {
   // Find the next upcoming active delivery day
   const [nextDay] = await db.select().from(deliveryDays)
@@ -65,6 +66,40 @@ async function createSubscriptionOrder(db: any, opts: {
     lineTotal: opts.price,
   };
 
+  // ── Try to auto-charge saved card ──
+  let paymentStatus = 'paid'; // default for backward compatibility
+  let paymentIntentId = '';
+  if (opts.env?.SQUARE_ACCESS_TOKEN && opts.env?.SQUARE_LOCATION_ID) {
+    const [cust] = await db.select().from(customers).where(eq(customers.id, opts.customerId)).limit(1);
+    if (cust?.squareCardId && cust?.squareCustomerId) {
+      try {
+        const chargeResult = await squareRequest(opts.env.SQUARE_ACCESS_TOKEN, '/payments', {
+          idempotency_key: crypto.randomUUID(),
+          source_id: cust.squareCardId,
+          amount_money: { amount: opts.price, currency: 'AUD' },
+          customer_id: cust.squareCustomerId,
+          location_id: opts.env.SQUARE_LOCATION_ID,
+          autocomplete: true,
+          note: `Subscription renewal: ${opts.boxName}`,
+        });
+
+        if (chargeResult.errors) {
+          console.error('Auto-charge failed:', JSON.stringify(chargeResult.errors));
+          paymentStatus = 'payment_failed';
+        } else {
+          paymentIntentId = ((chargeResult.payment as any)?.id ?? '') as string;
+          paymentStatus = 'paid';
+        }
+      } catch (e) {
+        console.error('Auto-charge error:', e);
+        paymentStatus = 'payment_failed';
+      }
+    } else {
+      // No saved card — mark as needing payment
+      paymentStatus = 'pending_payment';
+    }
+  }
+
   await db.insert(orders).values({
     id: orderId,
     customerId: opts.customerId,
@@ -76,14 +111,14 @@ async function createSubscriptionOrder(db: any, opts: {
     deliveryFee: 0,
     gst,
     total: opts.price,
-    status: 'confirmed',
+    status: paymentStatus === 'paid' ? 'confirmed' : 'pending_payment',
     deliveryDayId: nextDay.id,
     deliveryAddress: JSON.stringify(opts.address),
     postcodeZone: '',
-    paymentIntentId: '',
+    paymentIntentId,
     paymentProvider: 'square',
-    paymentStatus: 'paid',
-    notes: `Subscription box: ${opts.boxName}`,
+    paymentStatus,
+    notes: `Subscription box: ${opts.boxName}${paymentStatus === 'payment_failed' ? ' — AUTO-CHARGE FAILED' : ''}`,
     createdAt: opts.now,
     updatedAt: opts.now,
   });
@@ -93,11 +128,11 @@ async function createSubscriptionOrder(db: any, opts: {
 
   // Update delivery day order count and customer stats
   await db.update(deliveryDays).set({ orderCount: nextDay.orderCount + 1 }).where(eq(deliveryDays.id, nextDay.id));
-  const [cust] = await db.select().from(customers).where(eq(customers.id, opts.customerId)).limit(1);
-  if (cust) {
+  const [custStats] = await db.select().from(customers).where(eq(customers.id, opts.customerId)).limit(1);
+  if (custStats) {
     await db.update(customers).set({
-      orderCount: cust.orderCount + 1,
-      totalSpent: cust.totalSpent + opts.price,
+      orderCount: custStats.orderCount + 1,
+      totalSpent: custStats.totalSpent + opts.price,
       updatedAt: opts.now,
     }).where(eq(customers.id, opts.customerId));
   }
@@ -108,6 +143,9 @@ async function createSubscriptionOrder(db: any, opts: {
 const app = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
 
 // ── Square Checkout for new subscriptions (public — no auth) ──
+// Supports two modes:
+// 1. Card token (sourceId) — charges inline, saves card for recurring
+// 2. No token (fallback) — creates Square Payment Link for redirect
 app.post('/checkout', async (c) => {
   const body = await c.req.json<{
     email: string; name: string; phone: string;
@@ -115,6 +153,7 @@ app.post('/checkout', async (c) => {
     boxId: string; boxName: string;
     alternateBoxId?: string; alternateBoxName?: string;
     frequency: string;
+    sourceId?: string; // Square Web Payments SDK card token
   }>();
 
   // Try hardcoded prices first (storefront short IDs), then look up product by UUID
@@ -136,40 +175,11 @@ app.post('/checkout', async (c) => {
     return c.json({ error: 'Square not configured' }, 503);
   }
 
-  // Create a Square Payment Link for the first subscription payment
-  const result = await squareRequest(accessToken, '/online-checkout/payment-links', {
-    idempotency_key: crypto.randomUUID(),
-    quick_pay: {
-      name: `${body.boxName} — ${body.frequency} subscription`,
-      price_money: {
-        amount: price,
-        currency: 'AUD',
-      },
-      location_id: locationId,
-    },
-    checkout_options: {
-      redirect_url: `${storefrontUrl}/subscribe/success`,
-      ask_for_shipping_address: false,
-    },
-    pre_populated_data: {
-      buyer_email: body.email,
-      ...(body.phone ? { buyer_phone_number: body.phone.replace(/^0/, '+61').replace(/\s/g, '') } : {}),
-    },
-    payment_note: `Subscription: ${body.boxName} (${body.frequency}). Customer: ${body.name}, ${body.address}, ${body.suburb} ${body.postcode}`,
-  });
-
-  const paymentLink = result.payment_link as { url?: string } | undefined;
-  if (!paymentLink?.url) {
-    console.error('Square checkout error:', JSON.stringify(result));
-    return c.json({ error: 'Failed to create checkout', details: result.errors ?? result }, 500);
-  }
-
-  // Create subscription in our DB as 'pending' — will be activated when payment succeeds
   const db = drizzle(c.env.DB);
   const now = Date.now();
   const subId = crypto.randomUUID();
 
-  // Find or create customer
+  // Find or create local customer
   let customerId: string | null = null;
   const [existing] = await db.select().from(customers).where(eq(customers.email, body.email)).limit(1);
   if (existing) {
@@ -191,33 +201,124 @@ app.post('/checkout', async (c) => {
     });
   }
 
-  await db.insert(subscriptions).values({
-    id: subId,
-    customerId,
-    email: body.email,
-    boxId: body.boxId,
-    boxName: body.boxName,
-    alternateBoxId: body.alternateBoxId ?? null,
-    alternateBoxName: body.alternateBoxName ?? null,
-    nextIsAlternate: false,
-    frequency: body.frequency,
-    status: 'active',
-    createdAt: now,
-    updatedAt: now,
+  // ── Mode 1: Card token provided — charge inline + save card ──
+  if (body.sourceId) {
+    try {
+      // 1. Find or create Square customer
+      let squareCustId = existing?.squareCustomerId ?? null;
+      if (!squareCustId) {
+        const custResult = await squareRequest(accessToken, '/customers', {
+          idempotency_key: crypto.randomUUID(),
+          given_name: body.name.split(' ')[0] ?? '',
+          family_name: body.name.split(' ').slice(1).join(' ') ?? '',
+          email_address: body.email,
+          phone_number: body.phone ? `+61${body.phone.replace(/^0/, '').replace(/\s/g, '')}` : undefined,
+        });
+        squareCustId = (custResult.customer as any)?.id;
+        if (!squareCustId) return c.json({ error: 'Failed to create Square customer', details: custResult.errors }, 500);
+      }
+
+      // 2. Charge the card (first payment)
+      const payResult = await squareRequest(accessToken, '/payments', {
+        idempotency_key: crypto.randomUUID(),
+        source_id: body.sourceId,
+        amount_money: { amount: price, currency: 'AUD' },
+        customer_id: squareCustId,
+        location_id: locationId,
+        autocomplete: true,
+        note: `Subscription: ${body.boxName} (${body.frequency})`,
+      });
+
+      if (payResult.errors) {
+        return c.json({ error: 'Payment failed', details: payResult.errors }, 400);
+      }
+
+      // 3. Save card on file for future recurring charges
+      const cardResult = await squareRequest(accessToken, '/cards', {
+        idempotency_key: crypto.randomUUID(),
+        source_id: body.sourceId,
+        card: {
+          customer_id: squareCustId,
+        },
+      });
+
+      const savedCard = (cardResult.card as any) ?? {};
+      const cardId = savedCard.id ?? null;
+      const cardLast4 = savedCard.last_4 ?? null;
+      const cardBrand = savedCard.card_brand ?? null;
+
+      // 4. Store Square IDs on customer
+      await db.update(customers).set({
+        squareCustomerId: squareCustId,
+        squareCardId: cardId,
+        squareCardLast4: cardLast4,
+        squareCardBrand: cardBrand,
+        updatedAt: now,
+      }).where(eq(customers.id, customerId!));
+
+      // 5. Create subscription
+      await db.insert(subscriptions).values({
+        id: subId, customerId, email: body.email,
+        boxId: body.boxId, boxName: body.boxName,
+        alternateBoxId: body.alternateBoxId ?? null, alternateBoxName: body.alternateBoxName ?? null,
+        nextIsAlternate: false, frequency: body.frequency, status: 'active',
+        createdAt: now, updatedAt: now,
+      });
+
+      // 6. Create first order (already paid)
+      await createSubscriptionOrder(db, {
+        customerId: customerId!,
+        email: body.email, name: body.name, phone: body.phone,
+        address: { line1: body.address, suburb: body.suburb, state: 'QLD', postcode: body.postcode },
+        boxId: body.boxId, boxName: body.boxName, price,
+        subscriptionId: subId, now,
+      });
+
+      return c.json({ ok: true, subscriptionId: subId, cardLast4, cardBrand });
+    } catch (e: any) {
+      return c.json({ error: e?.message ?? 'Subscription checkout failed' }, 500);
+    }
+  }
+
+  // ── Mode 2: No token — fallback to Square Payment Link ──
+  const result = await squareRequest(accessToken, '/online-checkout/payment-links', {
+    idempotency_key: crypto.randomUUID(),
+    quick_pay: {
+      name: `${body.boxName} — ${body.frequency} subscription`,
+      price_money: { amount: price, currency: 'AUD' },
+      location_id: locationId,
+    },
+    checkout_options: {
+      redirect_url: `${storefrontUrl}/subscribe/success`,
+      ask_for_shipping_address: false,
+    },
+    pre_populated_data: {
+      buyer_email: body.email,
+      ...(body.phone ? { buyer_phone_number: body.phone.replace(/^0/, '+61').replace(/\s/g, '') } : {}),
+    },
+    payment_note: `Subscription: ${body.boxName} (${body.frequency}). Customer: ${body.name}, ${body.address}, ${body.suburb} ${body.postcode}`,
   });
 
-  // Create a linked order so subscription appears on Orders page
+  const paymentLink = result.payment_link as { url?: string } | undefined;
+  if (!paymentLink?.url) {
+    console.error('Square checkout error:', JSON.stringify(result));
+    return c.json({ error: 'Failed to create checkout', details: result.errors ?? result }, 500);
+  }
+
+  await db.insert(subscriptions).values({
+    id: subId, customerId, email: body.email,
+    boxId: body.boxId, boxName: body.boxName,
+    alternateBoxId: body.alternateBoxId ?? null, alternateBoxName: body.alternateBoxName ?? null,
+    nextIsAlternate: false, frequency: body.frequency, status: 'active',
+    createdAt: now, updatedAt: now,
+  });
+
   await createSubscriptionOrder(db, {
     customerId: customerId!,
-    email: body.email,
-    name: body.name,
-    phone: body.phone,
+    email: body.email, name: body.name, phone: body.phone,
     address: { line1: body.address, suburb: body.suburb, state: 'QLD', postcode: body.postcode },
-    boxId: body.boxId,
-    boxName: body.boxName,
-    price,
-    subscriptionId: subId,
-    now,
+    boxId: body.boxId, boxName: body.boxName, price,
+    subscriptionId: subId, now,
   });
 
   return c.json({ url: paymentLink.url });
@@ -415,6 +516,7 @@ app.post('/:id/generate-order', async (c) => {
     price,
     subscriptionId: sub.id,
     now,
+    env: c.env,
   });
 
   if (!orderId) return c.json({ error: 'No upcoming delivery day available' }, 400);
@@ -511,6 +613,7 @@ app.post('/auto-generate', async (c) => {
       price,
       subscriptionId: sub.id,
       now,
+      env: c.env,
     });
 
     if (!orderId) { errors.push(`${sub.email}: no upcoming delivery day`); continue; }
