@@ -1,16 +1,25 @@
+'use client';
+
 export const runtime = 'edge';
 
+import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { api } from '@butcher/shared';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { CheckCircle } from 'lucide-react';
 
-export default function CheckoutSuccessPage({
-  searchParams,
-}: {
-  searchParams: { orderId?: string };
-}) {
-  const { orderId } = searchParams;
+export default function CheckoutSuccessPage() {
+  const searchParams = useSearchParams();
+  const orderId = searchParams.get('orderId');
+  const [updated, setUpdated] = useState(false);
+
+  // Tell the API the customer completed Square payment
+  useEffect(() => {
+    if (!orderId || updated) return;
+    api.post(`/api/orders/${orderId}/mark-paid`, {}).then(() => setUpdated(true)).catch(() => {});
+  }, [orderId, updated]);
 
   return (
     <>
@@ -20,7 +29,7 @@ export default function CheckoutSuccessPage({
           <CheckCircle className="h-20 w-20 text-brand-mid mx-auto mb-6" />
           <h1 className="text-3xl font-bold text-brand mb-3">Order Confirmed!</h1>
           <p className="text-gray-600 mb-2">
-            Thank you for your order. We've sent a confirmation email with your order details.
+            Thank you for your order. We'll be in touch with delivery details.
           </p>
           {orderId && (
             <p className="text-sm text-gray-500 mb-8">
