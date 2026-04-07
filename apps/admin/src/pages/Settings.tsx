@@ -864,7 +864,7 @@ export default function SettingsPage() {
           <Field label="Team Body">
             <textarea className={textareaCls} rows={2} value={about.teamBody} onChange={(e) => setAbout({ ...about, teamBody: e.target.value })} />
           </Field>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="space-y-3">
             <ImageField label="Team Image 1" value={about.teamImage1} onChange={(url) => setAbout({ ...about, teamImage1: url })} />
             <ImageField label="Team Image 2" value={about.teamImage2} onChange={(url) => setAbout({ ...about, teamImage2: url })} />
             <ImageField label="Team Image 3" value={about.teamImage3} onChange={(url) => setAbout({ ...about, teamImage3: url })} />
