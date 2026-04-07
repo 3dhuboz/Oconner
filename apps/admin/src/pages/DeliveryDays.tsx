@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '@butcher/shared';
 import type { DeliveryDay } from '@butcher/shared';
-import { Plus, X, CalendarDays, ClipboardList, RefreshCw, AlertTriangle, Pencil, MapPin, Save, Trash2, Store } from 'lucide-react';
+import { Plus, X, CalendarDays, ClipboardList, RefreshCw, AlertTriangle, Pencil, MapPin, Save, Trash2, Store, BarChart3 } from 'lucide-react';
 import { toast } from '../lib/toast';
 import { useNavigate } from 'react-router-dom';
 import { ZoneAutocomplete } from '../components/ZoneAutocomplete';
@@ -13,7 +13,7 @@ export default function DeliveryDaysPage() {
   const [form, setForm] = useState({ date: '', maxOrders: 20, notes: '', deliveryWindowStart: '09:00', zones: '', type: 'delivery' as string, marketLocation: '' });
   const [saving, setSaving] = useState(false);
   const [showBulk, setShowBulk] = useState(false);
-  const [bulkForm, setBulkForm] = useState({ dayOfWeek: 5, weeks: 12, maxOrders: 40, deliveryWindowStart: '09:00', zones: '', type: 'delivery' as string, marketLocation: '' });
+  const [bulkForm, setBulkForm] = useState({ dayOfWeek: 5, weeks: 12, frequency: 'weekly' as 'weekly' | 'fortnightly' | 'monthly', maxOrders: 40, deliveryWindowStart: '09:00', zones: '', type: 'delivery' as string, marketLocation: '' });
   const [bulkSaving, setBulkSaving] = useState(false);
   const [editing, setEditing] = useState<DeliveryDay | null>(null);
   const [editForm, setEditForm] = useState({ maxOrders: 0, notes: '', deliveryWindowStart: '09:00', zones: '', type: 'delivery' as string, marketLocation: '' });
@@ -65,9 +65,10 @@ export default function DeliveryDaysPage() {
       const start = new Date();
       start.setHours(0, 0, 0, 0);
       while (start.getDay() !== bulkForm.dayOfWeek) start.setDate(start.getDate() + 1);
+      const intervalDays = bulkForm.frequency === 'monthly' ? 28 : bulkForm.frequency === 'fortnightly' ? 14 : 7;
       for (let w = 0; w < bulkForm.weeks; w++) {
         const d = new Date(start);
-        d.setDate(start.getDate() + w * 7);
+        d.setDate(start.getDate() + w * intervalDays);
         upcoming.push(d);
       }
       let created = 0;
@@ -213,6 +214,12 @@ export default function DeliveryDaysPage() {
                     <Trash2 className="h-4 w-4" />
                   </button>
                   <button
+                    onClick={() => navigate(`/delivery-days/${day.id}?tab=stock`)}
+                    className="flex items-center gap-1 text-xs text-amber-600 border border-amber-300 px-2 py-1 rounded-lg hover:bg-amber-50"
+                  >
+                    <BarChart3 className="h-3.5 w-3.5" /> Stock
+                  </button>
+                  <button
                     onClick={() => navigate(`/delivery-days/${day.id}`)}
                     className="flex items-center gap-1 text-xs text-brand border border-brand/30 px-2 py-1 rounded-lg hover:bg-brand/5"
                   >
@@ -311,6 +318,14 @@ export default function DeliveryDaysPage() {
                   <option value={0}>Sunday</option><option value={1}>Monday</option><option value={2}>Tuesday</option><option value={3}>Wednesday</option><option value={4}>Thursday</option><option value={5}>Friday</option><option value={6}>Saturday</option>
                 </select>
               </div>
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Frequency</label>
+                <select value={bulkForm.frequency} onChange={(e) => setBulkForm((f) => ({ ...f, frequency: e.target.value as 'weekly' | 'fortnightly' | 'monthly' }))} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
+                  <option value="weekly">Every week</option>
+                  <option value="fortnightly">Every 2 weeks (fortnightly)</option>
+                  <option value="monthly">Every 4 weeks (monthly)</option>
+                </select>
+              </div>
               <ZoneAutocomplete
                 value={bulkForm.zones}
                 onChange={(v) => setBulkForm((f) => ({ ...f, zones: v }))}
@@ -319,9 +334,12 @@ export default function DeliveryDaysPage() {
                 hint="All created days will have these zones"
               />
               <div>
-                <label className="text-xs text-gray-500 mb-1 block">How many weeks ahead</label>
+                <label className="text-xs text-gray-500 mb-1 block">How many runs</label>
                 <input type="number" min={1} max={52} value={bulkForm.weeks} onChange={(e) => setBulkForm((f) => ({ ...f, weeks: Number(e.target.value) }))} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
-                <p className="text-xs text-gray-400 mt-1">Creates up to {bulkForm.weeks} {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][bulkForm.dayOfWeek]}s</p>
+                <p className="text-xs text-gray-400 mt-1">
+                  Creates {bulkForm.weeks} {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][bulkForm.dayOfWeek]}s
+                  {bulkForm.frequency === 'fortnightly' ? ' (every 2 weeks)' : bulkForm.frequency === 'monthly' ? ' (every 4 weeks)' : ''}
+                </p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
