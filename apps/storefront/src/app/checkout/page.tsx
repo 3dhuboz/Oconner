@@ -101,6 +101,18 @@ export default function CheckoutPage() {
         notes: form.notes,
       }) as { id: string };
 
+      // Create Square payment link and redirect customer to pay
+      try {
+        const paymentResult = await api.post<{ ok: boolean; paymentUrl?: string }>(`/api/orders/${order.id}/payment-link`, {});
+        clearCart();
+        if (paymentResult.paymentUrl) {
+          window.location.href = paymentResult.paymentUrl;
+          return;
+        }
+      } catch {
+        // Payment link failed — still show success, staff can send invoice manually
+      }
+
       clearCart();
       router.push(`/checkout/success?orderId=${order.id}`);
     } catch (err) {

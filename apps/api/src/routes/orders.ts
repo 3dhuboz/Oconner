@@ -497,4 +497,86 @@ app.post('/:id/invoice', async (c) => {
   }
 });
 
+// ── Square Payment Link (for storefront checkout) ──
+app.post('/:id/payment-link', async (c) => {
+  const accessToken = c.env.SQUARE_ACCESS_TOKEN;
+  const locationId = c.env.SQUARE_LOCATION_ID;
+  const storefrontUrl = c.env.STOREFRONT_URL ?? 'https://oconnoragriculture.com.au';
+  if (!accessToken || !locationId) return c.json({ error: 'Square not configured' }, 400);
+
+  const db = drizzle(c.env.DB);
+  const orderId = c.req.param('id');
+  const [order] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+  if (!order) return c.json({ error: 'Order not found' }, 404);
+
+  const items = JSON.parse(order.items) as Array<{ productName: string; quantity?: number; weightKg?: number; weight?: number; lineTotal: number }>;
+
+  try {
+    const squareLineItems = items.map((i) => {
+      const qty = i.quantity ?? 1;
+      return {
+        name: i.productName ?? 'Item',
+        quantity: String(qty),
+        base_price_money: {
+          amount: Math.round(i.lineTotal / qty),
+          currency: 'AUD',
+        },
+      };
+    });
+
+    if (order.deliveryFee > 0) {
+      squareLineItems.push({
+        name: 'Delivery Fee',
+        quantity: '1',
+        base_price_money: { amount: order.deliveryFee, currency: 'AUD' },
+      });
+    }
+
+    const res = await fetch(`${SQUARE_API}/online-checkout/payment-links`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        'Square-Version': '2024-01-18',
+      },
+      body: JSON.stringify({
+        idempotency_key: crypto.randomUUID(),
+        order: {
+          location_id: locationId,
+          line_items: squareLineItems,
+          metadata: { orderId },
+        },
+        checkout_options: {
+          redirect_url: `${storefrontUrl}/checkout/success?orderId=${orderId}`,
+          merchant_support_email: 'orders@oconnoragriculture.com.au',
+        },
+        payment_note: `O'Connor Agriculture — Order #${orderId.slice(0, 8).toUpperCase()}`,
+      }),
+    });
+
+    const data = await res.json() as any;
+
+    if (data.errors) {
+      return c.json({ error: 'Failed to create payment link', details: data.errors }, 400);
+    }
+
+    const paymentUrl = data.payment_link?.url ?? data.payment_link?.long_url;
+    const paymentLinkId = data.payment_link?.id;
+
+    if (!paymentUrl) {
+      return c.json({ error: 'Payment link created but no URL returned' }, 500);
+    }
+
+    await db.update(orders).set({
+      paymentStatus: 'awaiting_payment',
+      internalNotes: `${order.internalNotes ?? ''}\nSquare payment link: ${paymentLinkId ?? 'unknown'}`.trim(),
+      updatedAt: Date.now(),
+    }).where(eq(orders.id, orderId));
+
+    return c.json({ ok: true, paymentUrl, paymentLinkId });
+  } catch (e: any) {
+    return c.json({ error: e?.message ?? 'Payment link creation failed' }, 500);
+  }
+});
+
 export default app;
