@@ -455,7 +455,18 @@ app.post('/:id/invoice', async (c) => {
         },
         payment_requests: [{
           request_type: 'BALANCE',
-          due_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          due_date: await (async () => {
+            // Due before delivery date, fallback to 3 days from now
+            if (order.deliveryDayId) {
+              const [dd] = await db.select().from(deliveryDays).where(eq(deliveryDays.id, order.deliveryDayId)).limit(1);
+              if (dd?.date) {
+                const deliveryDate = new Date(dd.date);
+                deliveryDate.setDate(deliveryDate.getDate() - 1); // day before delivery
+                if (deliveryDate > new Date()) return deliveryDate.toISOString().split('T')[0];
+              }
+            }
+            return new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+          })(),
           automatic_payment_source: 'NONE',
         }],
         delivery_method: 'EMAIL',
