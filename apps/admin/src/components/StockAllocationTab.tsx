@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '@butcher/shared';
 import { toast } from '../lib/toast';
-import { Save, Search, Copy, X, Check } from 'lucide-react';
+import { Save, Search, Copy, X, Check, Link2, Unlink } from 'lucide-react';
 
 interface Allocation {
   productId: string;
@@ -32,6 +32,9 @@ export default function StockAllocationTab({ dayId, dayDate }: { dayId: string; 
   const [search, setSearch] = useState('');
   const [allocatedOnly, setAllocatedOnly] = useState(false);
   const [showCopyModal, setShowCopyModal] = useState(false);
+  const [poolSourceId, setPoolSourceId] = useState<string | null>(null);
+  const [poolDays, setPoolDays] = useState<DayInfo[]>([]);
+  const [showLinkModal, setShowLinkModal] = useState(false);
 
   useEffect(() => {
     if (!dayId) return;
@@ -39,8 +42,11 @@ export default function StockAllocationTab({ dayId, dayDate }: { dayId: string; 
       api.deliveryDays.getStock(dayId),
       api.products.list(),
       api.deliveryDays.list(),
-    ]).then(([allocData, prodsData, daysData]) => {
-      setAllocations(allocData as Allocation[]);
+    ]).then(([stockData, prodsData, daysData]) => {
+      const sd = stockData as any;
+      setAllocations((sd.allocations ?? sd) as Allocation[]);
+      setPoolSourceId(sd.poolSourceId ?? null);
+      setPoolDays(sd.poolDays ?? []);
       setProducts(
         (prodsData as any[])
           .filter((p: any) => p.active)
@@ -102,10 +108,20 @@ export default function StockAllocationTab({ dayId, dayDate }: { dayId: string; 
       {/* Header */}
       <div className="px-5 py-4 border-b flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h3 className="font-semibold">Stock Allocation for This Day</h3>
-          <p className="text-xs text-gray-400 mt-0.5">Set how much of each product is available for this delivery day</p>
+          <h3 className="font-semibold">Stock Allocation{poolDays.length > 1 ? ' (Shared Pool)' : ''}</h3>
+          <p className="text-xs text-gray-400 mt-0.5">
+            {poolDays.length > 1
+              ? 'Shared across linked delivery days — orders from any day draw from this pool'
+              : 'Set how much of each product is available for this delivery day'}
+          </p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowLinkModal(true)}
+            className="flex items-center gap-1.5 border border-blue-300 text-blue-600 px-3 py-2 rounded-lg text-sm font-medium hover:bg-blue-50"
+          >
+            <Link2 className="h-4 w-4" /> {poolDays.length > 1 ? 'Manage Pool' : 'Link Days'}
+          </button>
           <button
             onClick={() => setShowCopyModal(true)}
             className="flex items-center gap-1.5 border border-brand/30 text-brand px-3 py-2 rounded-lg text-sm font-medium hover:bg-brand/5"
@@ -121,6 +137,20 @@ export default function StockAllocationTab({ dayId, dayDate }: { dayId: string; 
           </button>
         </div>
       </div>
+
+      {/* Pool info banner */}
+      {poolDays.length > 1 && (
+        <div className="px-5 py-3 border-b bg-blue-50 flex items-center gap-3 text-sm">
+          <Link2 className="h-4 w-4 text-blue-500 flex-shrink-0" />
+          <span className="text-blue-700">
+            Shared with{' '}
+            {poolDays
+              .filter((d) => d.id !== dayId)
+              .map((d) => new Date(d.date).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' }))
+              .join(', ')}
+          </span>
+        </div>
+      )}
 
       {!loaded ? (
         <div className="p-10 text-center text-gray-400">Loading…</div>
@@ -232,10 +262,28 @@ export default function StockAllocationTab({ dayId, dayDate }: { dayId: string; 
           futureDays={futureDays}
           allocations={allocations}
           onCopied={async () => {
-            const fresh = await api.deliveryDays.getStock(dayId) as Allocation[];
-            setAllocations(fresh);
+            const fresh = await api.deliveryDays.getStock(dayId) as any;
+            setAllocations((fresh.allocations ?? fresh) as Allocation[]);
           }}
           onClose={() => setShowCopyModal(false)}
+        />
+      )}
+
+      {/* Link Days Modal */}
+      {showLinkModal && (
+        <LinkDaysModal
+          dayId={dayId}
+          dayDate={dayDate}
+          allDays={allDays}
+          poolDays={poolDays}
+          poolSourceId={poolSourceId}
+          onUpdated={async () => {
+            const fresh = await api.deliveryDays.getStock(dayId) as any;
+            setAllocations((fresh.allocations ?? fresh) as Allocation[]);
+            setPoolSourceId(fresh.poolSourceId ?? null);
+            setPoolDays(fresh.poolDays ?? []);
+          }}
+          onClose={() => setShowLinkModal(false)}
         />
       )}
     </div>
@@ -378,6 +426,132 @@ function CopyModal({
               </>
             )}
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LinkDaysModal({
+  dayId,
+  dayDate,
+  allDays,
+  poolDays,
+  poolSourceId,
+  onUpdated,
+  onClose,
+}: {
+  dayId: string;
+  dayDate?: number;
+  allDays: DayInfo[];
+  poolDays: DayInfo[];
+  poolSourceId: string | null;
+  onUpdated: () => Promise<void>;
+  onClose: () => void;
+}) {
+  // Show days within ±7 days of the current day as candidates
+  const now = dayDate ?? Date.now();
+  const nearbyDays = allDays
+    .filter((d) => d.id !== dayId && Math.abs(d.date - now) < 8 * 86_400_000)
+    .sort((a, b) => a.date - b.date);
+
+  const [selected, setSelected] = useState<Set<string>>(new Set(poolDays.filter((d) => d.id !== dayId).map((d) => d.id)));
+  const [saving, setSaving] = useState(false);
+
+  const isPoolSource = !poolSourceId; // this day owns the pool (or will become the source)
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      // This day becomes the source. Link all selected days to it, unlink removed ones.
+      const currentlyLinked = new Set(poolDays.filter((d) => d.id !== dayId).map((d) => d.id));
+      const toLink = [...selected].filter((id) => !currentlyLinked.has(id));
+      const toUnlink = [...currentlyLinked].filter((id) => !selected.has(id));
+
+      for (const id of toLink) {
+        await api.deliveryDays.setStockPool(id, dayId);
+      }
+      for (const id of toUnlink) {
+        await api.deliveryDays.setStockPool(id, null);
+      }
+
+      await onUpdated();
+      toast(selected.size > 0 ? `Stock pool updated — ${selected.size + 1} days linked` : 'Stock pool removed');
+      onClose();
+    } catch {
+      toast('Failed to update pool', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggle = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const fmtDate = (ts: number) =>
+    new Date(ts).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl w-full max-w-md shadow-xl max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-5 border-b">
+          <h2 className="font-semibold text-lg">Link Days — Shared Stock Pool</h2>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100">
+            <X className="h-5 w-5 text-gray-400" />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-4 overflow-y-auto">
+          <p className="text-sm text-gray-600">
+            Select delivery days that should share the same stock pool as this day. Orders from any linked day will draw from one shared allocation.
+          </p>
+
+          {!isPoolSource && poolSourceId && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-700">
+              This day is currently linked to another day's pool. Saving here will make this day the new pool source.
+            </div>
+          )}
+
+          {nearbyDays.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-4">No nearby delivery days to link.</p>
+          ) : (
+            <div className="border rounded-lg divide-y max-h-56 overflow-y-auto">
+              {nearbyDays.map((d) => (
+                <label key={d.id} className="flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="accent-blue-600 w-4 h-4"
+                    checked={selected.has(d.id)}
+                    onChange={() => toggle(d.id)}
+                    disabled={saving}
+                  />
+                  <span className="text-sm">{fmtDate(d.date)}</span>
+                </label>
+              ))}
+            </div>
+          )}
+
+          {selected.size > 0 && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-700">
+              <strong>{selected.size + 1} days</strong> will share one stock pool. Set your allocations on any linked day and they all see the same stock.
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-3 p-5 border-t">
+          <button onClick={onClose} className="flex-1 border py-2.5 rounded-lg text-sm font-medium hover:bg-gray-50">Cancel</button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex-1 bg-blue-600 text-white py-2.5 rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-blue-700 flex items-center justify-center gap-2"
+          >
+            {saving ? 'Saving…' : selected.size > 0 ? `Link ${selected.size + 1} Days` : 'Remove Pool'}
+          </button>
         </div>
       </div>
     </div>

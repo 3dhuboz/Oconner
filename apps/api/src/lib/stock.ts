@@ -1,5 +1,12 @@
 import { eq } from 'drizzle-orm';
-import { products, stockMovements } from '@butcher/db';
+import { products, stockMovements, deliveryDays } from '@butcher/db';
+
+/** Resolve the effective stock day ID — if this day belongs to a pool, return the pool source ID */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function getStockDayId(db: any, deliveryDayId: string): Promise<string> {
+  const [day] = await db.select({ stockPoolId: deliveryDays.stockPoolId }).from(deliveryDays).where(eq(deliveryDays.id, deliveryDayId)).limit(1);
+  return day?.stockPoolId ?? deliveryDayId;
+}
 
 interface OrderItem {
   productId: string;

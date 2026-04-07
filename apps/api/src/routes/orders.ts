@@ -4,7 +4,7 @@ import { eq, desc, inArray, gte } from 'drizzle-orm';
 import { orders, customers, deliveryDays, stops, stockMovements, notifications, auditLog, deliveryDayStock, promoCodes } from '@butcher/db';
 import type { Env, AuthUser } from '../types';
 import { sendEmail, buildOrderEmail, getSubject } from '../lib/email';
-import { deductStock } from '../lib/stock';
+import { deductStock, getStockDayId } from '../lib/stock';
 
 const app = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
 
@@ -104,9 +104,10 @@ app.post('/', async (c) => {
   const gst = 0; // no GST on goods
   const total = discountedSubtotal + deliveryFee;
 
-  // ── Day-specific stock validation ──
+  // ── Day-specific stock validation (pool-aware) ──
+  const stockDayId = await getStockDayId(db, body.deliveryDayId);
   const dayAllocations = await db.select().from(deliveryDayStock)
-    .where(eq(deliveryDayStock.deliveryDayId, body.deliveryDayId));
+    .where(eq(deliveryDayStock.deliveryDayId, stockDayId));
 
   if (dayAllocations.length > 0) {
     // Check each item against day allocation

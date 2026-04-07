@@ -98,6 +98,7 @@ export const deliveryDays = sqliteTable('delivery_days', {
   marketLocation: text('market_location'),           // e.g. "Clinton Markets, 123 Main St"
   runStartedAt: integer('run_started_at'),
   runCompletedAt: integer('run_completed_at'),
+  stockPoolId: text('stock_pool_id'),  // if set, this day shares stock allocations from another day
   createdAt: integer('created_at').notNull(),
 });
 
