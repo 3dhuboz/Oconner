@@ -43,7 +43,8 @@ const DEFAULTS = {
 
 async function getAboutConfig() {
   try {
-    const data = await api.config.get('about') as typeof DEFAULTS | null;
+    const raw = await api.config.get('about') as any;
+    const data = raw?.value ?? raw;
     return { ...DEFAULTS, ...(data ?? {}) };
   } catch {
     return DEFAULTS;
