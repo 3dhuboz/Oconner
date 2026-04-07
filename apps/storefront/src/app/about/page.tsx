@@ -114,7 +114,7 @@ export default async function AboutPage() {
                 {a.cattleTitle}
               </h2>
               <div className="space-y-4 text-gray-600 leading-relaxed">
-                {a.cattleBody.split('\n\n').map((p, i) => <p key={i}>{p}</p>)}
+                {a.cattleBody.split('\n\n').map((p: string, i: number) => <p key={i}>{p}</p>)}
               </div>
               <div className="grid grid-cols-3 gap-4 mt-8">
                 {[
@@ -171,7 +171,7 @@ export default async function AboutPage() {
                 {a.processTitle}
               </h2>
               <div className="space-y-4 text-gray-600 leading-relaxed">
-                {a.processBody.split('\n\n').map((p, i) => <p key={i}>{p}</p>)}
+                {a.processBody.split('\n\n').map((p: string, i: number) => <p key={i}>{p}</p>)}
               </div>
               <div className="flex gap-3 mt-8">
                 <Link href="/shop" className="bg-brand text-white px-6 py-3 rounded-xl font-semibold text-sm hover:bg-brand-mid transition-colors">
