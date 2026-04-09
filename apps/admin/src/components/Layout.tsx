@@ -48,7 +48,7 @@ const NAV_SECTIONS = [
     heading: 'Tools',
     items: [
       { to: '/reels', icon: Film, label: 'Reels' },
-      { to: '/social-hub', icon: Sparkles, label: 'Social AI' },
+      // { to: '/social-hub', icon: Sparkles, label: 'Social AI' }, // disabled for now
       { to: '/settings', icon: Settings, label: 'Settings' },
     ],
   },
