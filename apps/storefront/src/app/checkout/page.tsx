@@ -74,6 +74,10 @@ export default function CheckoutPage() {
     e.preventDefault();
     if (!selectedDayId) { setError('Please select a delivery day.'); return; }
     if (items.length === 0) { setError('Your cart is empty.'); return; }
+    if (!isPickup && form.line1 && !/^\d/.test(form.line1.trim())) {
+      setError('Please include a street number in your address (e.g. 12 Katrina Boulevard).');
+      return;
+    }
     setSubmitting(true);
     setError('');
 
