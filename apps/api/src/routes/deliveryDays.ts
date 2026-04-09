@@ -399,7 +399,10 @@ app.put('/:id/stock', async (c) => {
   const body = await c.req.json<{ allocations: { productId: string; productName: string; allocated: number }[] }>();
   const now = Date.now();
 
-  // Write to the pool source day (or self if not pooled)
+  // Preserve existing sold counts when updating allocations
+  const existing = await db.select().from(deliveryDayStock).where(eq(deliveryDayStock.deliveryDayId, stockDayId));
+  const soldMap = new Map(existing.map((e) => [e.productId, e.sold]));
+
   await db.delete(deliveryDayStock).where(eq(deliveryDayStock.deliveryDayId, stockDayId));
 
   if (body.allocations.length > 0) {
@@ -409,7 +412,7 @@ app.put('/:id/stock', async (c) => {
       productId: a.productId,
       productName: a.productName,
       allocated: a.allocated,
-      sold: 0,
+      sold: soldMap.get(a.productId) ?? 0,
       createdAt: now,
     }));
     await db.insert(deliveryDayStock).values(values);
