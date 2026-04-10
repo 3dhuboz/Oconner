@@ -75,7 +75,16 @@ export async function requireAuth(c: Context<{ Bindings: Env; Variables: { user:
     if (!clerk) return c.json({ error: 'Unauthorized' }, 401);
 
     const db = drizzle(c.env.DB);
-    const [dbUser] = await db.select().from(users).where(eq(users.id, clerk.clerkId)).limit(1);
+    let [dbUser] = await db.select().from(users).where(eq(users.id, clerk.clerkId)).limit(1);
+
+    // If not found by Clerk ID, try matching by email (handles Clerk ID changes)
+    if (!dbUser && clerk.email) {
+      [dbUser] = await db.select().from(users).where(eq(users.email, clerk.email)).limit(1);
+      // Update the stored Clerk ID if we found by email
+      if (dbUser) {
+        await db.update(users).set({ id: clerk.clerkId }).where(eq(users.email, clerk.email)).catch(() => {});
+      }
+    }
 
     if (!dbUser || !dbUser.active) return c.json({ error: 'Forbidden' }, 403);
 
