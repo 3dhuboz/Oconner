@@ -48,17 +48,28 @@ export default function CheckoutPage() {
   const grandTotal = discountedSubtotal + deliveryFee;
 
   useEffect(() => {
-    api.deliveryDays.list(true)
+    api.get<any[]>('/api/delivery-days?upcoming=true&withStock=true')
       .then((data) => {
         const tomorrow = Date.now() + 86_400_000;
-        const days = (data as DeliveryDay[]).filter(
-          (d) => d.active && d.date >= tomorrow && (d.orderCount ?? 0) < (d.maxOrders ?? 999),
-        );
+        const days = (data as (DeliveryDay & { stockAvailability?: { productId: string; remaining: number }[] })[]).filter((d) => {
+          if (!d.active || d.date < tomorrow) return false;
+          if ((d.orderCount ?? 0) >= (d.maxOrders ?? 999)) return false;
+          // If this day has stock allocations, check cart items are available
+          if (d.stockAvailability && d.stockAvailability.length > 0) {
+            const hasUnavailable = items.some((item) => {
+              const alloc = d.stockAvailability!.find((s) => s.productId === item.productId);
+              // If product has an allocation but no remaining stock, it's sold out for this day
+              return alloc !== undefined && alloc.remaining <= 0;
+            });
+            if (hasUnavailable) return false;
+          }
+          return true;
+        });
         setDeliveryDays(days);
         if (days.length > 0) setSelectedDayId(days[0].id!);
       })
       .catch(() => {});
-  }, []);
+  }, [items]);
 
   useEffect(() => {
     if (user) {
