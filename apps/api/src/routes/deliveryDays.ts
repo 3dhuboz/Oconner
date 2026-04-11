@@ -11,7 +11,7 @@ const app = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
 
 app.get('/', async (c) => {
   const db = drizzle(c.env.DB);
-  const { upcoming } = c.req.query();
+  const { upcoming, withStock } = c.req.query();
   let rows;
   if (upcoming === 'true') {
     const now = Date.now();
@@ -21,6 +21,22 @@ app.get('/', async (c) => {
   } else {
     rows = await db.select().from(deliveryDays).orderBy(asc(deliveryDays.date));
   }
+
+  // Attach stock availability per day if requested (for checkout filtering)
+  if (withStock === 'true') {
+    const allStock = await db.select().from(deliveryDayStock);
+    const result = rows.map((day) => {
+      const effectiveId = (day as any).stockPoolId ?? day.id;
+      const dayStock = allStock.filter((s) => s.deliveryDayId === effectiveId && s.allocated > 0);
+      const available = dayStock.map((s) => ({
+        productId: s.productId,
+        remaining: s.allocated - s.sold,
+      }));
+      return { ...day, stockAvailability: available };
+    });
+    return c.json(result);
+  }
+
   return c.json(rows);
 });
 
