@@ -14,7 +14,7 @@ import { useCart } from '@/lib/cart';
 const SQUARE_APP_ID = process.env.NEXT_PUBLIC_SQUARE_APP_ID ?? '';
 const SQUARE_LOCATION_ID = process.env.NEXT_PUBLIC_SQUARE_LOCATION_ID ?? '';
 
-const FREQUENCIES = [
+const ALL_FREQUENCIES = [
   { id: 'weekly', label: 'Weekly', sub: 'Every week', deliveries: 52 },
   { id: 'fortnightly', label: 'Fortnightly', sub: 'Every 2 weeks', deliveries: 26 },
   { id: 'monthly', label: 'Monthly', sub: 'Once a month', deliveries: 12 },
@@ -45,6 +45,7 @@ export default function SubscribePage() {
   const [form, setForm] = useState({ name: '', email: '', phone: '', address: '', suburb: '', postcode: '', notes: '' });
   const [saving, setSaving] = useState(false);
   const [payError, setPayError] = useState('');
+  const [enabledFrequencies, setEnabledFrequencies] = useState<string[]>(['fortnightly', 'monthly']);
   const [squareReady, setSquareReady] = useState(false);
   const cardRef = useRef<any>(null);
   const cardContainerRef = useRef<HTMLDivElement>(null);
@@ -91,8 +92,16 @@ export default function SubscribePage() {
       setBoxes(packs);
       if (packs.length > 0 && !selectedBox) setSelectedBox(packs[0].id!);
     }).catch(() => {});
+    api.config.get('subscriptionFrequencies').then((data) => {
+      const val = (data as any)?.value ?? data;
+      if (Array.isArray(val) && val.length > 0) {
+        setEnabledFrequencies(val);
+        if (!val.includes(frequency)) setFrequency(val[0]);
+      }
+    }).catch(() => {});
   }, []);
 
+  const FREQUENCIES = ALL_FREQUENCIES.filter((f) => enabledFrequencies.includes(f.id));
   const box = boxes.find((b) => b.id === selectedBox);
   const altBoxProduct = alternating && alternateBox ? boxes.find((b) => b.id === alternateBox) : null;
   const freq = FREQUENCIES.find((f) => f.id === frequency)!;
