@@ -67,7 +67,7 @@ async function createSubscriptionOrder(db: any, opts: {
   };
 
   // ── Try to auto-charge saved card ──
-  let paymentStatus = 'paid'; // default for backward compatibility
+  let paymentStatus = 'pending_payment'; // default — only set to 'paid' after successful charge
   let paymentIntentId = '';
   if (opts.env?.SQUARE_ACCESS_TOKEN && opts.env?.SQUARE_LOCATION_ID) {
     const [cust] = await db.select().from(customers).where(eq(customers.id, opts.customerId)).limit(1);
