@@ -18,6 +18,7 @@ export interface Env {
   FB_PAGE_ACCESS_TOKEN: string;
   SQUARE_ACCESS_TOKEN: string;
   SQUARE_LOCATION_ID: string;
+  SQUARE_WEBHOOK_SIGNATURE_KEY: string;
 }
 
 export type UserRole = 'admin' | 'staff' | 'driver';

@@ -15,6 +15,7 @@ import usersRouter from './routes/users';
 import driversRouter from './routes/drivers';
 import deliveryRunsRouter from './routes/deliveryRuns';
 import stripeRouter from './routes/stripe';
+import squareWebhookRouter from './routes/square-webhook';
 import stockRouter from './routes/stock';
 import subscriptionsRouter from './routes/subscriptions';
 import pushRouter from './routes/push';
@@ -394,6 +395,9 @@ app.get('/api/config/:key', async (c) => {
   if (!row) return c.json({ error: 'Not found' }, 404);
   return c.json({ key: row.key, value: JSON.parse(row.value) });
 });
+
+// ── Public: Square webhook (no auth — verified by signature) ──
+app.route('/api/square', squareWebhookRouter);
 
 app.use('/api/*', requireAuth);
 
