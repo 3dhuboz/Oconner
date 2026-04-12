@@ -414,7 +414,12 @@ export default function OrdersPage() {
                   : 'bg-blue-100 text-blue-700'
               }`}>{ORDER_STATUS_LABELS[order.status] ?? order.status}</span>
             </div>
-            <p className="font-medium text-sm">{order.customerName}</p>
+            <p className="font-medium text-sm">
+              {order.customerName}
+              {((order as any).internalNotes ?? '').includes('[Subscription]') && (
+                <span className="ml-1.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700">Sub</span>
+              )}
+            </p>
             <p className="text-xs text-gray-400">{order.customerEmail}</p>
             <div className="flex items-center justify-between mt-2">
               <span className="text-xs text-gray-500">{order.items.length} item{order.items.length !== 1 ? 's' : ''}</span>
@@ -453,7 +458,12 @@ export default function OrdersPage() {
                   )}
                 </td>
                 <td className="px-4 py-3">
-                  <p className="font-medium">{order.customerName}</p>
+                  <p className="font-medium">
+                    {order.customerName}
+                    {((order as any).internalNotes ?? '').includes('[Subscription]') && (
+                      <span className="ml-1.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700">Sub</span>
+                    )}
+                  </p>
                   <p className="text-xs text-gray-400">{order.customerEmail}</p>
                 </td>
                 <td className="px-4 py-3 text-gray-600">{order.items.length}</td>
@@ -711,7 +721,7 @@ export default function OrdersPage() {
                       <option value="">Select product…</option>
                       {products.map((p) => (
                         <option key={p.id} value={p.id}>
-                          {p.name} — {p.isMeatPack ? formatCurrency(p.fixedPrice ?? 0) : `${formatCurrency(p.pricePerKg ?? 0)}/kg`}
+                          {p.isMeatPack && p.category === 'packs' ? '📦 ' : ''}{p.name} — {p.isMeatPack ? formatCurrency(p.fixedPrice ?? 0) : `${formatCurrency(p.pricePerKg ?? 0)}/kg`}
                         </option>
                       ))}
                     </select>
@@ -801,6 +811,13 @@ export default function OrdersPage() {
                     <div>
                       <span className="text-sm font-medium text-gray-800">📧 Send Square Invoice to customer</span>
                       <p className="text-xs text-gray-500">Customer will receive an email with a payment link</p>
+                    </div>
+                  </label>
+                  <label className="flex items-center gap-2.5 mb-3 p-3 rounded-lg border border-purple-200 bg-purple-50 cursor-pointer hover:bg-purple-100 transition-colors">
+                    <input type="checkbox" className="accent-purple-600 w-4 h-4" checked={form.internalNotes.includes('[Subscription]')} onChange={(e) => setForm((f) => ({ ...f, internalNotes: e.target.checked ? `[Subscription] ${f.internalNotes}`.trim() : f.internalNotes.replace('[Subscription] ', '').replace('[Subscription]', '') }))} />
+                    <div>
+                      <span className="text-sm font-medium text-gray-800">🔄 Subscription delivery</span>
+                      <p className="text-xs text-gray-500">Tags this as a recurring subscription box order</p>
                     </div>
                   </label>
                   <div className="mb-3">
