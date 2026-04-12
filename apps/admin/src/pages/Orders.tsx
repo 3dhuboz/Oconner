@@ -175,6 +175,27 @@ export default function OrdersPage() {
         paymentStatus: form.paymentStatus,
         internalNotes: form.internalNotes || undefined,
       }) as { id: string };
+      // Create subscription record if checkbox is checked
+      if (form.internalNotes.includes('[Subscription]') && items.length > 0) {
+        const boxItem = items.find((i) => i.fixedPrice);
+        const freq = form.internalNotes.includes('[monthly]') ? 'monthly' : form.internalNotes.includes('[weekly]') ? 'weekly' : 'fortnightly';
+        if (boxItem) {
+          try {
+            await api.post('/api/subscriptions', {
+              email: form.customerEmail,
+              boxId: boxItem.productId,
+              boxName: boxItem.productName,
+              frequency: freq,
+              customerName: form.customerName,
+              customerPhone: form.customerPhone,
+              address: form.address.line1,
+              suburb: form.address.suburb,
+              postcode: form.address.postcode,
+            });
+          } catch {}
+        }
+      }
+
       // Send Square invoice if requested
       if (form.sendInvoice && result.id) {
         try {
@@ -813,13 +834,29 @@ export default function OrdersPage() {
                       <p className="text-xs text-gray-500">Customer will receive an email with a payment link</p>
                     </div>
                   </label>
-                  <label className="flex items-center gap-2.5 mb-3 p-3 rounded-lg border border-purple-200 bg-purple-50 cursor-pointer hover:bg-purple-100 transition-colors">
-                    <input type="checkbox" className="accent-purple-600 w-4 h-4" checked={form.internalNotes.includes('[Subscription]')} onChange={(e) => setForm((f) => ({ ...f, internalNotes: e.target.checked ? `[Subscription] ${f.internalNotes}`.trim() : f.internalNotes.replace('[Subscription] ', '').replace('[Subscription]', '') }))} />
-                    <div>
-                      <span className="text-sm font-medium text-gray-800">🔄 Subscription delivery</span>
-                      <p className="text-xs text-gray-500">Tags this as a recurring subscription box order</p>
-                    </div>
-                  </label>
+                  <div className="mb-3 p-3 rounded-lg border border-purple-200 bg-purple-50">
+                    <label className="flex items-center gap-2.5 cursor-pointer hover:bg-purple-100 transition-colors rounded -m-1 p-1">
+                      <input type="checkbox" className="accent-purple-600 w-4 h-4" checked={form.internalNotes.includes('[Subscription]')} onChange={(e) => setForm((f) => ({ ...f, internalNotes: e.target.checked ? `[Subscription] ${f.internalNotes}`.trim() : f.internalNotes.replace('[Subscription] ', '').replace('[Subscription]', '') }))} />
+                      <div>
+                        <span className="text-sm font-medium text-gray-800">🔄 Subscription delivery</span>
+                        <p className="text-xs text-gray-500">Creates a recurring subscription for this customer</p>
+                      </div>
+                    </label>
+                    {form.internalNotes.includes('[Subscription]') && (
+                      <div className="mt-2 pt-2 border-t border-purple-200">
+                        <label className="text-xs text-purple-700 font-medium mb-1 block">Frequency</label>
+                        <select
+                          value={form.internalNotes.includes('[monthly]') ? 'monthly' : form.internalNotes.includes('[weekly]') ? 'weekly' : 'fortnightly'}
+                          onChange={(e) => setForm((f) => ({ ...f, internalNotes: f.internalNotes.replace(/\[(weekly|fortnightly|monthly)\]/g, '').trim() + ` [${e.target.value}]` }))}
+                          className="w-full border border-purple-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 bg-white"
+                        >
+                          <option value="weekly">Weekly</option>
+                          <option value="fortnightly">Fortnightly</option>
+                          <option value="monthly">Monthly</option>
+                        </select>
+                      </div>
+                    )}
+                  </div>
                   <div className="mb-3">
                     <label className="text-xs text-gray-500 mb-1 block">Internal Notes</label>
                     <textarea value={form.internalNotes} onChange={(e) => setForm((f) => ({ ...f, internalNotes: e.target.value }))} rows={2} placeholder="Notes visible to staff only…" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand resize-none" />
