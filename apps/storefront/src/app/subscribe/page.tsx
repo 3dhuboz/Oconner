@@ -464,8 +464,8 @@ export default function SubscribePage() {
                 />
               </div>
 
-              {/* Square card input */}
-              {SQUARE_APP_ID && (
+              {/* Square card input — disabled until App ID is verified */}
+              {SQUARE_APP_ID && squareReady && (
                 <div>
                   <label className="text-xs font-semibold text-gray-500 mb-2 block flex items-center gap-1.5">
                     <CreditCard className="h-3.5 w-3.5" /> Payment Details
@@ -489,7 +489,7 @@ export default function SubscribePage() {
 
               <button
                 type="submit"
-                disabled={saving || (SQUARE_APP_ID ? !squareReady : false)}
+                disabled={saving}
                 className="w-full bg-brand text-white py-4 rounded-xl font-black text-lg disabled:opacity-50 hover:bg-brand-mid transition-colors"
               >
                 {saving ? 'Processing payment…' : `Subscribe & Pay ${box ? formatCurrency(box.fixedPrice ?? 0) : ''}`}
