@@ -77,20 +77,35 @@ export async function requireAuth(c: Context<{ Bindings: Env; Variables: { user:
     const db = drizzle(c.env.DB);
     let [dbUser] = await db.select().from(users).where(eq(users.id, clerk.clerkId)).limit(1);
 
-    // If not found by Clerk ID, try matching by email (handles Clerk ID changes)
+    // If not found by Clerk ID, try matching by email
     if (!dbUser && clerk.email) {
       [dbUser] = await db.select().from(users).where(eq(users.email, clerk.email)).limit(1);
-      // Update the stored Clerk ID if we found by email
-      if (dbUser) {
-        await db.update(users).set({ id: clerk.clerkId }).where(eq(users.email, clerk.email)).catch(() => {});
-      }
+    }
+
+    // If still not found, the Clerk ID may have changed and JWT has no email.
+    // Look up email from Clerk Backend API and match against our users table.
+    if (!dbUser && c.env.CLERK_SECRET_KEY) {
+      try {
+        const clerkRes = await fetch(`https://api.clerk.com/v1/users/${clerk.clerkId}`, {
+          headers: { Authorization: `Bearer ${c.env.CLERK_SECRET_KEY}` },
+        });
+        if (clerkRes.ok) {
+          const clerkUser = await clerkRes.json() as { email_addresses?: { email_address: string }[] };
+          const emails = (clerkUser.email_addresses ?? []).map((e) => e.email_address);
+          for (const email of emails) {
+            [dbUser] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+            if (dbUser) break;
+          }
+        }
+      } catch {}
     }
 
     if (!dbUser || !dbUser.active) return c.json({ error: 'Forbidden' }, 403);
 
     c.set('user', { id: dbUser.id, email: dbUser.email, role: dbUser.role as AuthUser['role'] });
     await next();
-  } catch {
+  } catch (e) {
+    console.error('[auth] requireAuth error:', e);
     return c.json({ error: 'Unauthorized' }, 401);
   }
 }
