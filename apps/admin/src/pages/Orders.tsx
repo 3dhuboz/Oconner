@@ -850,7 +850,7 @@ export default function OrdersPage() {
                           onChange={(e) => setForm((f) => ({ ...f, internalNotes: f.internalNotes.replace(/\[(weekly|fortnightly|monthly)\]/g, '').trim() + ` [${e.target.value}]` }))}
                           className="w-full border border-purple-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 bg-white"
                         >
-                          <option value="weekly">Weekly</option>
+                          {/* <option value="weekly">Weekly</option> — re-enable when ready */}
                           <option value="fortnightly">Fortnightly</option>
                           <option value="monthly">Monthly</option>
                         </select>
