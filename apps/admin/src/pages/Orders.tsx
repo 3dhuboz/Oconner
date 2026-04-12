@@ -665,6 +665,28 @@ export default function OrdersPage() {
                       <input type="number" value={editForm.deliveryFee} onChange={(e) => setEditForm((f) => ({ ...f, deliveryFee: parseFloat(e.target.value) || 0 }))} step="0.01" min="0" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
                     </div>
                   </div>
+                  <div className="mb-3 p-3 rounded-lg border border-purple-200 bg-purple-50">
+                    <label className="flex items-center gap-2.5 cursor-pointer hover:bg-purple-100 transition-colors rounded -m-1 p-1">
+                      <input type="checkbox" className="accent-purple-600 w-4 h-4" checked={editForm.internalNotes.includes('[Subscription]')} onChange={(e) => setEditForm((f) => ({ ...f, internalNotes: e.target.checked ? `[Subscription] ${f.internalNotes}`.trim() : f.internalNotes.replace('[Subscription] ', '').replace('[Subscription]', '').replace(/\[(weekly|fortnightly|monthly)\]/g, '').trim() }))} />
+                      <div>
+                        <span className="text-sm font-medium text-gray-800">🔄 Subscription delivery</span>
+                        <p className="text-xs text-gray-500">Mark as a recurring subscription box order</p>
+                      </div>
+                    </label>
+                    {editForm.internalNotes.includes('[Subscription]') && (
+                      <div className="mt-2 pt-2 border-t border-purple-200">
+                        <label className="text-xs text-purple-700 font-medium mb-1 block">Frequency</label>
+                        <select
+                          value={editForm.internalNotes.includes('[monthly]') ? 'monthly' : 'fortnightly'}
+                          onChange={(e) => setEditForm((f) => ({ ...f, internalNotes: f.internalNotes.replace(/\[(weekly|fortnightly|monthly)\]/g, '').trim() + ` [${e.target.value}]` }))}
+                          className="w-full border border-purple-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-400 bg-white"
+                        >
+                          <option value="fortnightly">Fortnightly</option>
+                          <option value="monthly">Monthly</option>
+                        </select>
+                      </div>
+                    )}
+                  </div>
                   <div className="mb-3">
                     <label className="text-xs text-gray-500 mb-1 block">Internal Notes</label>
                     <textarea value={editForm.internalNotes} onChange={(e) => setEditForm((f) => ({ ...f, internalNotes: e.target.value }))} rows={2} placeholder="Notes visible to staff only…" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand resize-none" />
