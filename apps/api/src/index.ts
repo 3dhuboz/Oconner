@@ -173,6 +173,25 @@ app.post('/api/orders', async (c) => {
       });
     }
   }
+  // ── Server-side price verification: recalculate from product DB ──
+  const verifiedItems = [];
+  for (const item of (body.items as any[])) {
+    const [prod] = await db.select().from(productsTable).where(eq(productsTable.id, item.productId)).limit(1);
+    if (prod) {
+      const qty = item.quantity ?? 1;
+      const correctLineTotal = prod.isMeatPack
+        ? (prod.fixedPrice ?? 0) * qty
+        : Math.round((prod.pricePerKg ?? 0) * (item.weight ? item.weight / 1000 : (item.weightKg ?? 1)));
+      verifiedItems.push({ ...item, fixedPrice: prod.fixedPrice, pricePerKg: prod.pricePerKg, lineTotal: correctLineTotal });
+    } else {
+      verifiedItems.push(item); // keep as-is if product not found
+    }
+  }
+  body.items = verifiedItems;
+  const verifiedSubtotal = verifiedItems.reduce((s: number, i: any) => s + (i.lineTotal ?? 0), 0);
+  body.subtotal = verifiedSubtotal;
+  body.total = verifiedSubtotal + (body.deliveryFee ?? 0);
+
   // ── Pool-aware stock validation ──
   const { deliveryDayStock } = await import('@butcher/db');
   const stockDayId = await getStockDayId(db, body.deliveryDayId);
