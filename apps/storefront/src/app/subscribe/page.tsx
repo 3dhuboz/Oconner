@@ -53,8 +53,18 @@ export default function SubscribePage() {
   // Initialize Square card form when step changes to 'details'
   const initSquareCard = useCallback(async () => {
     if (!SQUARE_APP_ID || !SQUARE_LOCATION_ID || cardRef.current) return;
+    // Wait for Square SDK to be available (script may still be loading)
+    const waitForSquare = (): Promise<any> => new Promise((resolve) => {
+      if ((window as any).Square) return resolve((window as any).Square);
+      const check = setInterval(() => {
+        if ((window as any).Square) { clearInterval(check); resolve((window as any).Square); }
+      }, 200);
+      setTimeout(() => { clearInterval(check); resolve(null); }, 10000); // 10s timeout
+    });
     try {
-      const payments = (window as any).Square?.payments(SQUARE_APP_ID, SQUARE_LOCATION_ID);
+      const Square = await waitForSquare();
+      if (!Square) { console.error('Square SDK failed to load'); return; }
+      const payments = Square.payments(SQUARE_APP_ID, SQUARE_LOCATION_ID);
       if (!payments) return;
       const card = await payments.card();
       if (cardContainerRef.current) {
@@ -69,9 +79,7 @@ export default function SubscribePage() {
 
   useEffect(() => {
     if (step === 'details' && SQUARE_APP_ID) {
-      // Small delay to ensure DOM is ready
-      const t = setTimeout(initSquareCard, 300);
-      return () => clearTimeout(t);
+      initSquareCard();
     }
   }, [step, initSquareCard]);
 
@@ -477,7 +485,7 @@ export default function SubscribePage() {
               >
                 {saving ? 'Processing payment…' : `Subscribe & Pay ${box ? formatCurrency(box.fixedPrice ?? 0) : ''}`}
               </button>
-              <Script src="https://web.squareup.com/v1/square.js" strategy="lazyOnload" />
+              <Script src="https://web.squareup.com/v1/square.js" strategy="afterInteractive" />
             </form>
           )}
         </div>
