@@ -443,7 +443,16 @@ export default function OrdersPage() {
             </p>
             <p className="text-xs text-gray-400">{order.customerEmail}</p>
             <div className="flex items-center justify-between mt-2">
-              <span className="text-xs text-gray-500">{order.items.length} item{order.items.length !== 1 ? 's' : ''}</span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-500">{order.items.length} item{order.items.length !== 1 ? 's' : ''}</span>
+                <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+                  (order as any).paymentStatus === 'paid' ? 'bg-green-100 text-green-700'
+                    : (order as any).paymentStatus === 'invoice_sent' ? 'bg-amber-100 text-amber-700'
+                    : 'bg-gray-100 text-gray-600'
+                }`}>
+                  {(order as any).paymentStatus === 'paid' ? '✓ Paid' : (order as any).paymentStatus === 'invoice_sent' ? 'Invoiced' : 'Unpaid'}
+                </span>
+              </div>
               <span className="font-semibold text-sm">{formatCurrency(order.total)}</span>
             </div>
           </Link>
@@ -459,15 +468,16 @@ export default function OrdersPage() {
               <th className="px-4 py-3 text-left">Customer</th>
               <th className="px-4 py-3 text-left">Items</th>
               <th className="px-4 py-3 text-right">Total</th>
+              <th className="px-4 py-3 text-left">Payment</th>
               <th className="px-4 py-3 text-left">Status</th>
               <th className="px-4 py-3 text-left">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y">
             {loading ? (
-              <tr><td colSpan={6} className="text-center py-10 text-gray-400">Loading…</td></tr>
+              <tr><td colSpan={7} className="text-center py-10 text-gray-400">Loading…</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={6} className="text-center py-10 text-gray-400">No orders found</td></tr>
+              <tr><td colSpan={7} className="text-center py-10 text-gray-400">No orders found</td></tr>
             ) : filtered.map((order) => (
               <tr key={order.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3">
@@ -489,6 +499,20 @@ export default function OrdersPage() {
                 </td>
                 <td className="px-4 py-3 text-gray-600">{order.items.length}</td>
                 <td className="px-4 py-3 text-right font-medium">{formatCurrency(order.total)}</td>
+                <td className="px-4 py-3">
+                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                    (order as any).paymentStatus === 'paid' ? 'bg-green-100 text-green-700'
+                      : (order as any).paymentStatus === 'payment_failed' ? 'bg-red-100 text-red-700'
+                      : (order as any).paymentStatus === 'invoice_sent' ? 'bg-amber-100 text-amber-700'
+                      : 'bg-gray-100 text-gray-600'
+                  }`}>
+                    {(order as any).paymentStatus === 'paid' ? '✓ Paid'
+                      : (order as any).paymentStatus === 'payment_failed' ? '✗ Failed'
+                      : (order as any).paymentStatus === 'invoice_sent' ? '📧 Invoiced'
+                      : (order as any).paymentStatus === 'awaiting_payment' ? '⏳ Awaiting'
+                      : '⏳ Unpaid'}
+                  </span>
+                </td>
                 <td className="px-4 py-3">
                   <select
                     value={order.status}
