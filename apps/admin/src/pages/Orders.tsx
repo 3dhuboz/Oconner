@@ -218,10 +218,12 @@ export default function OrdersPage() {
   };
 
   const filtered = orders.filter((o) => {
-    // Hide unpaid/pending orders by default — only show when 'all' or 'pending_payment' is selected
+    // Hide orders that were never paid (abandoned checkouts) — keep invoiced, paid, and manually confirmed
     if (statusFilter === 'all' || !statusFilter) {
       const ps = (o as any).paymentStatus ?? '';
-      if (ps === 'pending_payment' || ps === 'awaiting_payment' || ps === 'payment_failed') return false;
+      const isUnpaid = ps === 'pending_payment' || ps === 'awaiting_payment';
+      const isManuallyConfirmed = o.status === 'confirmed' || o.status === 'preparing' || o.status === 'packed' || o.status === 'out_for_delivery' || o.status === 'delivered';
+      if (isUnpaid && !isManuallyConfirmed) return false;
     }
     if (search && !(
       o.customerName?.toLowerCase().includes(search.toLowerCase()) ||
