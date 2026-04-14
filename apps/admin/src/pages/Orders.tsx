@@ -237,7 +237,13 @@ export default function OrdersPage() {
   const handleStatusChange = async (orderId: string, status: OrderStatus) => {
     try {
       await api.orders.updateStatus(orderId, status);
-      setOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, status } : o));
+      // When confirming an order, also mark as paid
+      const paymentUpdate = (status === 'confirmed' || status === 'preparing' || status === 'packed' || status === 'out_for_delivery' || status === 'delivered')
+        ? 'paid' : undefined;
+      if (paymentUpdate) {
+        await api.post(`/api/orders/${orderId}/mark-paid`, {}).catch(() => {});
+      }
+      setOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, status, ...(paymentUpdate ? { paymentStatus: paymentUpdate } : {}) } as any : o));
       toast(`Order status updated to ${ORDER_STATUS_LABELS[status] ?? status}`);
     } catch {
       toast('Failed to update order status', 'error');
