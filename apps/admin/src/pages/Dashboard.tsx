@@ -30,14 +30,16 @@ export default function DashboardPage() {
         const weekStart = new Date(todayStart); weekStart.setDate(weekStart.getDate() - weekStart.getDay());
         const weekMs = weekStart.getTime();
 
-        const todayFiltered = allOrders.filter((o) => o.createdAt >= todayMs);
-        const weekFiltered = allOrders.filter((o) => o.createdAt >= weekMs);
-        const pending = allOrders.filter((o) => ['confirmed', 'preparing', 'packed'].includes(o.status));
-        const outForDelivery = allOrders.filter((o) => o.status === 'out_for_delivery');
+        // Only count paid/confirmed orders in stats (exclude unpaid/pending)
+        const paidOrders = allOrders.filter((o) => (o as any).paymentStatus === 'paid' || o.status === 'delivered');
+        const todayFiltered = paidOrders.filter((o) => o.createdAt >= todayMs);
+        const weekFiltered = paidOrders.filter((o) => o.createdAt >= weekMs);
+        const pending = paidOrders.filter((o) => ['confirmed', 'preparing', 'packed'].includes(o.status));
+        const outForDelivery = paidOrders.filter((o) => o.status === 'out_for_delivery');
 
         setStats({
-          totalOrders: allOrders.length,
-          totalRevenue: allOrders.filter(o => o.paymentStatus === 'paid' || o.status === 'delivered').reduce((s, o) => s + (o.total ?? 0), 0),
+          totalOrders: paidOrders.length,
+          totalRevenue: paidOrders.reduce((s, o) => s + (o.total ?? 0), 0),
           pendingOrders: pending.length,
           outForDelivery: outForDelivery.length,
           todayOrders: todayFiltered.length,
@@ -45,7 +47,7 @@ export default function DashboardPage() {
           thisWeekOrders: weekFiltered.length,
           thisWeekRevenue: weekFiltered.reduce((s, o) => s + (o.total ?? 0), 0),
         });
-        setRecentOrders(allOrders.slice(0, 10));
+        setRecentOrders(paidOrders.slice(0, 10));
       } catch (e) {
         console.error('Dashboard load failed:', e);
       } finally {
