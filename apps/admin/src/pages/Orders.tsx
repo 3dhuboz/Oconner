@@ -218,6 +218,11 @@ export default function OrdersPage() {
   };
 
   const filtered = orders.filter((o) => {
+    // Hide unpaid/pending orders by default — only show when 'all' or 'pending_payment' is selected
+    if (statusFilter === 'all' || !statusFilter) {
+      const ps = (o as any).paymentStatus ?? '';
+      if (ps === 'pending_payment' || ps === 'awaiting_payment' || ps === 'payment_failed') return false;
+    }
     if (search && !(
       o.customerName?.toLowerCase().includes(search.toLowerCase()) ||
       o.customerEmail?.toLowerCase().includes(search.toLowerCase()) ||
@@ -405,7 +410,8 @@ export default function OrdersPage() {
           value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as OrderStatus | 'all')}
           className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
         >
-          <option value="all">All Statuses</option>
+          <option value="all">Paid Orders</option>
+          <option value="pending_payment">Unpaid / Pending</option>
           {STATUSES.map((s) => <option key={s} value={s}>{ORDER_STATUS_LABELS[s] ?? s}</option>)}
         </select>
         <select
