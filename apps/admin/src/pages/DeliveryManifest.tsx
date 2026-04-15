@@ -11,7 +11,7 @@ import {
   Eye, MapPin, Timer, TrendingUp, ChevronUp, ChevronDown, Info, Send, Layers, BarChart3, Sparkles, X, ClipboardCopy, Download, Plus,
 } from 'lucide-react';
 
-const DRIVER_URL = import.meta.env.VITE_DRIVER_URL ?? 'https://butcher-driver.pages.dev';
+const DRIVER_URL = import.meta.env.VITE_DRIVER_URL ?? 'https://driver.oconnoragriculture.com.au';
 
 function parseTimeWindow(note?: string | null): { earliest?: number; latest?: number } {
   if (!note) return {};

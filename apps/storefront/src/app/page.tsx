@@ -17,7 +17,7 @@ import { useScrollReveal } from '@/hooks/useScrollReveal';
 import { useCountUp } from '@/hooks/useCountUp';
 
 const ADMIN_URL = process.env.NEXT_PUBLIC_ADMIN_URL ?? 'https://butcher-admin.pages.dev';
-const DRIVER_URL = process.env.NEXT_PUBLIC_DRIVER_URL ?? 'https://butcher-driver.pages.dev';
+const DRIVER_URL = process.env.NEXT_PUBLIC_DRIVER_URL ?? 'https://driver.oconnoragriculture.com.au';
 
 interface Feature { icon: string; title: string; description: string }
 interface Config {
