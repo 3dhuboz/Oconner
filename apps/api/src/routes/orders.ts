@@ -275,6 +275,8 @@ app.patch('/:id', async (c) => {
     const [newDay] = await db.select().from(deliveryDays).where(eq(deliveryDays.id, body.deliveryDayId)).limit(1);
     if (newDay) await db.update(deliveryDays).set({ orderCount: newDay.orderCount + 1 }).where(eq(deliveryDays.id, newDay.id));
     patch.deliveryDayId = body.deliveryDayId;
+    // Move any existing stops to the new delivery day
+    await db.update(stops).set({ deliveryDayId: body.deliveryDayId }).where(eq(stops.orderId, orderId));
   }
 
   // Update customer totalSpent if total changed
