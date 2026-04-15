@@ -8,7 +8,7 @@ import StockAllocationTab from '../components/StockAllocationTab';
 import {
   ArrowLeft, Route, Printer, Bell, Package, FileText,
   CheckCircle, Clock, Navigation, AlertTriangle, User, Camera,
-  Eye, MapPin, Timer, TrendingUp, ChevronUp, ChevronDown, Info, Send, Layers, BarChart3, Sparkles, X, ClipboardCopy, Download,
+  Eye, MapPin, Timer, TrendingUp, ChevronUp, ChevronDown, Info, Send, Layers, BarChart3, Sparkles, X, ClipboardCopy, Download, Plus,
 } from 'lucide-react';
 
 const DRIVER_URL = import.meta.env.VITE_DRIVER_URL ?? 'https://butcher-driver.pages.dev';
@@ -167,6 +167,9 @@ export default function DeliveryManifestPage() {
   const [saving, setSaving] = useState(false);
   const [lastPushed, setLastPushed] = useState<Date | null>(null);
   const [showExplainer, setShowExplainer] = useState(false);
+  const [showAddStop, setShowAddStop] = useState(false);
+  const [manualStop, setManualStop] = useState({ name: '', address: '', note: '' });
+  const [addingStop, setAddingStop] = useState(false);
 
   useEffect(() => {
     if (!dayId) return;
@@ -588,7 +591,15 @@ export default function DeliveryManifestPage() {
       <div className="bg-white rounded-xl border overflow-hidden">
         <div className="px-5 py-4 border-b bg-gray-50 flex items-center justify-between">
           <h2 className="font-semibold">Stops ({total})</h2>
-          <p className="text-sm text-gray-500">{day?.notes}</p>
+          <div className="flex items-center gap-3">
+            <p className="text-sm text-gray-500">{day?.notes}</p>
+            <button
+              onClick={() => setShowAddStop(true)}
+              className="flex items-center gap-1.5 text-xs font-medium text-brand border border-brand/30 px-2.5 py-1 rounded-lg hover:bg-brand/5"
+            >
+              <Plus className="h-3.5 w-3.5" /> Add Stop
+            </button>
+          </div>
         </div>
         {stops.length === 0 ? (
           <div className="text-center py-12 text-gray-400">
@@ -649,6 +660,66 @@ export default function DeliveryManifestPage() {
           </div>
         )}
       </div>
+
+      {/* ── Add Manual Stop Modal ── */}
+      {showAddStop && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowAddStop(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-lg">Add Manual Stop</h2>
+              <button onClick={() => setShowAddStop(false)}><X className="h-5 w-5 text-gray-400" /></button>
+            </div>
+            <p className="text-xs text-gray-400 mb-4">Add a custom stop to this delivery run — not linked to an order.</p>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Name / Label *</label>
+                <input value={manualStop.name} onChange={(e) => setManualStop((s) => ({ ...s, name: e.target.value }))} placeholder="e.g. Drop off at Steve's" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Address</label>
+                <input value={manualStop.address} onChange={(e) => setManualStop((s) => ({ ...s, address: e.target.value }))} placeholder="e.g. 123 Main St, Gladstone" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Notes</label>
+                <textarea value={manualStop.note} onChange={(e) => setManualStop((s) => ({ ...s, note: e.target.value }))} rows={2} placeholder="Any extra info…" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand resize-none" />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-5">
+              <button onClick={() => setShowAddStop(false)} className="flex-1 border py-2.5 rounded-lg text-sm font-medium hover:bg-gray-50">Cancel</button>
+              <button
+                disabled={!manualStop.name.trim() || addingStop}
+                onClick={async () => {
+                  if (!dayId || !manualStop.name.trim()) return;
+                  setAddingStop(true);
+                  try {
+                    await api.post('/api/stops', {
+                      deliveryDayId: dayId,
+                      customerName: manualStop.name,
+                      address: JSON.stringify({ line1: manualStop.address, suburb: '', state: 'QLD', postcode: '' }),
+                      customerNote: manualStop.note,
+                      items: JSON.stringify([]),
+                      sequence: stops.length + 1,
+                      status: 'pending',
+                    });
+                    const updated = await api.stops.list(dayId) as Stop[];
+                    setStops(updated);
+                    setShowAddStop(false);
+                    setManualStop({ name: '', address: '', note: '' });
+                    toast('Manual stop added');
+                  } catch {
+                    toast('Failed to add stop', 'error');
+                  } finally {
+                    setAddingStop(false);
+                  }
+                }}
+                className="flex-1 bg-brand text-white py-2.5 rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-brand-mid"
+              >
+                {addingStop ? 'Adding…' : 'Add Stop'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       </>)}
 
       {/* ── Social Post Modal ── */}
