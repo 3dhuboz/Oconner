@@ -121,8 +121,8 @@ function departureTimestamp(day: DeliveryDayData | null): number {
 }
 
 // O'Connor Agriculture depot — Rockhampton, QLD
-const DEPOT_LAT = -23.3791;
-const DEPOT_LNG = 150.5100;
+const DEPOT_LAT = -24.2119; // Boynedale, QLD
+const DEPOT_LNG = 151.2833;
 
 /** Haversine distance in km between two lat/lng points */
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
