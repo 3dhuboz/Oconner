@@ -413,7 +413,7 @@ app.post('/:id/invoice', async (c) => {
       }
     }
 
-    // Step 2: Create a Square Order with line items
+    // Step 2: Create a Square Order with line items + delivery fee
     const squareLineItems = items.map((i) => {
       const qty = i.quantity ?? 1;
       return {
@@ -425,6 +425,15 @@ app.post('/:id/invoice', async (c) => {
         },
       };
     });
+
+    // Include delivery fee as a line item if > 0
+    if (order.deliveryFee > 0) {
+      squareLineItems.push({
+        name: 'Delivery Fee',
+        quantity: '1',
+        base_price_money: { amount: order.deliveryFee, currency: 'AUD' },
+      });
+    }
 
     const orderResult = await squareFetch('/orders', {
       idempotency_key: crypto.randomUUID(),
