@@ -58,11 +58,28 @@ function windowStatus(etaMs: number, w: { earliest?: number; latest?: number }):
 function optimizeWithConstraints(
   stops: Stop[], departureMs: number,
 ): { stops: Stop[]; reasons: Record<string, string> } {
-  const AVG = 8 * 60 * 1000;
+  const STOP_TIME_MS = 5 * 60 * 1000; // 5 min per stop for unloading
+  const AVG_SPEED_KMH = 80; // average regional driving speed
+  const ROAD_FACTOR = 1.3; // roads are ~30% longer than straight line
+
   let sorted = furthestToClosestRoute([...stops]);
   const geoPos: Record<string, number> = {};
   sorted.forEach((s, i) => { geoPos[s.id!] = i; });
-  let withEta = sorted.map((s, i) => ({ ...s, estimatedArrival: departureMs + i * AVG }));
+
+  // Calculate cumulative drive time from depot through each stop
+  const calcEtas = (list: Stop[]) => {
+    let cumulativeMs = 0;
+    return list.map((s, i) => {
+      const prevLat = i === 0 ? DEPOT_LAT : (list[i - 1].lat ?? DEPOT_LAT);
+      const prevLng = i === 0 ? DEPOT_LNG : (list[i - 1].lng ?? DEPOT_LNG);
+      const km = (s.lat && s.lng) ? haversineKm(prevLat, prevLng, s.lat, s.lng) * ROAD_FACTOR : 20;
+      const driveMs = (km / AVG_SPEED_KMH) * 60 * 60 * 1000;
+      cumulativeMs += driveMs + STOP_TIME_MS;
+      return { ...s, estimatedArrival: departureMs + cumulativeMs };
+    });
+  };
+
+  let withEta = calcEtas(sorted);
   // Constraint pass: bubble stops with a 'before' window forward if needed
   for (let i = withEta.length - 1; i > 0; i--) {
     const s = withEta[i];
@@ -72,13 +89,14 @@ function optimizeWithConstraints(
     if (etaMins <= w.latest) continue;
     let best = i;
     for (let j = 0; j < i; j++) {
-      const cm = new Date(departureMs + j * AVG).getHours() * 60 + new Date(departureMs + j * AVG).getMinutes();
+      const testEta = calcEtas(withEta.slice(0, j + 1));
+      const cm = new Date(testEta[j].estimatedArrival!).getHours() * 60 + new Date(testEta[j].estimatedArrival!).getMinutes();
       if (cm <= w.latest) { best = j; break; }
     }
     if (best < i) {
       const [moved] = withEta.splice(i, 1);
       withEta.splice(best, 0, moved);
-      withEta = withEta.map((x, k) => ({ ...x, estimatedArrival: departureMs + k * AVG }));
+      withEta = calcEtas(withEta);
     }
   }
   const reasons: Record<string, string> = {};
