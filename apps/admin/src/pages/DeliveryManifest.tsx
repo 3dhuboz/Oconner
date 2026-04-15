@@ -712,10 +712,13 @@ export default function DeliveryManifestPage() {
                   try {
                     await api.post('/api/stops', {
                       deliveryDayId: dayId,
+                      orderId: `manual-${crypto.randomUUID().slice(0, 8)}`,
+                      customerId: 'manual',
                       customerName: manualStop.name,
-                      address: JSON.stringify({ line1: manualStop.address, suburb: '', state: 'QLD', postcode: '' }),
+                      customerPhone: '',
+                      address: { line1: manualStop.address, suburb: '', state: 'QLD', postcode: '' },
                       customerNote: manualStop.note,
-                      items: JSON.stringify([]),
+                      items: [],
                       sequence: stops.length + 1,
                       status: 'pending',
                     });
