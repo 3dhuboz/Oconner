@@ -156,10 +156,10 @@ export const deliveryRuns = sqliteTable('delivery_runs', {
 // ── Stops ─────────────────────────────────────────────────────────────────────
 export const stops = sqliteTable('stops', {
   id: text('id').primaryKey(),
-  orderId: text('order_id').notNull().references(() => orders.id),
-  deliveryDayId: text('delivery_day_id').notNull().references(() => deliveryDays.id),
-  runId: text('run_id').references(() => deliveryRuns.id), // nullable; null = unassigned
-  customerId: text('customer_id').notNull().references(() => customers.id),
+  orderId: text('order_id'),  // nullable for manual stops
+  deliveryDayId: text('delivery_day_id').notNull(),
+  runId: text('run_id'),     // nullable; null = unassigned
+  customerId: text('customer_id'),  // nullable for manual stops
   customerName: text('customer_name').notNull(),
   customerPhone: text('customer_phone').notNull().default(''),
   address: text('address').notNull(),    // JSON: Address
