@@ -63,7 +63,7 @@ export function buildOrderEmail(type: string, data: OrderEmailData): string {
 
   const bodies: Record<string, string> = {
     order_confirmation: `<p>Thank you for your order! We've confirmed <strong>#${data.orderId.slice(-8).toUpperCase()}</strong> for delivery on <strong>${data.deliveryDate}</strong>.</p>`,
-    day_before: `<p>Your order is scheduled for delivery <strong>tomorrow, ${data.deliveryDate}</strong>. We'll notify you when it's on its way!</p>`,
+    day_before: `<p>Your order is scheduled for delivery <strong>tomorrow, ${data.deliveryDate}</strong>.${(data as any).timeWindow ?? ''} We'll notify you when it's on its way!</p>`,
     out_for_delivery: `<p>Your order is on its way! Our driver is heading to you now.</p>`,
     delivered: `<p>Your order has been successfully delivered. Thank you for choosing O'Connor Agriculture!</p>`,
     order_cancelled: `<p>Your order <strong>#${data.orderId.slice(-8).toUpperCase()}</strong> has been cancelled. Contact us if this is an error.</p>`,
