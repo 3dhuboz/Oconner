@@ -479,6 +479,7 @@ export default function OrdersPage() {
           <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
             <tr>
               <th className="px-4 py-3 text-left">Order</th>
+              <th className="px-4 py-3 text-left">Date</th>
               <th className="px-4 py-3 text-left">Customer</th>
               <th className="px-4 py-3 text-left">Items</th>
               <th className="px-4 py-3 text-right">Total</th>
@@ -489,9 +490,9 @@ export default function OrdersPage() {
           </thead>
           <tbody className="divide-y">
             {loading ? (
-              <tr><td colSpan={7} className="text-center py-10 text-gray-400">Loading…</td></tr>
+              <tr><td colSpan={8} className="text-center py-10 text-gray-400">Loading…</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={7} className="text-center py-10 text-gray-400">No orders found</td></tr>
+              <tr><td colSpan={8} className="text-center py-10 text-gray-400">No orders found</td></tr>
             ) : filtered.map((order) => (
               <tr key={order.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3">
@@ -501,6 +502,9 @@ export default function OrdersPage() {
                   {(order as any).fulfillmentType === 'pickup' && (
                     <span className="ml-1.5 text-[10px] font-medium bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full">Pickup</span>
                   )}
+                </td>
+                <td className="px-4 py-3 text-xs text-gray-500">
+                  {new Date(order.createdAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}
                 </td>
                 <td className="px-4 py-3">
                   <p className="font-medium">
