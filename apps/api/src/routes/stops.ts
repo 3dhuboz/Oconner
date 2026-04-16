@@ -114,8 +114,10 @@ app.patch('/:id/status', async (c) => {
 
 app.patch('/:id/sequence', async (c) => {
   const db = drizzle(c.env.DB);
-  const { sequence } = await c.req.json<{ sequence: number }>();
-  await db.update(stops).set({ sequence }).where(eq(stops.id, c.req.param('id')));
+  const { sequence, estimatedArrival } = await c.req.json<{ sequence: number; estimatedArrival?: number }>();
+  const patch: Record<string, unknown> = { sequence };
+  if (estimatedArrival !== undefined) patch.estimatedArrival = estimatedArrival;
+  await db.update(stops).set(patch).where(eq(stops.id, c.req.param('id')));
   return c.json({ ok: true });
 });
 

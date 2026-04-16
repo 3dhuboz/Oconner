@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, formatCurrency } from '@butcher/shared';
 import type { Stop, Order } from '@butcher/shared';
@@ -241,7 +241,7 @@ export default function DeliveryManifestPage() {
     const departure = departureTimestamp(day);
     const { stops: optimized, reasons } = optimizeWithConstraints(stops, departure);
     const withSeq = optimized.map((s, i) => ({ ...s, sequence: i + 1 }));
-    await Promise.all(withSeq.map((s, i) => api.stops.updateSequence(s.id!, i + 1)));
+    await Promise.all(withSeq.map((s) => api.stops.updateSequence(s.id!, s.sequence!, s.estimatedArrival)));
     setStops(withSeq);
     setStopReasons(reasons);
     setRouteOptimised(true);
@@ -522,6 +522,12 @@ export default function DeliveryManifestPage() {
                 </div>
               )}
             </div>
+            {/* Route Map */}
+            {stopsWithEta.some((s) => s.lat && s.lng) && (
+              <div className="border-b border-indigo-100">
+                <RouteMap stops={stopsWithEta} depotLat={DEPOT_LAT} depotLng={DEPOT_LNG} />
+              </div>
+            )}
             {/* Per-stop timeline */}
             <div className="divide-y divide-indigo-50">
               {stopsWithEta.map((stop, idx) => {
@@ -830,4 +836,49 @@ export default function DeliveryManifestPage() {
       )}
     </div>
   );
+}
+
+// ── Route Map Component (Leaflet via iframe) ──
+function RouteMap({ stops, depotLat, depotLng }: { stops: { lat?: number; lng?: number; customerName: string; sequence?: number }[]; depotLat: number; depotLng: number }) {
+  const mapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!mapRef.current) return;
+    const geoStops = stops.filter((s) => s.lat && s.lng);
+    if (geoStops.length === 0) return;
+
+    const allLats = [depotLat, ...geoStops.map((s) => s.lat!)];
+    const allLngs = [depotLng, ...geoStops.map((s) => s.lng!)];
+    const minLat = Math.min(...allLats) - 0.01;
+    const maxLat = Math.max(...allLats) + 0.01;
+    const minLng = Math.min(...allLngs) - 0.01;
+    const maxLng = Math.max(...allLngs) + 0.01;
+
+    const markers = geoStops.map((s) => `
+      var m${s.sequence} = L.marker([${s.lat},${s.lng}],{icon:L.divIcon({className:'',html:'<div style="background:#4f46e5;color:white;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;border:2px solid white;box-shadow:0 2px 4px rgba(0,0,0,0.3)">${s.sequence}</div>',iconSize:[24,24],iconAnchor:[12,12]})}).addTo(map).bindPopup('<b>${s.sequence}. ${s.customerName.replace(/'/g, "\\'")}</b>');
+    `).join('\n');
+
+    const routeCoords = [[depotLat, depotLng], ...geoStops.map((s) => [s.lat, s.lng])];
+    const polyline = `L.polyline(${JSON.stringify(routeCoords)},{color:'#4f46e5',weight:3,opacity:0.6,dashArray:'8,8'}).addTo(map);`;
+
+    const html = `<!DOCTYPE html><html><head>
+      <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+      <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+      <style>body{margin:0}#map{width:100%;height:100%}</style>
+    </head><body><div id="map"></div><script>
+      var map = L.map('map',{zoomControl:true,attributionControl:false}).fitBounds([[${minLat},${minLng}],[${maxLat},${maxLng}]]);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+      L.marker([${depotLat},${depotLng}],{icon:L.divIcon({className:'',html:'<div style="background:#16a34a;color:white;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;border:2px solid white;box-shadow:0 2px 4px rgba(0,0,0,0.3)">🏠</div>',iconSize:[28,28],iconAnchor:[14,14]})}).addTo(map).bindPopup('<b>Depot — Boynedale</b>');
+      ${markers}
+      ${polyline}
+    </script></body></html>`;
+
+    const iframe = document.createElement('iframe');
+    iframe.style.cssText = 'width:100%;height:100%;border:none';
+    iframe.srcdoc = html;
+    mapRef.current.innerHTML = '';
+    mapRef.current.appendChild(iframe);
+  }, [stops, depotLat, depotLng]);
+
+  return <div ref={mapRef} style={{ height: 350 }} className="bg-gray-100" />;
 }
