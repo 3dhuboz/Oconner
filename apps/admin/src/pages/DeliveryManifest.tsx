@@ -883,12 +883,23 @@ function RouteMap({ stops, depotLat, depotLng }: { stops: { lat?: number; lng?: 
       });
       (map as any)._markers.push(depotMarker);
 
-      // Stop markers with numbered circles
+      // Stop markers with numbered circles (offset overlapping positions)
+      const usedPositions: string[] = [];
       const routePath = [{ lat: depotLat, lng: depotLng }];
       geoStops.forEach((s) => {
+        let lat = s.lat!, lng = s.lng!;
+        const key = `${lat.toFixed(4)},${lng.toFixed(4)}`;
+        const overlapCount = usedPositions.filter((k) => k === key).length;
+        if (overlapCount > 0) {
+          // Offset overlapping markers in a circle pattern
+          const angle = (overlapCount * 60) * (Math.PI / 180);
+          lat += Math.cos(angle) * 0.0008;
+          lng += Math.sin(angle) * 0.0008;
+        }
+        usedPositions.push(key);
         routePath.push({ lat: s.lat!, lng: s.lng! });
         const marker = new google.maps.Marker({
-          position: { lat: s.lat!, lng: s.lng! },
+          position: { lat, lng },
           map,
           label: { text: String(s.sequence), color: 'white', fontWeight: 'bold', fontSize: '11px' },
           icon: {
