@@ -38,13 +38,32 @@ app.post('/', async (c) => {
   const db = drizzle(c.env.DB);
   const body = await c.req.json<typeof stops.$inferInsert & { address: object; items: object[] }>();
   const id = crypto.randomUUID();
-  await db.insert(stops).values({
-    ...body,
-    id,
-    address: JSON.stringify(body.address),
-    items: JSON.stringify(body.items),
-    createdAt: Date.now(),
-  });
+  const isManual = !body.orderId || String(body.orderId).startsWith('manual');
+
+  if (isManual) {
+    // Manual stops don't have real order/customer IDs — bypass FK constraints
+    const { sql } = await import('drizzle-orm');
+    await db.run(sql`PRAGMA foreign_keys = OFF`);
+    await db.insert(stops).values({
+      ...body,
+      id,
+      orderId: `manual-${id.slice(0, 8)}`,
+      customerId: 'manual',
+      address: JSON.stringify(body.address),
+      items: JSON.stringify(body.items ?? []),
+      createdAt: Date.now(),
+    });
+    await db.run(sql`PRAGMA foreign_keys = ON`);
+  } else {
+    await db.insert(stops).values({
+      ...body,
+      id,
+      address: JSON.stringify(body.address),
+      items: JSON.stringify(body.items),
+      createdAt: Date.now(),
+    });
+  }
+
   return c.json({ id }, 201);
 });
 
