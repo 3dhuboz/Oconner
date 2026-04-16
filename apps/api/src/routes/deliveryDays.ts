@@ -341,11 +341,31 @@ app.post('/:id/send-reminders', async (c) => {
   // Send to all active orders (not cancelled/refunded/delivered)
   const allOrders = await db.select().from(orders).where(eq(orders.deliveryDayId, dayId));
   const pendingOrders = allOrders.filter((o) => !['cancelled', 'refunded', 'delivered'].includes(o.status));
+  const allStops = await db.select().from(stops).where(eq(stops.deliveryDayId, dayId));
 
   const dateLabel = new Date(day.date).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' });
   let sent = 0;
 
+  const fmtTime = (ms: number) => {
+    const d = new Date(ms);
+    const h = d.getHours();
+    const m = d.getMinutes();
+    const ampm = h >= 12 ? 'pm' : 'am';
+    const h12 = h % 12 || 12;
+    return m === 0 ? `${h12}${ampm}` : `${h12}:${m.toString().padStart(2, '0')}${ampm}`;
+  };
+
   for (const order of pendingOrders) {
+    // Find the stop's estimated arrival to build a ±1hr window
+    const stop = allStops.find((s) => s.orderId === order.id);
+    let timeWindowText = '';
+    if (stop?.estimatedArrival) {
+      const eta = stop.estimatedArrival;
+      const windowStart = fmtTime(eta - 60 * 60 * 1000); // 1 hour before
+      const windowEnd = fmtTime(eta + 60 * 60 * 1000);   // 1 hour after
+      timeWindowText = ` We expect to arrive between <strong>${windowStart} and ${windowEnd}</strong>. Please ensure someone is home during this window.`;
+    }
+
     const emailData = {
       customerName: order.customerName,
       orderId: order.id,
@@ -357,6 +377,7 @@ app.post('/:id/send-reminders', async (c) => {
       deliveryDate: dateLabel,
       deliveryAddress: order.deliveryAddress,
       trackingUrl: `${c.env.STOREFRONT_URL}/track/${order.id}`,
+      timeWindow: timeWindowText,
     };
     const result = await sendEmail({
       apiKey: c.env.RESEND_API_KEY,
@@ -368,7 +389,9 @@ app.post('/:id/send-reminders', async (c) => {
     if (result) sent++;
     await notifyCustomer(db, order.customerId, {
       title: "O'Connor — Delivery Tomorrow",
-      body: `Your order is on its way ${dateLabel}. Check your order summary for details.`,
+      body: stop?.estimatedArrival
+        ? `Your delivery is scheduled for tomorrow ${dateLabel}. Expected arrival between ${fmtTime(stop.estimatedArrival - 3600000)} and ${fmtTime(stop.estimatedArrival + 3600000)}. Please ensure someone is home.`
+        : `Your order is on its way ${dateLabel}. Check your order summary for details.`,
       url: `${c.env.STOREFRONT_URL}/track/${order.id}`,
     }, c.env);
     await db.insert(notifications).values({
