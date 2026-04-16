@@ -199,11 +199,13 @@ app.post('/api/orders', async (c) => {
   if (dayAllocations.length > 0) {
     for (const item of (body.items as any[])) {
       const alloc = dayAllocations.find((a: any) => a.productId === item.productId);
-      if (alloc) {
-        const qty = item.weight ? item.weight / 1000 : (item.weightKg ?? item.quantity ?? 1);
-        if (alloc.sold + qty > alloc.allocated) {
-          return c.json({ error: `${item.productName} is sold out for this delivery day` }, 400);
-        }
+      if (!alloc) {
+        // Product has no allocation for this day — block it (strict enforcement)
+        return c.json({ error: `${item.productName} is not available for this delivery day. Please select a different day or contact us.` }, 400);
+      }
+      const qty = item.weight ? item.weight / 1000 : (item.weightKg ?? item.quantity ?? 1);
+      if (alloc.sold + qty > alloc.allocated) {
+        return c.json({ error: `${item.productName} is sold out for this delivery day` }, 400);
       }
     }
   }
