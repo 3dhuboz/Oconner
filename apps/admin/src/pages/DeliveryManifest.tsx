@@ -838,49 +838,108 @@ export default function DeliveryManifestPage() {
   );
 }
 
-// ── Route Map Component (SVG overlay on OSM tiles) ──
+// ── Route Map Component (Interactive Google Maps) ──
+const GOOGLE_MAPS_KEY = 'AIzaSyA1nxhaU5f0ns9ZHJDkYeQh7tNRXlkdmWU';
+
 function RouteMap({ stops, depotLat, depotLng }: { stops: { lat?: number; lng?: number; customerName: string; sequence?: number }[]; depotLat: number; depotLng: number }) {
-  const geoStops = stops.filter((s) => s.lat && s.lng);
-  if (geoStops.length === 0) return null;
+  const mapRef = useRef<HTMLDivElement>(null);
+  const mapInstanceRef = useRef<any>(null);
 
-  const allLats = [depotLat, ...geoStops.map((s) => s.lat!)];
-  const allLngs = [depotLng, ...geoStops.map((s) => s.lng!)];
-  const minLat = Math.min(...allLats);
-  const maxLat = Math.max(...allLats);
-  const minLng = Math.min(...allLngs);
-  const maxLng = Math.max(...allLngs);
-  const padLat = (maxLat - minLat) * 0.15 || 0.01;
-  const padLng = (maxLng - minLng) * 0.15 || 0.01;
+  useEffect(() => {
+    const geoStops = stops.filter((s) => s.lat && s.lng);
+    if (geoStops.length === 0 || !mapRef.current) return;
 
-  const W = 800, H = 400;
-  const toX = (lng: number) => ((lng - (minLng - padLng)) / ((maxLng + padLng) - (minLng - padLng))) * W;
-  const toY = (lat: number) => H - ((lat - (minLat - padLat)) / ((maxLat + padLat) - (minLat - padLat))) * H;
+    const initMap = () => {
+      const google = (window as any).google;
+      if (!google?.maps) return;
 
-  const depotX = toX(depotLng), depotY = toY(depotLat);
-  const points = geoStops.map((s) => ({ x: toX(s.lng!), y: toY(s.lat!), seq: s.sequence!, name: s.customerName }));
-  const routePath = [`${depotX},${depotY}`, ...points.map((p) => `${p.x},${p.y}`)].join(' ');
+      const bounds = new google.maps.LatLngBounds();
+      bounds.extend({ lat: depotLat, lng: depotLng });
+      geoStops.forEach((s) => bounds.extend({ lat: s.lat!, lng: s.lng! }));
 
-  return (
-    <div className="relative" style={{ height: 400 }}>
-      <img
-        src={`https://maps.geoapify.com/v1/staticmap?style=osm-bright-smooth&width=${W}&height=${H}&area=rect:${minLng - padLng},${minLat - padLat},${maxLng + padLng},${maxLat + padLat}&apiKey=FREE`}
-        alt="Route map"
-        className="w-full h-full object-cover bg-gray-200"
-        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-      />
-      <svg className="absolute inset-0 w-full h-full" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
-        <polyline points={routePath} fill="none" stroke="#4f46e5" strokeWidth="2.5" strokeDasharray="8,6" opacity="0.7" />
-        {/* Depot */}
-        <circle cx={depotX} cy={depotY} r="14" fill="#16a34a" stroke="white" strokeWidth="2" />
-        <text x={depotX} y={depotY + 1} textAnchor="middle" dominantBaseline="central" fill="white" fontSize="10" fontWeight="bold">🏠</text>
-        {/* Stops */}
-        {points.map((p) => (
-          <g key={p.seq}>
-            <circle cx={p.x} cy={p.y} r="12" fill="#4f46e5" stroke="white" strokeWidth="2" />
-            <text x={p.x} y={p.y + 1} textAnchor="middle" dominantBaseline="central" fill="white" fontSize="10" fontWeight="bold">{p.seq}</text>
-          </g>
-        ))}
-      </svg>
-    </div>
-  );
+      if (!mapInstanceRef.current) {
+        mapInstanceRef.current = new google.maps.Map(mapRef.current!, {
+          mapTypeId: 'roadmap',
+          mapTypeControl: false,
+          streetViewControl: false,
+          fullscreenControl: true,
+        });
+      }
+      const map = mapInstanceRef.current;
+      map.fitBounds(bounds, 40);
+
+      // Clear existing markers/polylines
+      if ((map as any)._markers) (map as any)._markers.forEach((m: any) => m.setMap(null));
+      if ((map as any)._polyline) (map as any)._polyline.setMap(null);
+      (map as any)._markers = [];
+
+      // Depot marker
+      const depotMarker = new google.maps.Marker({
+        position: { lat: depotLat, lng: depotLng },
+        map,
+        label: { text: '🏠', fontSize: '16px' },
+        title: 'Depot — Boynedale',
+        zIndex: 1000,
+      });
+      (map as any)._markers.push(depotMarker);
+
+      // Stop markers with numbered circles
+      const routePath = [{ lat: depotLat, lng: depotLng }];
+      geoStops.forEach((s) => {
+        routePath.push({ lat: s.lat!, lng: s.lng! });
+        const marker = new google.maps.Marker({
+          position: { lat: s.lat!, lng: s.lng! },
+          map,
+          label: { text: String(s.sequence), color: 'white', fontWeight: 'bold', fontSize: '11px' },
+          icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 14,
+            fillColor: '#4f46e5',
+            fillOpacity: 1,
+            strokeColor: 'white',
+            strokeWeight: 2,
+          },
+          title: `${s.sequence}. ${s.customerName}`,
+          zIndex: 500 + (s.sequence ?? 0),
+        });
+        (map as any)._markers.push(marker);
+
+        const infoWindow = new google.maps.InfoWindow({
+          content: `<div style="font-family:sans-serif;padding:2px"><strong>${s.sequence}. ${s.customerName}</strong></div>`,
+        });
+        marker.addListener('click', () => infoWindow.open(map, marker));
+      });
+
+      // Route polyline
+      const polyline = new google.maps.Polyline({
+        path: routePath,
+        strokeColor: '#4f46e5',
+        strokeOpacity: 0.7,
+        strokeWeight: 3,
+        map,
+      });
+      (map as any)._polyline = polyline;
+    };
+
+    // Load Google Maps JS if not already loaded
+    if ((window as any).google?.maps) {
+      initMap();
+    } else {
+      const existing = document.querySelector('script[src*="maps.googleapis.com"]');
+      if (!existing) {
+        const script = document.createElement('script');
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_KEY}`;
+        script.async = true;
+        script.onload = initMap;
+        document.head.appendChild(script);
+      } else {
+        const check = setInterval(() => {
+          if ((window as any).google?.maps) { clearInterval(check); initMap(); }
+        }, 200);
+        setTimeout(() => clearInterval(check), 10000);
+      }
+    }
+  }, [stops, depotLat, depotLng]);
+
+  return <div ref={mapRef} style={{ height: 400 }} className="bg-gray-200 rounded-none" />;
 }
