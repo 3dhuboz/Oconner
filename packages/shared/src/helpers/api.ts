@@ -86,7 +86,7 @@ export const api = {
     create: (data: unknown) => api.post('/api/stops', data),
     updateStatus: (id: string, data: { status: string; driverNote?: string; flagReason?: string; proofUrl?: string }) =>
       api.patch(`/api/stops/${id}/status`, data),
-    updateSequence: (id: string, sequence: number) => api.patch(`/api/stops/${id}/sequence`, { sequence }),
+    updateSequence: (id: string, sequence: number, estimatedArrival?: number) => api.patch(`/api/stops/${id}/sequence`, { sequence, estimatedArrival }),
     assignRun: (id: string, runId: string | null) => api.patch(`/api/stops/${id}/run`, { runId }),
   },
 
