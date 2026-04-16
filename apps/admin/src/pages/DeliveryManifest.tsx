@@ -396,6 +396,33 @@ export default function DeliveryManifestPage() {
           <Route className="h-4 w-4" />
           {optimizing ? 'Optimising…' : routeOptimised ? '✓ Route Optimised' : 'Optimise Route'}
         </button>
+        <button
+          onClick={async () => {
+            if (!dayId || stops.length === 0) return;
+            const departure = departureTimestamp(day);
+            const sorted = [...stops].sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
+            const STOP_TIME_MS = 5 * 60 * 1000;
+            const AVG_SPEED_KMH = 80;
+            const ROAD_FACTOR = 1.3;
+            let cumulativeMs = 0;
+            const updated = sorted.map((s, i) => {
+              const prevLat = i === 0 ? DEPOT_LAT : (sorted[i - 1].lat ?? DEPOT_LAT);
+              const prevLng = i === 0 ? DEPOT_LNG : (sorted[i - 1].lng ?? DEPOT_LNG);
+              const km = (s.lat && s.lng) ? haversineKm(prevLat, prevLng, s.lat, s.lng) * ROAD_FACTOR : 20;
+              cumulativeMs += (km / AVG_SPEED_KMH) * 3600000 + STOP_TIME_MS;
+              return { ...s, estimatedArrival: departure + cumulativeMs };
+            });
+            await Promise.all(updated.map((s) => api.stops.updateSequence(s.id!, s.sequence!, s.estimatedArrival)));
+            setStops(updated);
+            setShowPreview(true);
+            setLastPushed(new Date());
+            toast('ETAs recalculated');
+          }}
+          disabled={stops.length === 0}
+          className="flex items-center gap-2 border border-brand text-brand px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand/5 disabled:opacity-50"
+        >
+          <Clock className="h-4 w-4" /> Refresh ETAs
+        </button>
         {stops.length > 0 && (
           <button
             onClick={() => setShowPreview((v) => !v)}
