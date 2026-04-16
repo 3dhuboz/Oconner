@@ -838,47 +838,49 @@ export default function DeliveryManifestPage() {
   );
 }
 
-// ── Route Map Component (Leaflet via iframe) ──
+// ── Route Map Component (SVG overlay on OSM tiles) ──
 function RouteMap({ stops, depotLat, depotLng }: { stops: { lat?: number; lng?: number; customerName: string; sequence?: number }[]; depotLat: number; depotLng: number }) {
-  const mapRef = useRef<HTMLDivElement>(null);
+  const geoStops = stops.filter((s) => s.lat && s.lng);
+  if (geoStops.length === 0) return null;
 
-  useEffect(() => {
-    if (!mapRef.current) return;
-    const geoStops = stops.filter((s) => s.lat && s.lng);
-    if (geoStops.length === 0) return;
+  const allLats = [depotLat, ...geoStops.map((s) => s.lat!)];
+  const allLngs = [depotLng, ...geoStops.map((s) => s.lng!)];
+  const minLat = Math.min(...allLats);
+  const maxLat = Math.max(...allLats);
+  const minLng = Math.min(...allLngs);
+  const maxLng = Math.max(...allLngs);
+  const padLat = (maxLat - minLat) * 0.15 || 0.01;
+  const padLng = (maxLng - minLng) * 0.15 || 0.01;
 
-    const allLats = [depotLat, ...geoStops.map((s) => s.lat!)];
-    const allLngs = [depotLng, ...geoStops.map((s) => s.lng!)];
-    const minLat = Math.min(...allLats) - 0.01;
-    const maxLat = Math.max(...allLats) + 0.01;
-    const minLng = Math.min(...allLngs) - 0.01;
-    const maxLng = Math.max(...allLngs) + 0.01;
+  const W = 800, H = 400;
+  const toX = (lng: number) => ((lng - (minLng - padLng)) / ((maxLng + padLng) - (minLng - padLng))) * W;
+  const toY = (lat: number) => H - ((lat - (minLat - padLat)) / ((maxLat + padLat) - (minLat - padLat))) * H;
 
-    const markers = geoStops.map((s) => `
-      var m${s.sequence} = L.marker([${s.lat},${s.lng}],{icon:L.divIcon({className:'',html:'<div style="background:#4f46e5;color:white;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;border:2px solid white;box-shadow:0 2px 4px rgba(0,0,0,0.3)">${s.sequence}</div>',iconSize:[24,24],iconAnchor:[12,12]})}).addTo(map).bindPopup('<b>${s.sequence}. ${s.customerName.replace(/'/g, "\\'")}</b>');
-    `).join('\n');
+  const depotX = toX(depotLng), depotY = toY(depotLat);
+  const points = geoStops.map((s) => ({ x: toX(s.lng!), y: toY(s.lat!), seq: s.sequence!, name: s.customerName }));
+  const routePath = [`${depotX},${depotY}`, ...points.map((p) => `${p.x},${p.y}`)].join(' ');
 
-    const routeCoords = [[depotLat, depotLng], ...geoStops.map((s) => [s.lat, s.lng])];
-    const polyline = `L.polyline(${JSON.stringify(routeCoords)},{color:'#4f46e5',weight:3,opacity:0.6,dashArray:'8,8'}).addTo(map);`;
-
-    const html = `<!DOCTYPE html><html><head>
-      <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-      <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-      <style>body{margin:0}#map{width:100%;height:100%}</style>
-    </head><body><div id="map"></div><script>
-      var map = L.map('map',{zoomControl:true,attributionControl:false}).fitBounds([[${minLat},${minLng}],[${maxLat},${maxLng}]]);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-      L.marker([${depotLat},${depotLng}],{icon:L.divIcon({className:'',html:'<div style="background:#16a34a;color:white;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;border:2px solid white;box-shadow:0 2px 4px rgba(0,0,0,0.3)">🏠</div>',iconSize:[28,28],iconAnchor:[14,14]})}).addTo(map).bindPopup('<b>Depot — Boynedale</b>');
-      ${markers}
-      ${polyline}
-    </script></body></html>`;
-
-    const iframe = document.createElement('iframe');
-    iframe.style.cssText = 'width:100%;height:100%;border:none';
-    iframe.srcdoc = html;
-    mapRef.current.innerHTML = '';
-    mapRef.current.appendChild(iframe);
-  }, [stops, depotLat, depotLng]);
-
-  return <div ref={mapRef} style={{ height: 350 }} className="bg-gray-100" />;
+  return (
+    <div className="relative" style={{ height: 400 }}>
+      <img
+        src={`https://maps.geoapify.com/v1/staticmap?style=osm-bright-smooth&width=${W}&height=${H}&area=rect:${minLng - padLng},${minLat - padLat},${maxLng + padLng},${maxLat + padLat}&apiKey=FREE`}
+        alt="Route map"
+        className="w-full h-full object-cover bg-gray-200"
+        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+      />
+      <svg className="absolute inset-0 w-full h-full" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+        <polyline points={routePath} fill="none" stroke="#4f46e5" strokeWidth="2.5" strokeDasharray="8,6" opacity="0.7" />
+        {/* Depot */}
+        <circle cx={depotX} cy={depotY} r="14" fill="#16a34a" stroke="white" strokeWidth="2" />
+        <text x={depotX} y={depotY + 1} textAnchor="middle" dominantBaseline="central" fill="white" fontSize="10" fontWeight="bold">🏠</text>
+        {/* Stops */}
+        {points.map((p) => (
+          <g key={p.seq}>
+            <circle cx={p.x} cy={p.y} r="12" fill="#4f46e5" stroke="white" strokeWidth="2" />
+            <text x={p.x} y={p.y + 1} textAnchor="middle" dominantBaseline="central" fill="white" fontSize="10" fontWeight="bold">{p.seq}</text>
+          </g>
+        ))}
+      </svg>
+    </div>
+  );
 }
