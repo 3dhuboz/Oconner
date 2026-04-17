@@ -49,16 +49,39 @@ export default function LiveDeliveryTracker({ dayId, initialStops = [] }: Props)
   // Keep local stops in sync with parent's initial fetch (manifest page case).
   useEffect(() => { if (initialStops.length) setStops(initialStops); }, [initialStops]);
 
-  // Poll for the active session, then pull fresh stops for that session's day.
+  // Poll for an active session, then pull fresh stops for that session's day.
+  // Rules:
+  //  - If a dayId is passed (manifest page), scope to that day.
+  //  - Otherwise (dashboard), scope to TODAY's delivery day only — stale
+  //    sessions from previous days don't get surfaced.
+  //  - Also ignore any session whose last ping is older than 12 hours
+  //    (belt-and-braces for sessions that the driver app never closed).
   useEffect(() => {
     let cancelled = false;
+    const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
     const fetchAll = async () => {
       try {
+        let targetDayId = dayId;
+        if (!targetDayId) {
+          // Dashboard mode: find today's delivery day first. If there isn't one, nothing to show.
+          try {
+            const today = await api.deliveryDays.today() as { id?: string } | null;
+            targetDayId = today?.id;
+          } catch {
+            targetDayId = undefined;
+          }
+        }
+        if (!targetDayId) { if (!cancelled) setSession(null); return; }
+
         const all = await api.drivers.activeSessions() as ActiveDriverSession[];
         if (cancelled) return;
-        const picked = dayId
-          ? all.find((s) => s.deliveryDayId === dayId && s.active)
-          : all.find((s) => s.active);
+
+        // Pick the most recently pinged active session for the target day whose ping isn't stale.
+        const cutoff = Date.now() - TWELVE_HOURS_MS;
+        const picked = all
+          .filter((s) => s.active && s.deliveryDayId === targetDayId && s.lastUpdated >= cutoff)
+          .sort((a, b) => b.lastUpdated - a.lastUpdated)[0];
+
         setSession(picked ?? null);
         if (picked) {
           const fresh = await api.stops.list(picked.deliveryDayId) as Stop[];
