@@ -5,6 +5,7 @@ import LoginPage from './pages/Login';
 import StopsPage from './pages/Stops';
 import StopDetailPage from './pages/StopDetail';
 import ProfilePage from './pages/Profile';
+import GPSPermissionBanner from './components/GPSPermissionBanner';
 
 function RequireDriver({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -39,6 +40,7 @@ function InstallBanner() {
 export default function App() {
   return (
     <>
+    <GPSPermissionBanner />
     <InstallBanner />
     <Routes>
       <Route path="/login" element={<LoginPage />} />
