@@ -145,18 +145,46 @@ export default function DeliveryRunsTab({ dayId }: { dayId: string }) {
     if (runStops.length < 2) return;
     setOptimising(true);
     try {
-      // Sort furthest to closest (by lat/lng distance from depot)
-      const DEPOT = { lat: -23.3791, lng: 150.5100 };
-      const withDist = runStops.map((s) => {
+      // Anti-clockwise spiral outward from Boynedale depot. Nearest stop first,
+      // furthest last, middle sorted by anti-clockwise bearing from start.
+      const DEPOT = { lat: -24.2119, lng: 151.2833 };
+      const R = 6371;
+      const toRad = Math.PI / 180;
+      const hav = (lat1: number, lng1: number, lat2: number, lng2: number) => {
+        const dLat = (lat2 - lat1) * toRad;
+        const dLng = (lng2 - lng1) * toRad;
+        const a = Math.sin(dLat / 2) ** 2 +
+          Math.cos(lat1 * toRad) * Math.cos(lat2 * toRad) * Math.sin(dLng / 2) ** 2;
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      };
+      const bearing = (lat1: number, lng1: number, lat2: number, lng2: number) => {
+        const y = Math.sin((lng2 - lng1) * toRad) * Math.cos(lat2 * toRad);
+        const x = Math.cos(lat1 * toRad) * Math.sin(lat2 * toRad) -
+                  Math.sin(lat1 * toRad) * Math.cos(lat2 * toRad) * Math.cos((lng2 - lng1) * toRad);
+        return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+      };
+
+      const annotated = runStops.map((s) => {
         const lat = (s as any).lat ?? 0;
         const lng = (s as any).lng ?? 0;
-        const dist = Math.sqrt(Math.pow(lat - DEPOT.lat, 2) + Math.pow(lng - DEPOT.lng, 2));
-        return { ...s, dist };
+        return {
+          stop: s,
+          dist: (lat && lng) ? hav(DEPOT.lat, DEPOT.lng, lat, lng) : 0,
+          bearing: (lat && lng) ? bearing(DEPOT.lat, DEPOT.lng, lat, lng) : 0,
+        };
       });
-      withDist.sort((a, b) => b.dist - a.dist); // furthest first
-      await Promise.all(withDist.map((s, i) => api.stops.updateSequence(s.id!, i + 1)));
+
+      const start = annotated.reduce((a, b) => a.dist < b.dist ? a : b);
+      const end = annotated.reduce((a, b) => a.dist > b.dist ? a : b);
+      const middle = annotated
+        .filter((a) => a !== start && a !== end)
+        .map((a) => ({ ...a, acDist: (start.bearing - a.bearing + 360) % 360 }))
+        .sort((a, b) => a.acDist - b.acDist);
+      const ordered = [start, ...middle, end].map((a) => a.stop);
+
+      await Promise.all(ordered.map((s, i) => api.stops.updateSequence(s.id!, i + 1)));
       await load();
-      toast('Route optimised — furthest to closest');
+      toast('Route optimised — anti-clockwise from base');
     } catch {
       toast('Failed to optimise', 'error');
     } finally {

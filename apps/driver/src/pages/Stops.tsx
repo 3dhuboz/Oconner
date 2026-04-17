@@ -4,7 +4,19 @@ import { useUser } from '@clerk/clerk-react';
 import { api } from '@butcher/shared';
 import type { Stop, DeliveryDay, DeliveryRun } from '@butcher/shared';
 import { useGPS, type GPSStatus } from '../hooks/useGPS';
-import { MapPin, Navigation, User, CheckCircle, Clock, Truck } from 'lucide-react';
+import { MapPin, Navigation, User, CheckCircle, Clock, Truck, PackagePlus } from 'lucide-react';
+
+// Keep this list in sync with StopDetail.tsx. Detects offal/suet requests
+// typed into the free-text customer_note so we can flag them on the list.
+const ADDON_KEYWORDS = [
+  'offal', 'suet', 'liver', 'kidney', 'kidneys',
+  'heart', 'hearts', 'tongue', 'tripe', 'brain', 'brains',
+  'oxtail', 'marrow', 'bones', 'trotter', 'trotters',
+];
+function hasAddOns(note: string | null | undefined): boolean {
+  if (!note) return false;
+  return ADDON_KEYWORDS.some((k) => new RegExp(`\\b${k}\\b`, 'i').test(note));
+}
 
 export default function StopsPage() {
   const navigate = useNavigate();
@@ -53,6 +65,19 @@ export default function StopsPage() {
       });
   }, [deliveryDay?.id]);
 
+  // Restore an in-flight session on page load so a browser refresh doesn't
+  // orphan it (the server still thinks the session is active — without this
+  // the "End Day" button silently no-ops because sessionId is null).
+  useEffect(() => {
+    if (!deliveryDay?.id) return;
+    const key = `ocn-driver-session:${deliveryDay.id}`;
+    const stored = localStorage.getItem(key);
+    if (stored && !sessionId) {
+      setSessionId(stored);
+      setTrackingEnabled(true);
+    }
+  }, [deliveryDay?.id, sessionId]);
+
   const handleBeginRoute = async () => {
     if (!deliveryDay?.id || !user) return;
     const session = await api.drivers.startSession({
@@ -61,6 +86,7 @@ export default function StopsPage() {
     }) as { id: string };
     setSessionId(session.id);
     setTrackingEnabled(true);
+    try { localStorage.setItem(`ocn-driver-session:${deliveryDay.id}`, session.id); } catch {}
     // Navigate to first pending stop
     const sorted = [...stops].sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
     const firstPending = sorted.find((s) => s.status !== 'delivered' && s.status !== 'failed');
@@ -75,6 +101,9 @@ export default function StopsPage() {
     }
     setTrackingEnabled(false);
     setSessionId(null);
+    if (deliveryDay?.id) {
+      try { localStorage.removeItem(`ocn-driver-session:${deliveryDay.id}`); } catch {}
+    }
   };
 
   const delivered = stops.filter((s) => s.status === 'delivered').length;
@@ -242,7 +271,15 @@ function StopCard({ stop, index, onClick }: { stop: Stop; index: number; onClick
         <span className={`text-sm font-bold ${cfg.color}`}>{index}</span>
       </div>
       <div className="flex-1 min-w-0">
-        <p className="font-medium truncate">{stop.customerName}</p>
+        <div className="flex items-center gap-2">
+          <p className="font-medium truncate">{stop.customerName}</p>
+          {hasAddOns(stop.customerNote) && (
+            <span className="flex-shrink-0 inline-flex items-center gap-0.5 text-[10px] font-bold bg-red-100 text-red-700 rounded-full px-1.5 py-0.5 uppercase tracking-wide">
+              <PackagePlus className="h-3 w-3" />
+              Add-ons
+            </span>
+          )}
+        </div>
         <p className="text-sm text-gray-500 truncate flex items-center gap-1">
           <MapPin className="h-3 w-3 flex-shrink-0" />
           {stop.address.line1}, {stop.address.suburb}

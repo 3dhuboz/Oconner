@@ -2,8 +2,33 @@ import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '@butcher/shared';
 import type { Stop, StopStatus } from '@butcher/shared';
-import { ArrowLeft, MapPin, Phone, Navigation, CheckCircle, Camera, AlertTriangle, ChevronRight, Undo2 } from 'lucide-react';
+import { ArrowLeft, MapPin, Phone, Navigation, CheckCircle, Camera, AlertTriangle, ChevronRight, Undo2, PackagePlus } from 'lucide-react';
 import { formatWeight } from '@butcher/shared';
+
+/**
+ * Detect offal/suet/bones add-on requests typed into the free-text customer
+ * note during checkout. Returns the matched excerpts so the driver can see
+ * exactly what was asked for ("Suet 2kg") rather than just a generic flag.
+ * Used to render a prominent red banner on StopDetail so these add-ons don't
+ * get missed when loading the ute.
+ */
+const ADDON_KEYWORDS = [
+  'offal', 'suet', 'liver', 'kidney', 'kidneys',
+  'heart', 'hearts', 'tongue', 'tripe', 'brain', 'brains',
+  'oxtail', 'marrow', 'bones', 'trotter', 'trotters',
+];
+function detectAddOns(note: string | null | undefined): string[] {
+  if (!note) return [];
+  const lines = note.split(/[,;\n]+|\.\s+/g).map((s) => s.trim()).filter(Boolean);
+  const matched: string[] = [];
+  for (const line of lines) {
+    const lower = line.toLowerCase();
+    if (ADDON_KEYWORDS.some((k) => new RegExp(`\\b${k}\\b`, 'i').test(lower))) {
+      matched.push(line);
+    }
+  }
+  return matched;
+}
 
 export default function StopDetailPage() {
   const { stopId } = useParams<{ stopId: string }>();
@@ -56,6 +81,11 @@ export default function StopDetailPage() {
     }
   };
 
+  // Capture a photo and either:
+  //  - just upload it (mode: 'upload') — driver decides to finish delivery separately
+  //  - upload + mark delivered + trigger SMS to customer (mode: 'deliver') — the "Deliver with Photo & Send" flow
+  const [captureMode, setCaptureMode] = useState<'upload' | 'deliver'>('upload');
+
   const handlePhotoCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !stopId) return;
@@ -63,14 +93,19 @@ export default function StopDetailPage() {
     try {
       const url = await api.images.upload(file, 'proof');
       setProofUrl(url);
-      await api.stops.updateStatus(stopId, { status: 'delivered', proofUrl: url, driverNote: note || undefined });
-      // Update local state to show delivered
-      setStop((s) => s ? { ...s, status: 'delivered' as StopStatus, proofUrl: url } : s);
-      setAllStops((prev) => prev.map((s) => s.id === stopId ? { ...s, status: 'delivered' as StopStatus } : s));
+      if (captureMode === 'deliver') {
+        // Proof-of-delivery path — photo goes out to customer via SMS on the server side.
+        await api.stops.updateStatus(stopId, { status: 'delivered', proofUrl: url, driverNote: note || undefined });
+        setStop((s) => s ? { ...s, status: 'delivered' as StopStatus, proofUrl: url } : s);
+        setAllStops((prev) => prev.map((s) => s.id === stopId ? { ...s, status: 'delivered' as StopStatus } : s));
+        goToNextOrHome();
+      }
+      // mode === 'upload': photo stored locally; driver still needs to tap "Mark as Delivered" to commit.
     } catch {
       // best-effort
     } finally {
       setUploadingPhoto(false);
+      setCaptureMode('upload'); // reset for next time
     }
   };
 
@@ -107,6 +142,12 @@ export default function StopDetailPage() {
   };
 
   const deliverWithPhoto = () => {
+    setCaptureMode('deliver');
+    fileInputRef.current?.click();
+  };
+
+  const takeOptionalPhoto = () => {
+    setCaptureMode('upload');
     fileInputRef.current?.click();
   };
 
@@ -157,6 +198,26 @@ export default function StopDetailPage() {
       </header>
 
       <main className="flex-1 overflow-y-auto p-4 space-y-4">
+        {(() => {
+          const addOns = detectAddOns(stop.customerNote);
+          if (addOns.length === 0) return null;
+          return (
+            <div className="bg-red-600 text-white rounded-xl p-4 shadow-md">
+              <div className="flex items-center gap-2 mb-2">
+                <PackagePlus className="h-5 w-5" />
+                <h2 className="font-bold uppercase tracking-wide text-sm">Add-ons to load</h2>
+              </div>
+              <ul className="space-y-1">
+                {addOns.map((line, i) => (
+                  <li key={i} className="text-base font-semibold bg-white/10 rounded-lg px-3 py-1.5">
+                    {line}
+                  </li>
+                ))}
+              </ul>
+              <p className="text-xs text-white/75 mt-2">From the customer's note. Double-check you have these before you get to the door.</p>
+            </div>
+          );
+        })()}
         <div className="bg-white rounded-xl border p-4">
           <h2 className="font-semibold text-sm text-gray-500 uppercase tracking-wide mb-2">Delivery Address</h2>
           <div className="flex items-start gap-2">
@@ -210,7 +271,7 @@ export default function StopDetailPage() {
                 <CheckCircle className="h-3 w-3" /> Photo saved
               </p>
               <button
-                onClick={() => fileInputRef.current?.click()}
+                onClick={takeOptionalPhoto}
                 className="text-xs text-brand underline"
               >
                 Retake photo
@@ -261,27 +322,28 @@ export default function StopDetailPage() {
             )}
             {(stop.status === 'en_route' || stop.status === 'arrived') && (
               <>
-                {!proofUrl && !stop.proofUrl ? (
+                {/* Primary: quick hand-delivery, no photo. Most deliveries go this way. */}
+                <button
+                  onClick={() => updateStatus('delivered', { driverNote: note })}
+                  disabled={updating || uploadingPhoto}
+                  className="w-full bg-green-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  <CheckCircle className="h-5 w-5" />
+                  {proofUrl || stop.proofUrl ? 'Mark as Delivered (with photo)' : 'Mark as Delivered'}
+                </button>
+                {/* Secondary: capture photo + deliver + SMS the customer the photo link. */}
+                {!proofUrl && !stop.proofUrl && (
                   <button
                     onClick={deliverWithPhoto}
                     disabled={updating || uploadingPhoto}
-                    className="w-full bg-green-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50"
+                    className="w-full bg-white border-2 border-green-600 text-green-700 py-3 rounded-xl font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
                   >
                     {uploadingPhoto ? (
-                      <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
+                      <div className="animate-spin rounded-full h-5 w-5 border-2 border-green-600 border-t-transparent" />
                     ) : (
                       <Camera className="h-5 w-5" />
                     )}
-                    {uploadingPhoto ? 'Uploading & Delivering…' : 'Take Photo & Deliver'}
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => updateStatus('delivered', { driverNote: note })}
-                    disabled={updating}
-                    className="w-full bg-green-600 text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50"
-                  >
-                    <CheckCircle className="h-5 w-5" />
-                    Mark as Delivered
+                    {uploadingPhoto ? 'Uploading & Delivering…' : 'Deliver with Photo & Send'}
                   </button>
                 )}
                 <button

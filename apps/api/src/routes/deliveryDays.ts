@@ -261,8 +261,13 @@ app.post('/:id/generate-stops', async (c) => {
   const existingRuns = await db.select().from(deliveryRuns).where(eq(deliveryRuns.deliveryDayId, dayId));
   if (existingRuns.length === 0) {
     // Only auto-create if no runs exist yet for this day
+    // Include users with role='driver' or any user with canDrive=true.
+    const { or } = await import('drizzle-orm');
     const activeDrivers = await db.select().from(users)
-      .where(and(eq(users.role, 'driver'), eq(users.active, true)));
+      .where(and(
+        or(eq(users.role, 'driver'), eq(users.canDrive, true)),
+        eq(users.active, true),
+      ));
 
     const RUN_COLORS = ['#1B3A2E', '#4E7732', '#2563EB', '#7C3AED', '#DC2626', '#EA580C', '#0891B2', '#BE185D'];
     let runSeq = 0;

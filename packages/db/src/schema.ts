@@ -8,6 +8,10 @@ export const users = sqliteTable('users', {
   name: text('name').notNull().default(''),
   role: text('role').notNull().default('staff'), // 'admin' | 'staff' | 'driver'
   active: integer('active', { mode: 'boolean' }).notNull().default(true),
+  // When true, this user appears in driver lists and is allowed to use the
+  // driver app even if role is not 'driver' (e.g. Seamus is role='admin' but
+  // also drives). Implicitly true for role='driver' users.
+  canDrive: integer('can_drive', { mode: 'boolean' }).notNull().default(false),
   phone: text('phone'),
   address: text('address'),
   vehicleInfo: text('vehicle_info'),

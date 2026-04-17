@@ -14,7 +14,10 @@ app.get('/', async (c) => {
 
 app.get('/drivers', async (c) => {
   const db = drizzle(c.env.DB);
-  const rows = await db.select().from(users).where(eq(users.role, 'driver'));
+  // Include users with role='driver' *or* role='admin'/'staff' who have
+  // canDrive=true (e.g. Seamus drives but is role='admin').
+  const { or } = await import('drizzle-orm');
+  const rows = await db.select().from(users).where(or(eq(users.role, 'driver'), eq(users.canDrive, true)));
   return c.json(rows);
 });
 

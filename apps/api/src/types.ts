@@ -18,6 +18,9 @@ export interface Env {
   FB_PAGE_ACCESS_TOKEN: string;
   SQUARE_ACCESS_TOKEN: string;
   SQUARE_LOCATION_ID: string;
+  CLICKSEND_USERNAME: string;
+  CLICKSEND_API_KEY: string;
+  CLICKSEND_FROM: string;
 }
 
 export type UserRole = 'admin' | 'staff' | 'driver';

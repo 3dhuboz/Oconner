@@ -5,6 +5,7 @@ import type { Stop, Order } from '@butcher/shared';
 import { toast } from '../lib/toast';
 import DeliveryRunsTab from './DeliveryRunsTab';
 import StockAllocationTab from '../components/StockAllocationTab';
+import LiveDeliveryTracker from '../components/LiveDeliveryTracker';
 import {
   ArrowLeft, Route, Printer, Bell, Package, FileText,
   CheckCircle, Clock, Navigation, AlertTriangle, User, Camera,
@@ -62,7 +63,7 @@ function optimizeWithConstraints(
   const AVG_SPEED_KMH = 80; // average regional driving speed
   const ROAD_FACTOR = 1.3; // roads are ~30% longer than straight line
 
-  let sorted = furthestToClosestRoute([...stops]);
+  let sorted = antiClockwiseOutwardRoute([...stops]);
   const geoPos: Record<string, number> = {};
   sorted.forEach((s, i) => { geoPos[s.id!] = i; });
 
@@ -152,13 +153,53 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-/** Sort stops from furthest to closest relative to depot */
-function furthestToClosestRoute(stops: Stop[]): Stop[] {
-  return [...stops].sort((a, b) => {
-    const distA = (a.lat && a.lng) ? haversineKm(DEPOT_LAT, DEPOT_LNG, a.lat, a.lng) : 0;
-    const distB = (b.lat && b.lng) ? haversineKm(DEPOT_LAT, DEPOT_LNG, b.lat, b.lng) : 0;
-    return distB - distA; // furthest first
-  });
+/** Compass bearing (0–360°) from point A to point B, measured clockwise from north. */
+function bearingDeg(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const toRad = Math.PI / 180;
+  const y = Math.sin((lng2 - lng1) * toRad) * Math.cos(lat2 * toRad);
+  const x = Math.cos(lat1 * toRad) * Math.sin(lat2 * toRad) -
+            Math.sin(lat1 * toRad) * Math.cos(lat2 * toRad) * Math.cos((lng2 - lng1) * toRad);
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+
+/**
+ * Sort stops in an anti-clockwise spiral outward from the depot.
+ *
+ * Seamus prefers to start close to base and end furthest away, running
+ * anti-clockwise in between. To guarantee both endpoints:
+ *   - First stop is hard-locked to the nearest (by haversine) to depot.
+ *   - Last stop is hard-locked to the furthest.
+ *   - Middle stops are sorted by anti-clockwise angular distance from the
+ *     first stop's bearing (around depot). Anti-clockwise = decreasing
+ *     compass bearing, so AC angular distance = (startBearing - stopBearing + 360) % 360.
+ *
+ * Stops missing lat/lng fall back to 0 distance/bearing — they'll sort to
+ * the front but the admin can manually reorder using the chevrons.
+ */
+function antiClockwiseOutwardRoute(stops: Stop[]): Stop[] {
+  if (stops.length <= 1) return [...stops];
+
+  const annotated = stops.map((s) => ({
+    stop: s,
+    dist: (s.lat && s.lng) ? haversineKm(DEPOT_LAT, DEPOT_LNG, s.lat, s.lng) : 0,
+    bearing: (s.lat && s.lng) ? bearingDeg(DEPOT_LAT, DEPOT_LNG, s.lat, s.lng) : 0,
+  }));
+
+  const start = annotated.reduce((a, b) => a.dist < b.dist ? a : b);
+  const end = annotated.reduce((a, b) => a.dist > b.dist ? a : b);
+
+  // Only two stops, or nearest == furthest (e.g. 1 valid stop): just return ordered list.
+  if (stops.length === 2 || start === end) {
+    const rest = annotated.filter((a) => a !== start);
+    return [start.stop, ...rest.map((a) => a.stop)];
+  }
+
+  const middle = annotated
+    .filter((a) => a !== start && a !== end)
+    .map((a) => ({ ...a, acDist: (start.bearing - a.bearing + 360) % 360 }))
+    .sort((a, b) => a.acDist - b.acDist);
+
+  return [start.stop, ...middle.map((m) => m.stop), end.stop];
 }
 
 const STATUS_CONFIG: Record<string, { label: string; icon: any; cls: string }> = {
@@ -351,6 +392,7 @@ export default function DeliveryManifestPage() {
       )}
 
       {activeTab === 'manifest' && (<>
+      {dayId && <LiveDeliveryTracker dayId={dayId} initialStops={stops} />}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         {[
           { label: 'Total Stops', value: total, icon: Package },
@@ -523,7 +565,7 @@ export default function DeliveryManifestPage() {
                 <div className="px-5 pb-4 space-y-2">
                   <div className="bg-indigo-50 rounded-lg p-3 text-xs text-indigo-800 leading-relaxed">
                     <p className="font-semibold mb-1">Step 1 — Furthest to closest</p>
-                    <p>Stops are sorted by distance from the depot, starting with the furthest delivery and working back towards base. This ensures the driver covers the longest distance first and finishes close to home.</p>
+                    <p>The run starts at the stop closest to base and spirals anti-clockwise around the depot, finishing at the stop furthest away. Middle stops are ordered by their bearing from base so the driver moves in one continuous anti-clockwise loop. Time-window constraints (from delivery notes) can shift stops earlier if needed.</p>
                   </div>
                   <div className="bg-indigo-50 rounded-lg p-3 text-xs text-indigo-800 leading-relaxed">
                     <p className="font-semibold mb-1">Step 2 — Customer time window constraints</p>
@@ -981,3 +1023,6 @@ function RouteMap({ stops, depotLat, depotLng }: { stops: { lat?: number; lng?: 
 
   return <div ref={mapRef} style={{ height: 400 }} className="bg-gray-200 rounded-none" />;
 }
+
+// LiveDeliveryTracker was extracted to ../components/LiveDeliveryTracker.tsx
+// so it can be reused from the Dashboard. See that file.

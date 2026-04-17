@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api, formatCurrency } from '@butcher/shared';
 import type { Order } from '@butcher/shared';
 import { ShoppingBag, DollarSign, Truck, Package, Clock, CalendarDays } from 'lucide-react';
+import LiveDeliveryTracker from '../components/LiveDeliveryTracker';
 
 interface Stats {
   totalOrders: number;
@@ -76,6 +77,8 @@ export default function DashboardPage() {
   return (
     <div>
       <h1 className="text-2xl font-bold text-brand mb-6">Dashboard</h1>
+      {/* Auto-hides when no driver run is in progress. */}
+      <LiveDeliveryTracker />
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {cards.map(({ label, value, icon: Icon, color }) => (
           <div key={label} className="bg-white rounded-xl border p-5 flex items-center gap-4">

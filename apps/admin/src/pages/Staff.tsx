@@ -7,8 +7,10 @@ interface StaffUser {
   id: string;
   email: string;
   name: string;
+  phone?: string | null;
   role: 'admin' | 'staff';
   active: boolean;
+  canDrive?: boolean;
   createdAt: number;
 }
 
@@ -89,8 +91,10 @@ export default function StaffPage() {
       await api.users.update(editing.id!, {
         name: editing.name,
         email: editing.email,
+        phone: editing.phone ?? null,
         role: editing.role,
         active: editing.active,
+        canDrive: editing.canDrive ?? false,
       });
       load(); close();
     } catch (e: any) {
@@ -171,6 +175,7 @@ export default function StaffPage() {
                 <td className="px-4 py-3">
                   <p className="font-medium">{u.name}</p>
                   <p className="text-xs text-gray-400">{u.email}</p>
+                  {u.phone && <p className="text-xs text-gray-400">{u.phone}</p>}
                 </td>
                 <td className="px-4 py-3">
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${ROLE_BADGE[u.role] ?? 'bg-gray-100 text-gray-600'}`}>
@@ -266,6 +271,17 @@ export default function StaffPage() {
             <input className={inp} type="email" value={editing.email ?? ''} onChange={(e) => setEdit('email', e.target.value)} />
           </div>
           <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Mobile phone</label>
+            <input
+              className={inp}
+              type="tel"
+              placeholder="+61400000000"
+              value={editing.phone ?? ''}
+              onChange={(e) => setEdit('phone', e.target.value)}
+            />
+            <p className="text-[11px] text-gray-400 mt-1">Used for driver ops SMS (GPS issues, run alerts). Enter in +61 format.</p>
+          </div>
+          <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Role</label>
             <select className={inp} value={editing.role ?? 'staff'} onChange={(e) => setEdit('role', e.target.value)}>
               <option value="staff">Staff</option>
@@ -275,6 +291,11 @@ export default function StaffPage() {
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" className="accent-brand" checked={!!editing.active} onChange={(e) => setEdit('active', e.target.checked)} />
             <span className="text-sm font-medium text-gray-700">Account active</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" className="accent-brand" checked={!!editing.canDrive} onChange={(e) => setEdit('canDrive', e.target.checked)} />
+            <span className="text-sm font-medium text-gray-700">Can drive deliveries</span>
+            <span className="text-xs text-gray-400 ml-1">(appears in driver lists and can use the driver app)</span>
           </label>
           {error && <p className="text-red-600 text-sm">{error}</p>}
           <div className="flex justify-end gap-2 pt-2">
