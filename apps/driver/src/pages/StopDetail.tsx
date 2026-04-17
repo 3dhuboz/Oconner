@@ -2,8 +2,33 @@ import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '@butcher/shared';
 import type { Stop, StopStatus } from '@butcher/shared';
-import { ArrowLeft, MapPin, Phone, Navigation, CheckCircle, Camera, AlertTriangle, ChevronRight, Undo2 } from 'lucide-react';
+import { ArrowLeft, MapPin, Phone, Navigation, CheckCircle, Camera, AlertTriangle, ChevronRight, Undo2, PackagePlus } from 'lucide-react';
 import { formatWeight } from '@butcher/shared';
+
+/**
+ * Detect offal/suet/bones add-on requests typed into the free-text customer
+ * note during checkout. Returns the matched excerpts so the driver can see
+ * exactly what was asked for ("Suet 2kg") rather than just a generic flag.
+ * Used to render a prominent red banner on StopDetail so these add-ons don't
+ * get missed when loading the ute.
+ */
+const ADDON_KEYWORDS = [
+  'offal', 'suet', 'liver', 'kidney', 'kidneys',
+  'heart', 'hearts', 'tongue', 'tripe', 'brain', 'brains',
+  'oxtail', 'marrow', 'bones', 'trotter', 'trotters',
+];
+function detectAddOns(note: string | null | undefined): string[] {
+  if (!note) return [];
+  const lines = note.split(/[,;\n]+|\.\s+/g).map((s) => s.trim()).filter(Boolean);
+  const matched: string[] = [];
+  for (const line of lines) {
+    const lower = line.toLowerCase();
+    if (ADDON_KEYWORDS.some((k) => new RegExp(`\\b${k}\\b`, 'i').test(lower))) {
+      matched.push(line);
+    }
+  }
+  return matched;
+}
 
 export default function StopDetailPage() {
   const { stopId } = useParams<{ stopId: string }>();
@@ -173,6 +198,26 @@ export default function StopDetailPage() {
       </header>
 
       <main className="flex-1 overflow-y-auto p-4 space-y-4">
+        {(() => {
+          const addOns = detectAddOns(stop.customerNote);
+          if (addOns.length === 0) return null;
+          return (
+            <div className="bg-red-600 text-white rounded-xl p-4 shadow-md">
+              <div className="flex items-center gap-2 mb-2">
+                <PackagePlus className="h-5 w-5" />
+                <h2 className="font-bold uppercase tracking-wide text-sm">Add-ons to load</h2>
+              </div>
+              <ul className="space-y-1">
+                {addOns.map((line, i) => (
+                  <li key={i} className="text-base font-semibold bg-white/10 rounded-lg px-3 py-1.5">
+                    {line}
+                  </li>
+                ))}
+              </ul>
+              <p className="text-xs text-white/75 mt-2">From the customer's note. Double-check you have these before you get to the door.</p>
+            </div>
+          );
+        })()}
         <div className="bg-white rounded-xl border p-4">
           <h2 className="font-semibold text-sm text-gray-500 uppercase tracking-wide mb-2">Delivery Address</h2>
           <div className="flex items-start gap-2">
