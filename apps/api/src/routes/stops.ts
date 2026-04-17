@@ -64,19 +64,35 @@ app.patch('/:id/status', async (c) => {
   const stopId = c.req.param('id');
   const now = Date.now();
 
+  // Read prior state so we can handle undo (terminal -> non-terminal) cleanly.
+  const [priorStop] = await db.select().from(stops).where(eq(stops.id, stopId)).limit(1);
+  const wasTerminal = priorStop?.status === 'delivered' || priorStop?.status === 'failed';
+  const isTerminal = status === 'delivered' || status === 'failed';
+  const isUndo = wasTerminal && !isTerminal;
+
   const patch: Partial<typeof stops.$inferInsert> = { status };
   if (driverNote !== undefined) patch.driverNote = driverNote;
   if (flagReason !== undefined) patch.flagReason = flagReason;
   if (proofUrl !== undefined) patch.proofUrl = proofUrl;
-  if (status === 'delivered' || status === 'failed') patch.completedAt = now;
+  if (isTerminal) patch.completedAt = now;
+  if (isUndo) {
+    // Reverting an accidental delivered/failed — clear terminal markers so the UI treats it as active again.
+    patch.completedAt = null;
+    if (priorStop?.status === 'delivered') patch.proofUrl = null;
+  }
 
   await db.update(stops).set(patch).where(eq(stops.id, stopId));
 
-  // Get the current stop for context
+  // Get the current stop for context (post-update)
   const [currentStop] = await db.select().from(stops).where(eq(stops.id, stopId)).limit(1);
 
   if (status === 'delivered' && currentStop) {
     await db.update(orders).set({ status: 'delivered', proofUrl: proofUrl ?? null, updatedAt: now }).where(eq(orders.id, currentStop.orderId));
+  }
+
+  // If undoing a previously-delivered stop, revert the linked order from delivered -> out_for_delivery
+  if (isUndo && priorStop?.status === 'delivered' && currentStop) {
+    await db.update(orders).set({ status: 'out_for_delivery', proofUrl: null, updatedAt: now }).where(eq(orders.id, currentStop.orderId));
   }
 
   // Notify next customer that driver is on the way

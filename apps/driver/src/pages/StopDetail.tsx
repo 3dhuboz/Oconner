@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '@butcher/shared';
 import type { Stop, StopStatus } from '@butcher/shared';
-import { ArrowLeft, MapPin, Phone, Navigation, CheckCircle, Camera, AlertTriangle, ChevronRight } from 'lucide-react';
+import { ArrowLeft, MapPin, Phone, Navigation, CheckCircle, Camera, AlertTriangle, ChevronRight, Undo2 } from 'lucide-react';
 import { formatWeight } from '@butcher/shared';
 
 export default function StopDetailPage() {
@@ -84,6 +84,26 @@ export default function StopDetailPage() {
     if (status === 'delivered' || status === 'failed') {
       goToNextOrHome();
     }
+  };
+
+  // Undo a mistap on "Delivered" or "Cannot Deliver". Resets the stop to en_route so the driver
+  // can re-deliver it. Server clears completedAt and reverts the order status if needed.
+  const undoStatus = async () => {
+    if (!stopId || !stop) return;
+    setUpdating(true);
+    try {
+      await api.stops.updateStatus(stopId, { status: 'en_route' });
+      setProofUrl(null);
+      setStop((s) => s ? { ...s, status: 'en_route' as StopStatus, proofUrl: undefined } : s);
+      setAllStops((prev) => prev.map((s) => s.id === stopId ? { ...s, status: 'en_route' as StopStatus, proofUrl: undefined } : s));
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const confirmCannotDeliver = () => {
+    if (!window.confirm(`Mark ${stop?.customerName ?? 'this stop'} as failed? You can undo this after.`)) return;
+    updateStatus('failed', { failReason: note || 'No answer', driverNote: note });
   };
 
   const deliverWithPhoto = () => {
@@ -265,7 +285,7 @@ export default function StopDetailPage() {
                   </button>
                 )}
                 <button
-                  onClick={() => updateStatus('failed', { failReason: note || 'No answer', driverNote: note })}
+                  onClick={confirmCannotDeliver}
                   disabled={updating}
                   className="w-full bg-red-100 text-red-700 py-3 rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50"
                 >
@@ -299,6 +319,14 @@ export default function StopDetailPage() {
                 All Deliveries Complete
               </button>
             )}
+            <button
+              onClick={undoStatus}
+              disabled={updating}
+              className="w-full bg-white border border-gray-300 text-gray-700 py-2.5 rounded-xl font-medium flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              <Undo2 className="h-4 w-4" />
+              Undo — mark as not delivered
+            </button>
           </div>
         )}
         {stop.status === 'failed' && (
@@ -323,6 +351,14 @@ export default function StopDetailPage() {
                 Back to Run
               </button>
             )}
+            <button
+              onClick={undoStatus}
+              disabled={updating}
+              className="w-full bg-white border border-gray-300 text-gray-700 py-2.5 rounded-xl font-medium flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              <Undo2 className="h-4 w-4" />
+              Undo — not actually failed
+            </button>
           </div>
         )}
       </div>
