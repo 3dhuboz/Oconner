@@ -1,9 +1,18 @@
 import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/d1';
 import { eq, asc, and, isNull, gt } from 'drizzle-orm';
-import { stops, orders, driverSessions } from '@butcher/db';
+import { stops, orders, driverSessions, notifications } from '@butcher/db';
 import { notifyCustomer } from './push';
+import { sendSms } from '../lib/sms';
 import type { Env, AuthUser } from '../types';
+
+/** True if we've already recorded a successful notification of this (orderId,type). Used to dedupe SMS across undo/redo. */
+async function alreadySent(db: ReturnType<typeof drizzle>, orderId: string, type: string): Promise<boolean> {
+  const [row] = await db.select().from(notifications)
+    .where(and(eq(notifications.orderId, orderId), eq(notifications.type, type), eq(notifications.status, 'sent')))
+    .limit(1);
+  return !!row;
+}
 
 const app = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
 
@@ -88,6 +97,28 @@ app.patch('/:id/status', async (c) => {
 
   if (status === 'delivered' && currentStop) {
     await db.update(orders).set({ status: 'delivered', proofUrl: proofUrl ?? null, updatedAt: now }).where(eq(orders.id, currentStop.orderId));
+
+    // If the driver attached a proof photo, SMS the customer a link to it.
+    // Only customers with a phone number get this; dedup via notifications table so undo+redo doesn't double-send.
+    if (proofUrl && currentStop.customerPhone && currentStop.orderId
+        && !(await alreadySent(db, currentStop.orderId, 'delivered_with_photo'))) {
+      const storefrontUrl = c.env.STOREFRONT_URL || 'https://oconnoragriculture.com.au';
+      const trackingUrl = `${storefrontUrl}/track/${currentStop.orderId}`;
+      const firstName = (currentStop.customerName ?? '').trim().split(/\s+/)[0] || 'there';
+      const smsBody = `Hi ${firstName}, your O'Connor Agriculture delivery has arrived. Proof photo: ${trackingUrl}`;
+      const result = await sendSms(c.env, currentStop.customerPhone, smsBody);
+      await db.insert(notifications).values({
+        id: crypto.randomUUID(),
+        orderId: currentStop.orderId,
+        customerId: currentStop.customerId,
+        type: 'delivered_with_photo',
+        status: result.ok ? 'sent' : 'failed',
+        recipientEmail: currentStop.customerPhone, // table field is misnamed; stores whatever channel identifier was used
+        resendId: result.messageId ?? null,
+        error: result.error ?? null,
+        sentAt: now,
+      });
+    }
   }
 
   // If undoing a previously-delivered stop, revert the linked order from delivered -> out_for_delivery
@@ -111,16 +142,38 @@ app.patch('/:id/status', async (c) => {
       await db.update(stops).set({ status: 'en_route' }).where(eq(stops.id, nextStop.id));
       // Update the order to out_for_delivery
       await db.update(orders).set({ status: 'out_for_delivery', updatedAt: now }).where(eq(orders.id, nextStop.orderId));
-      // Send push notification to the next customer
+
       const storefrontUrl = c.env.STOREFRONT_URL || 'https://oconnoragriculture.com.au';
+      const trackingUrl = nextStop.orderId ? `${storefrontUrl}/track/${nextStop.orderId}` : storefrontUrl;
+
+      // Send push notification to the next customer (best-effort; silently no-ops if not subscribed)
       try {
         await notifyCustomer(db, nextStop.customerId, {
           title: "O'Connor Agriculture — Driver On The Way",
           body: 'Your delivery is next! Track your driver live.',
-          url: `${storefrontUrl}/track/${nextStop.orderId}`,
+          url: trackingUrl,
         }, c.env);
       } catch {
         // best-effort — don't fail the stop update
+      }
+
+      // SMS the next customer (ClickSend). Dedup'd via notifications table so undo+redo can't double-send.
+      if (nextStop.customerPhone && nextStop.orderId
+          && !(await alreadySent(db, nextStop.orderId, 'sms_pre_alert'))) {
+        const firstName = (nextStop.customerName ?? '').trim().split(/\s+/)[0] || 'there';
+        const smsBody = `Hi ${firstName}, your O'Connor Agriculture delivery is next — the driver is on the way. Track: ${trackingUrl}`;
+        const result = await sendSms(c.env, nextStop.customerPhone, smsBody);
+        await db.insert(notifications).values({
+          id: crypto.randomUUID(),
+          orderId: nextStop.orderId,
+          customerId: nextStop.customerId,
+          type: 'sms_pre_alert',
+          status: result.ok ? 'sent' : 'failed',
+          recipientEmail: nextStop.customerPhone,
+          resendId: result.messageId ?? null,
+          error: result.error ?? null,
+          sentAt: now,
+        });
       }
     }
   }
