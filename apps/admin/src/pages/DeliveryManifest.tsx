@@ -62,7 +62,7 @@ function optimizeWithConstraints(
   const AVG_SPEED_KMH = 80; // average regional driving speed
   const ROAD_FACTOR = 1.3; // roads are ~30% longer than straight line
 
-  let sorted = furthestToClosestRoute([...stops]);
+  let sorted = antiClockwiseOutwardRoute([...stops]);
   const geoPos: Record<string, number> = {};
   sorted.forEach((s, i) => { geoPos[s.id!] = i; });
 
@@ -152,13 +152,53 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-/** Sort stops from furthest to closest relative to depot */
-function furthestToClosestRoute(stops: Stop[]): Stop[] {
-  return [...stops].sort((a, b) => {
-    const distA = (a.lat && a.lng) ? haversineKm(DEPOT_LAT, DEPOT_LNG, a.lat, a.lng) : 0;
-    const distB = (b.lat && b.lng) ? haversineKm(DEPOT_LAT, DEPOT_LNG, b.lat, b.lng) : 0;
-    return distB - distA; // furthest first
-  });
+/** Compass bearing (0–360°) from point A to point B, measured clockwise from north. */
+function bearingDeg(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const toRad = Math.PI / 180;
+  const y = Math.sin((lng2 - lng1) * toRad) * Math.cos(lat2 * toRad);
+  const x = Math.cos(lat1 * toRad) * Math.sin(lat2 * toRad) -
+            Math.sin(lat1 * toRad) * Math.cos(lat2 * toRad) * Math.cos((lng2 - lng1) * toRad);
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+
+/**
+ * Sort stops in an anti-clockwise spiral outward from the depot.
+ *
+ * Seamus prefers to start close to base and end furthest away, running
+ * anti-clockwise in between. To guarantee both endpoints:
+ *   - First stop is hard-locked to the nearest (by haversine) to depot.
+ *   - Last stop is hard-locked to the furthest.
+ *   - Middle stops are sorted by anti-clockwise angular distance from the
+ *     first stop's bearing (around depot). Anti-clockwise = decreasing
+ *     compass bearing, so AC angular distance = (startBearing - stopBearing + 360) % 360.
+ *
+ * Stops missing lat/lng fall back to 0 distance/bearing — they'll sort to
+ * the front but the admin can manually reorder using the chevrons.
+ */
+function antiClockwiseOutwardRoute(stops: Stop[]): Stop[] {
+  if (stops.length <= 1) return [...stops];
+
+  const annotated = stops.map((s) => ({
+    stop: s,
+    dist: (s.lat && s.lng) ? haversineKm(DEPOT_LAT, DEPOT_LNG, s.lat, s.lng) : 0,
+    bearing: (s.lat && s.lng) ? bearingDeg(DEPOT_LAT, DEPOT_LNG, s.lat, s.lng) : 0,
+  }));
+
+  const start = annotated.reduce((a, b) => a.dist < b.dist ? a : b);
+  const end = annotated.reduce((a, b) => a.dist > b.dist ? a : b);
+
+  // Only two stops, or nearest == furthest (e.g. 1 valid stop): just return ordered list.
+  if (stops.length === 2 || start === end) {
+    const rest = annotated.filter((a) => a !== start);
+    return [start.stop, ...rest.map((a) => a.stop)];
+  }
+
+  const middle = annotated
+    .filter((a) => a !== start && a !== end)
+    .map((a) => ({ ...a, acDist: (start.bearing - a.bearing + 360) % 360 }))
+    .sort((a, b) => a.acDist - b.acDist);
+
+  return [start.stop, ...middle.map((m) => m.stop), end.stop];
 }
 
 const STATUS_CONFIG: Record<string, { label: string; icon: any; cls: string }> = {
@@ -351,6 +391,7 @@ export default function DeliveryManifestPage() {
       )}
 
       {activeTab === 'manifest' && (<>
+      {dayId && <LiveDeliveryTracker dayId={dayId} stops={stops} depotLat={DEPOT_LAT} depotLng={DEPOT_LNG} />}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         {[
           { label: 'Total Stops', value: total, icon: Package },
@@ -523,7 +564,7 @@ export default function DeliveryManifestPage() {
                 <div className="px-5 pb-4 space-y-2">
                   <div className="bg-indigo-50 rounded-lg p-3 text-xs text-indigo-800 leading-relaxed">
                     <p className="font-semibold mb-1">Step 1 — Furthest to closest</p>
-                    <p>Stops are sorted by distance from the depot, starting with the furthest delivery and working back towards base. This ensures the driver covers the longest distance first and finishes close to home.</p>
+                    <p>The run starts at the stop closest to base and spirals anti-clockwise around the depot, finishing at the stop furthest away. Middle stops are ordered by their bearing from base so the driver moves in one continuous anti-clockwise loop. Time-window constraints (from delivery notes) can shift stops earlier if needed.</p>
                   </div>
                   <div className="bg-indigo-50 rounded-lg p-3 text-xs text-indigo-800 leading-relaxed">
                     <p className="font-semibold mb-1">Step 2 — Customer time window constraints</p>
@@ -980,4 +1021,219 @@ function RouteMap({ stops, depotLat, depotLng }: { stops: { lat?: number; lng?: 
   }, [stops, depotLat, depotLng]);
 
   return <div ref={mapRef} style={{ height: 400 }} className="bg-gray-200 rounded-none" />;
+}
+
+interface ActiveDriverSession {
+  id: string;
+  driverName: string;
+  deliveryDayId: string;
+  lastLat: number;
+  lastLng: number;
+  lastUpdated: number;
+  active: boolean;
+  completedStops?: number;
+  totalStops?: number;
+}
+
+/**
+ * Live tracker for an in-progress delivery run. Polls every 10s and shows:
+ *   - Google Map with depot, stop markers colour-coded by status, driver truck
+ *   - Progress counter + last-ping timestamp
+ *   - Gracefully hides when no active driver session exists for this day
+ *
+ * The driver's GPS pings update driver_sessions.lastLat/lastLng from the
+ * driver app. If Seamus denies location permission, lastLat/lastLng stay at
+ * 0 — we treat that as "no position yet" and hide the truck marker.
+ */
+function LiveDeliveryTracker({ dayId, stops: initialStops, depotLat, depotLng }: {
+  dayId: string;
+  stops: Stop[];
+  depotLat: number;
+  depotLng: number;
+}) {
+  const mapRef = useRef<HTMLDivElement>(null);
+  const mapInstanceRef = useRef<any>(null);
+  const [session, setSession] = useState<ActiveDriverSession | null>(null);
+  const [stops, setStops] = useState<Stop[]>(initialStops);
+  const [tick, setTick] = useState(0); // force re-render of "last ping" text
+
+  // Keep local stops in sync with parent's initial fetch.
+  useEffect(() => { setStops(initialStops); }, [initialStops]);
+
+  // Poll active driver session AND live stops for this day.
+  useEffect(() => {
+    let cancelled = false;
+    const fetchAll = async () => {
+      try {
+        const [allSessions, freshStops] = await Promise.all([
+          api.drivers.activeSessions() as Promise<ActiveDriverSession[]>,
+          api.stops.list(dayId) as Promise<Stop[]>,
+        ]);
+        if (cancelled) return;
+        const forThisDay = allSessions.find((s) => s.deliveryDayId === dayId && s.active);
+        setSession(forThisDay ?? null);
+        if (freshStops) setStops(freshStops);
+      } catch {
+        // best-effort
+      }
+    };
+    fetchAll();
+    const interval = setInterval(fetchAll, 10_000);
+    const tickInterval = setInterval(() => setTick((t) => t + 1), 30_000);
+    return () => { cancelled = true; clearInterval(interval); clearInterval(tickInterval); };
+  }, [dayId]);
+
+  // Render map whenever session or stops change
+  useEffect(() => {
+    if (!session || !mapRef.current) return;
+    const geoStops = stops.filter((s) => s.lat && s.lng);
+    if (geoStops.length === 0) return;
+
+    const initMap = () => {
+      const google = (window as any).google;
+      if (!google?.maps) return;
+
+      if (!mapInstanceRef.current) {
+        mapInstanceRef.current = new google.maps.Map(mapRef.current!, {
+          mapTypeId: 'roadmap',
+          mapTypeControl: false,
+          streetViewControl: false,
+          fullscreenControl: true,
+          zoom: 11,
+          center: { lat: depotLat, lng: depotLng },
+        });
+      }
+      const map = mapInstanceRef.current;
+
+      // Fit bounds around depot + stops + driver (if positioned)
+      const bounds = new google.maps.LatLngBounds();
+      bounds.extend({ lat: depotLat, lng: depotLng });
+      geoStops.forEach((s) => bounds.extend({ lat: s.lat!, lng: s.lng! }));
+      const hasDriverPosition = session.lastLat !== 0 && session.lastLng !== 0;
+      if (hasDriverPosition) bounds.extend({ lat: session.lastLat, lng: session.lastLng });
+      map.fitBounds(bounds, 60);
+
+      // Clear existing markers
+      if ((map as any)._markers) (map as any)._markers.forEach((m: any) => m.setMap(null));
+      (map as any)._markers = [];
+
+      // Depot
+      const depotMarker = new google.maps.Marker({
+        position: { lat: depotLat, lng: depotLng },
+        map,
+        label: { text: '🏠', fontSize: '16px' },
+        title: 'Depot — Boynedale',
+        zIndex: 1000,
+      });
+      (map as any)._markers.push(depotMarker);
+
+      // Stops (coloured by status)
+      const STATUS_COLOR: Record<string, string> = {
+        delivered: '#16a34a',    // green
+        en_route: '#2563eb',      // blue
+        arrived: '#ea580c',       // orange
+        pending: '#9ca3af',       // gray
+        failed: '#dc2626',        // red
+      };
+      geoStops.forEach((s) => {
+        const colour = STATUS_COLOR[s.status] ?? '#9ca3af';
+        const marker = new google.maps.Marker({
+          position: { lat: s.lat!, lng: s.lng! },
+          map,
+          label: { text: String(s.sequence ?? ''), color: 'white', fontWeight: 'bold', fontSize: '11px' },
+          icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 13,
+            fillColor: colour,
+            fillOpacity: 1,
+            strokeColor: 'white',
+            strokeWeight: 2,
+          },
+          title: `${s.sequence}. ${s.customerName} — ${s.status}`,
+          zIndex: 500 + (s.sequence ?? 0),
+        });
+        (map as any)._markers.push(marker);
+      });
+
+      // Driver truck (only if GPS has pinged)
+      if (hasDriverPosition) {
+        const driverMarker = new google.maps.Marker({
+          position: { lat: session.lastLat, lng: session.lastLng },
+          map,
+          label: { text: '🚚', fontSize: '20px' },
+          title: `${session.driverName} — last update ${new Date(session.lastUpdated).toLocaleTimeString()}`,
+          zIndex: 2000,
+          animation: google.maps.Animation.DROP,
+        });
+        (map as any)._markers.push(driverMarker);
+      }
+    };
+
+    if ((window as any).google?.maps) {
+      initMap();
+    } else {
+      const existing = document.querySelector('script[src*="maps.googleapis.com"]');
+      if (!existing) {
+        const script = document.createElement('script');
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_KEY}`;
+        script.async = true;
+        script.onload = initMap;
+        document.head.appendChild(script);
+      } else {
+        const check = setInterval(() => {
+          if ((window as any).google?.maps) { clearInterval(check); initMap(); }
+        }, 200);
+        setTimeout(() => clearInterval(check), 10000);
+      }
+    }
+  }, [session, stops, depotLat, depotLng]);
+
+  if (!session) return null;
+
+  const delivered = stops.filter((s) => s.status === 'delivered').length;
+  const failed = stops.filter((s) => s.status === 'failed').length;
+  const total = stops.length;
+  const pct = total > 0 ? Math.round(((delivered + failed) / total) * 100) : 0;
+
+  const hasDriverPosition = session.lastLat !== 0 && session.lastLng !== 0;
+  const secondsSincePing = Math.round((Date.now() - session.lastUpdated) / 1000);
+  const pingAgo = !hasDriverPosition ? 'no GPS yet' :
+    secondsSincePing < 60 ? 'just now' :
+    secondsSincePing < 3600 ? `${Math.round(secondsSincePing / 60)}m ago` :
+    `${Math.round(secondsSincePing / 3600)}h ago`;
+  // tick is intentionally referenced so the pingAgo string re-renders every 30s
+  void tick;
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-green-200 mb-4 overflow-hidden">
+      <div className="bg-green-600 text-white px-5 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Navigation className="h-4 w-4" />
+          <span className="font-semibold">Live Delivery Run</span>
+          <span className="text-green-100 text-xs">· {session.driverName}</span>
+        </div>
+        <span className={`text-xs px-2 py-0.5 rounded-full ${hasDriverPosition ? 'bg-white/20' : 'bg-amber-500/90'}`}>
+          {hasDriverPosition ? `GPS · ${pingAgo}` : 'GPS not broadcasting'}
+        </span>
+      </div>
+      <div className="px-5 py-3 bg-gray-50 flex items-center gap-4 text-sm">
+        <div className="flex-1">
+          <div className="flex justify-between text-xs text-gray-600 mb-1">
+            <span>{delivered} delivered{failed > 0 ? `, ${failed} failed` : ''}</span>
+            <span className="font-medium">{pct}%</span>
+          </div>
+          <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+            <div className="h-full bg-green-500 transition-all" style={{ width: `${pct}%` }} />
+          </div>
+        </div>
+        <span className="text-gray-500 text-xs whitespace-nowrap">{delivered + failed} of {total}</span>
+      </div>
+      <div ref={mapRef} style={{ height: 380 }} className="bg-gray-200" />
+      {!hasDriverPosition && (
+        <div className="px-5 py-2 bg-amber-50 border-t border-amber-200 text-xs text-amber-800">
+          Driver hasn't sent a GPS position yet. Ask the driver to check location permission on their device.
+        </div>
+      )}
+    </div>
+  );
 }
