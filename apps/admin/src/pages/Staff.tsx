@@ -10,6 +10,7 @@ interface StaffUser {
   phone?: string | null;
   role: 'admin' | 'staff';
   active: boolean;
+  canDrive?: boolean;
   createdAt: number;
 }
 
@@ -93,6 +94,7 @@ export default function StaffPage() {
         phone: editing.phone ?? null,
         role: editing.role,
         active: editing.active,
+        canDrive: editing.canDrive ?? false,
       });
       load(); close();
     } catch (e: any) {
@@ -289,6 +291,11 @@ export default function StaffPage() {
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" className="accent-brand" checked={!!editing.active} onChange={(e) => setEdit('active', e.target.checked)} />
             <span className="text-sm font-medium text-gray-700">Account active</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" className="accent-brand" checked={!!editing.canDrive} onChange={(e) => setEdit('canDrive', e.target.checked)} />
+            <span className="text-sm font-medium text-gray-700">Can drive deliveries</span>
+            <span className="text-xs text-gray-400 ml-1">(appears in driver lists and can use the driver app)</span>
           </label>
           {error && <p className="text-red-600 text-sm">{error}</p>}
           <div className="flex justify-end gap-2 pt-2">

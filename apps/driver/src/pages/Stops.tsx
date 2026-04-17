@@ -53,6 +53,19 @@ export default function StopsPage() {
       });
   }, [deliveryDay?.id]);
 
+  // Restore an in-flight session on page load so a browser refresh doesn't
+  // orphan it (the server still thinks the session is active — without this
+  // the "End Day" button silently no-ops because sessionId is null).
+  useEffect(() => {
+    if (!deliveryDay?.id) return;
+    const key = `ocn-driver-session:${deliveryDay.id}`;
+    const stored = localStorage.getItem(key);
+    if (stored && !sessionId) {
+      setSessionId(stored);
+      setTrackingEnabled(true);
+    }
+  }, [deliveryDay?.id, sessionId]);
+
   const handleBeginRoute = async () => {
     if (!deliveryDay?.id || !user) return;
     const session = await api.drivers.startSession({
@@ -61,6 +74,7 @@ export default function StopsPage() {
     }) as { id: string };
     setSessionId(session.id);
     setTrackingEnabled(true);
+    try { localStorage.setItem(`ocn-driver-session:${deliveryDay.id}`, session.id); } catch {}
     // Navigate to first pending stop
     const sorted = [...stops].sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
     const firstPending = sorted.find((s) => s.status !== 'delivered' && s.status !== 'failed');
@@ -75,6 +89,9 @@ export default function StopsPage() {
     }
     setTrackingEnabled(false);
     setSessionId(null);
+    if (deliveryDay?.id) {
+      try { localStorage.removeItem(`ocn-driver-session:${deliveryDay.id}`); } catch {}
+    }
   };
 
   const delivered = stops.filter((s) => s.status === 'delivered').length;
