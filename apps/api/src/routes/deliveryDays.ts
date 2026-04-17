@@ -42,11 +42,16 @@ app.get('/', async (c) => {
 
 app.get('/today', async (c) => {
   const db = drizzle(c.env.DB);
-  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
-  const todayEnd = new Date(todayStart); todayEnd.setDate(todayEnd.getDate() + 1);
+  // Compute "today" in Brisbane (AEST = UTC+10, no DST in QLD). Workers run in UTC.
+  const BRISBANE_OFFSET_MS = 10 * 60 * 60 * 1000;
+  const nowBrisbaneMs = Date.now() + BRISBANE_OFFSET_MS;
+  const brisbaneDay = new Date(nowBrisbaneMs);
+  brisbaneDay.setUTCHours(0, 0, 0, 0);
+  const todayStartMs = brisbaneDay.getTime() - BRISBANE_OFFSET_MS; // Brisbane 00:00 expressed in UTC ms
+  const todayEndMs = todayStartMs + 24 * 60 * 60 * 1000;
   const { lt } = await import('drizzle-orm');
   const [day] = await db.select().from(deliveryDays)
-    .where(and(eq(deliveryDays.active, true), gte(deliveryDays.date, todayStart.getTime()), lt(deliveryDays.date, todayEnd.getTime())))
+    .where(and(eq(deliveryDays.active, true), gte(deliveryDays.date, todayStartMs), lt(deliveryDays.date, todayEndMs)))
     .limit(1);
   if (!day) return c.json({ error: 'No delivery day today' }, 404);
   return c.json(day);
