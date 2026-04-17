@@ -7,6 +7,7 @@ interface StaffUser {
   id: string;
   email: string;
   name: string;
+  phone?: string | null;
   role: 'admin' | 'staff';
   active: boolean;
   createdAt: number;
@@ -89,6 +90,7 @@ export default function StaffPage() {
       await api.users.update(editing.id!, {
         name: editing.name,
         email: editing.email,
+        phone: editing.phone ?? null,
         role: editing.role,
         active: editing.active,
       });
@@ -171,6 +173,7 @@ export default function StaffPage() {
                 <td className="px-4 py-3">
                   <p className="font-medium">{u.name}</p>
                   <p className="text-xs text-gray-400">{u.email}</p>
+                  {u.phone && <p className="text-xs text-gray-400">{u.phone}</p>}
                 </td>
                 <td className="px-4 py-3">
                   <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${ROLE_BADGE[u.role] ?? 'bg-gray-100 text-gray-600'}`}>
@@ -264,6 +267,17 @@ export default function StaffPage() {
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Email</label>
             <input className={inp} type="email" value={editing.email ?? ''} onChange={(e) => setEdit('email', e.target.value)} />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">Mobile phone</label>
+            <input
+              className={inp}
+              type="tel"
+              placeholder="+61400000000"
+              value={editing.phone ?? ''}
+              onChange={(e) => setEdit('phone', e.target.value)}
+            />
+            <p className="text-[11px] text-gray-400 mt-1">Used for driver ops SMS (GPS issues, run alerts). Enter in +61 format.</p>
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Role</label>
