@@ -50,11 +50,14 @@ function LiveDriverMap({ deliveryAddress }: { deliveryAddress: { line1: string; 
     document.head.appendChild(js);
   }, []);
 
-  // Poll driver location
+  // Poll driver location. Ignore sessions that haven't successfully pinged yet
+  // (lastLat/lastLng default to 0 — without this guard the map would centre on
+  // (0,0), which is in the Atlantic Ocean off West Africa).
   const fetchDriver = useCallback(async () => {
     try {
       const sessions = await api.drivers.activeSessions() as DriverLocation[];
-      if (sessions.length > 0) setDriver(sessions[0]);
+      const withPosition = sessions.find((s) => s.lastLat !== 0 && s.lastLng !== 0);
+      if (withPosition) setDriver(withPosition);
     } catch {}
   }, []);
 
