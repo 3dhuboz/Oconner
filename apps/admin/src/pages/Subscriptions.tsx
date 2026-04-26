@@ -3,6 +3,7 @@ import { api } from '@butcher/shared';
 import type { Product } from '@butcher/shared';
 import { RefreshCcw, Check, X, Phone, Mail, Plus, Upload, Image, Save, ArrowLeftRight, PackageCheck, ShoppingCart, Calendar, Package, User, Clock, Pencil, Trash2, MapPin } from 'lucide-react';
 import { toast } from '../lib/toast';
+import DataLoadError, { toDataLoadError, type DataLoadErrorState } from '../components/DataLoadError';
 
 interface Subscription {
   id: string;
@@ -108,13 +109,21 @@ export default function SubscriptionsPage() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState<DataLoadErrorState | null>(null);
 
-  useEffect(() => {
-    api.get<Subscription[]>('/api/subscriptions').then(setSubs).catch(() => {});
-    api.products.list()
-      .then((data) => setBoxProducts((data as (Product & { imageUrl?: string })[]).filter((p) => p.isMeatPack)))
-      .catch(() => {});
-  }, []);
+  const load = () => {
+    setLoadError(null);
+    Promise.all([
+      api.get<Subscription[]>('/api/subscriptions'),
+      api.products.list() as Promise<Product[]>,
+    ])
+      .then(([subsData, prods]) => {
+        setSubs(subsData);
+        setBoxProducts((prods as (Product & { imageUrl?: string })[]).filter((p) => p.isMeatPack));
+      })
+      .catch((e) => setLoadError(toDataLoadError(e, "Couldn't load subscriptions")));
+  };
+  useEffect(() => { load(); }, []);
 
   const setStatus = async (id: string, status: string) => {
     try {
@@ -186,6 +195,7 @@ export default function SubscriptionsPage() {
 
   return (
     <div>
+      {loadError && <DataLoadError error={loadError} onRetry={load} title="Couldn't load subscriptions" />}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-brand flex items-center gap-2">

@@ -4,13 +4,14 @@ import { eq, and } from 'drizzle-orm';
 import { driverSessions } from '@butcher/db';
 import type { Env, AuthUser } from '../types';
 import { sendEmail } from '../lib/email';
+import { parseJson } from '../lib/json';
 
 const app = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
 
 app.get('/active', async (c) => {
   const db = drizzle(c.env.DB);
   const rows = await db.select().from(driverSessions).where(eq(driverSessions.active, true));
-  return c.json(rows.map((s) => ({ ...s, breadcrumb: JSON.parse(s.breadcrumb) })));
+  return c.json(rows.map((s) => ({ ...s, breadcrumb: parseJson<Array<{ lat: number; lng: number; ts: number }>>(s.breadcrumb, []) })));
 });
 
 app.post('/session', async (c) => {
@@ -41,7 +42,7 @@ app.patch('/session/:id/ping', async (c) => {
   const [session] = await db.select().from(driverSessions).where(eq(driverSessions.id, sessionId)).limit(1);
   if (!session) return c.json({ error: 'Not found' }, 404);
 
-  const breadcrumb = JSON.parse(session.breadcrumb) as Array<{ lat: number; lng: number; ts: number }>;
+  const breadcrumb = parseJson<Array<{ lat: number; lng: number; ts: number }>>(session.breadcrumb, []);
   breadcrumb.push({ lat, lng, ts: now });
   if (breadcrumb.length > 500) breadcrumb.shift();
 

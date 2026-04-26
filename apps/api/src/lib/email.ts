@@ -19,15 +19,32 @@ export async function sendEmail(opts: {
   subject: string;
   html: string;
 }): Promise<{ id: string } | null> {
+  // Without a key Resend would just 401 the request and we'd swallow the
+  // failure into a generic "failed" notification — making config errors look
+  // identical to transient outages. Detect missing-config explicitly and log
+  // it so operators have a clear signal something is unconfigured.
+  if (!opts.apiKey) {
+    console.warn('[email] RESEND_API_KEY not set — skipping send to', opts.to);
+    return null;
+  }
+  if (!opts.from) {
+    console.warn('[email] FROM_EMAIL not set — skipping send to', opts.to);
+    return null;
+  }
   try {
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${opts.apiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ from: opts.from, to: opts.to, subject: opts.subject, html: opts.html }),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      console.warn('[email] Resend rejected request:', res.status, body.slice(0, 200));
+      return null;
+    }
     return res.json() as Promise<{ id: string }>;
-  } catch {
+  } catch (e) {
+    console.warn('[email] Resend network error:', String(e));
     return null;
   }
 }

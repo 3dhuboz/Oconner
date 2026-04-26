@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm';
 import { orders, customers, notifications } from '@butcher/db';
 import { sendEmail, buildOrderEmail, getSubject } from '../lib/email';
 import { deductStock, restoreStock } from '../lib/stock';
+import { parseJson } from '../lib/json';
 import type { Env, AuthUser } from '../types';
 
 interface OrderItem {
@@ -16,6 +17,9 @@ interface OrderItem {
 }
 
 const app = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
+
+/** Webhook timestamp tolerance — Stripe recommends 5 minutes. */
+const STRIPE_TIMESTAMP_TOLERANCE_S = 300;
 
 async function verifyStripeSignature(
   payload: string,
@@ -31,6 +35,15 @@ async function verifyStripeSignature(
     if (k === 'v1') signatures.push(v);
   }
   if (!timestamp || signatures.length === 0) throw new Error('Invalid signature header');
+
+  // Reject replays — without this an attacker who once captured a valid webhook
+  // payload could replay it indefinitely (signature still validates).
+  const tsSec = Number(timestamp);
+  if (!Number.isFinite(tsSec)) throw new Error('Invalid signature timestamp');
+  const nowSec = Math.floor(Date.now() / 1000);
+  if (Math.abs(nowSec - tsSec) > STRIPE_TIMESTAMP_TOLERANCE_S) {
+    throw new Error('Stripe webhook timestamp outside tolerance window');
+  }
 
   const signedPayload = `${timestamp}.${payload}`;
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
@@ -63,10 +76,10 @@ app.post('/webhook', async (c) => {
       await db.update(orders).set({ paymentStatus: 'paid', status: 'confirmed', updatedAt: now }).where(eq(orders.id, orderId));
       if (order) {
         // ── Deduct stock for each item in the order ──
-        const items = JSON.parse(order.items) as OrderItem[];
+        const items = parseJson<OrderItem[]>(order.items, []);
         await deductStock(db, items, orderId, now);
 
-        const addrParsed = JSON.parse(order.deliveryAddress) as Record<string, string>;
+        const addrParsed = parseJson<Record<string, string>>(order.deliveryAddress, {});
         const addr = `${addrParsed.line1 ?? ''}${addrParsed.line2 ? ', ' + addrParsed.line2 : ''}, ${addrParsed.suburb ?? ''} ${addrParsed.state ?? ''} ${addrParsed.postcode ?? ''}`;
         const emailData = {
           customerName: order.customerName,
@@ -115,7 +128,7 @@ app.post('/webhook', async (c) => {
       const [order] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
       await db.update(orders).set({ paymentStatus: 'refunded', status: 'refunded', updatedAt: now }).where(eq(orders.id, orderId));
       if (order) {
-        const items = JSON.parse(order.items) as OrderItem[];
+        const items = parseJson<OrderItem[]>(order.items, []);
         await restoreStock(db, items, orderId, now);
       }
     }

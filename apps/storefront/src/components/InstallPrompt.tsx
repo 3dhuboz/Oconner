@@ -57,6 +57,16 @@ export default function InstallPrompt() {
   }, [isSignedIn]);
 
   const subscribeToPush = async () => {
+    // Why this is careful: a previous version marked the user as "subscribed"
+    // (localStorage flag) even when the server rejected the subscribe call,
+    // so the user thought they'd opted in but the DB had nothing — that's how
+    // we ended up with only ~4 push subscriptions site-wide despite many opt-ins.
+    // Now we only set the flag once the server confirms.
+    if (!VAPID_PUBLIC_KEY) {
+      // Don't even attempt — would otherwise throw on db64u(empty).
+      console.warn('[push] VAPID_PUBLIC_KEY not configured — skipping subscription');
+      return;
+    }
     try {
       const sw = await navigator.serviceWorker.ready;
       const sub = await sw.pushManager.subscribe({
@@ -64,14 +74,24 @@ export default function InstallPrompt() {
         applicationServerKey: db64u(VAPID_PUBLIC_KEY),
       });
       const token = await getToken();
-      await fetch(`${API_URL}/api/push/subscribe`, {
+      const res = await fetch(`${API_URL}/api/push/subscribe`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify(sub.toJSON()),
       });
+      if (!res.ok) {
+        // Tear down the just-created browser-side subscription so we're not
+        // leaving a half-subscribed state — the user can retry later.
+        try { await sub.unsubscribe(); } catch {}
+        const errBody = await res.json().catch(() => ({ error: res.statusText })) as { error?: string };
+        console.warn('[push] server rejected subscription:', res.status, errBody?.error);
+        return;
+      }
       localStorage.setItem('push-subscribed', '1');
-    } catch {
-      // Silently fail — user may have blocked or the device doesn't support push
+    } catch (e) {
+      // Browser-side failure (permission denied, no PushManager, etc.) — leave
+      // localStorage flag unset so we'll re-prompt on next visit.
+      console.warn('[push] subscribe failed:', e);
     }
   };
 

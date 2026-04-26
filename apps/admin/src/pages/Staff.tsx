@@ -69,8 +69,15 @@ export default function StaffPage() {
     try {
       const found = await api.users.findByEmail(newForm.email) as { clerkId: string };
       clerkId = found.clerkId;
-    } catch {
-      // Not in Clerk yet — use UUID
+    } catch (e: any) {
+      // 404 = user not in Clerk yet (fine — auth middleware reconciles by email later);
+      // 5xx/network = Clerk transient failure — abort to avoid creating an unmatched record.
+      const msg = String(e?.message ?? '');
+      if (/clerk lookup failed|http 5\d{2}|fetch failed|network/i.test(msg)) {
+        setError("Couldn't reach Clerk to verify the email. Please try again in a moment.");
+        setSaving(false);
+        return;
+      }
     }
     const id = clerkId ?? crypto.randomUUID();
     try {

@@ -3,6 +3,7 @@ import { api } from '@butcher/shared';
 import type { Product, StockMovement } from '@butcher/shared';
 import { AlertTriangle, Plus, Minus, Package, X } from 'lucide-react';
 import { toast } from '../lib/toast';
+import DataLoadError, { toDataLoadError, type DataLoadErrorState } from '../components/DataLoadError';
 
 const REASONS = ['Restock', 'Damaged / Waste', 'Stocktake correction', 'Return', 'Transfer in', 'Transfer out', 'Other'];
 
@@ -18,15 +19,21 @@ export default function StockPage() {
   const [movements, setMovements] = useState<StockMovement[]>([]);
   const [adjust, setAdjust] = useState<AdjustState | null>(null);
   const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState<DataLoadErrorState | null>(null);
 
-  useEffect(() => {
-    (api.products.list() as Promise<Product[]>)
-      .then((prods) => setProducts(prods.sort((a, b) => a.name.localeCompare(b.name))))
-      .catch(() => {});
-    api.get<StockMovement[]>('/api/stock/movements')
-      .then((movs) => setMovements(movs))
-      .catch(() => {});
-  }, []);
+  const load = () => {
+    setLoadError(null);
+    Promise.all([
+      api.products.list() as Promise<Product[]>,
+      api.get<StockMovement[]>('/api/stock/movements'),
+    ])
+      .then(([prods, movs]) => {
+        setProducts(prods.sort((a, b) => a.name.localeCompare(b.name)));
+        setMovements(movs);
+      })
+      .catch((e) => setLoadError(toDataLoadError(e, "Couldn't load stock")));
+  };
+  useEffect(() => { load(); }, []);
 
   const openAdjust = (p: Product, direction: 1 | -1) =>
     setAdjust({ product: p, delta: direction, reason: REASONS[0], note: '' });
@@ -59,6 +66,7 @@ export default function StockPage() {
   return (
     <div>
       <h1 className="text-2xl font-bold text-brand mb-6">Stock Management</h1>
+      {loadError && <DataLoadError error={loadError} onRetry={load} title="Couldn't load stock" />}
 
       {lowStock.length > 0 && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">

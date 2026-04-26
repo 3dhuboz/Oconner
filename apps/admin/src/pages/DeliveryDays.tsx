@@ -5,6 +5,7 @@ import { Plus, X, CalendarDays, ClipboardList, RefreshCw, AlertTriangle, Pencil,
 import { toast } from '../lib/toast';
 import { useNavigate } from 'react-router-dom';
 import { ZoneAutocomplete } from '../components/ZoneAutocomplete';
+import DataLoadError, { toDataLoadError, type DataLoadErrorState } from '../components/DataLoadError';
 
 export default function DeliveryDaysPage() {
   const navigate = useNavigate();
@@ -19,12 +20,15 @@ export default function DeliveryDaysPage() {
   const [editForm, setEditForm] = useState({ maxOrders: 0, notes: '', deliveryWindowStart: '09:00', zones: '', type: 'delivery' as string, marketLocation: '' });
   const [editSaving, setEditSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<DataLoadErrorState | null>(null);
 
-  useEffect(() => {
+  const load = () => {
+    setLoadError(null);
     api.deliveryDays.list()
       .then((data) => setDays(data as DeliveryDay[]))
-      .catch(() => {});
-  }, []);
+      .catch((e) => setLoadError(toDataLoadError(e, "Couldn't load delivery days")));
+  };
+  useEffect(() => { load(); }, []);
 
   const handleCreate = async () => {
     if (!form.date) return;
@@ -144,6 +148,7 @@ export default function DeliveryDaysPage() {
 
   return (
     <div>
+      {loadError && <DataLoadError error={loadError} onRetry={load} title="Couldn't load delivery days" />}
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-bold text-brand">Delivery Days</h1>
         <div className="flex items-center gap-2">

@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 import { Search, Plus, X, Trash2, Pencil, Receipt } from 'lucide-react';
 import { toast } from '../lib/toast';
 import AddressAutocomplete from '../components/AddressAutocomplete';
+import DataLoadError, { toDataLoadError, type DataLoadErrorState } from '../components/DataLoadError';
 
 interface Product {
   id: string;
@@ -93,13 +94,18 @@ export default function OrdersPage() {
   const [deleteTarget, setDeleteTarget] = useState<Order | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [invoiceSending, setInvoiceSending] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<DataLoadErrorState | null>(null);
 
-  useEffect(() => {
+  const load = () => {
     setLoading(true);
+    setLoadError(null);
     api.orders.list(statusFilter === 'all' ? undefined : statusFilter)
-      .then((data) => { setOrders(data as Order[]); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, [statusFilter]);
+      .then((data) => { setOrders(data as Order[]); })
+      .catch((e) => setLoadError(toDataLoadError(e, "Couldn't load orders")))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { load(); }, [statusFilter]);
 
   const openCreate = () => {
     setForm(EMPTY_FORM);
@@ -395,6 +401,7 @@ export default function OrdersPage() {
 
   return (
     <div>
+      {loadError && <DataLoadError error={loadError} onRetry={load} title="Couldn't load orders" />}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-brand">Orders</h1>
         <button

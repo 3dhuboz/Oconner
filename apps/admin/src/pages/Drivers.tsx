@@ -4,6 +4,7 @@ import { Plus, X, Truck, User, ToggleLeft, ToggleRight, Mail, Send, Map, Pencil,
 import { toast } from '../lib/toast';
 import MapPage from './Map';
 import { ZoneAutocomplete } from '../components/ZoneAutocomplete';
+import DataLoadError, { toDataLoadError, type DataLoadErrorState } from '../components/DataLoadError';
 
 
 const EMPTY_FORM = {
@@ -55,12 +56,15 @@ export default function DriversPage() {
   const [editForm, setEditForm] = useState(EMPTY_EDIT);
   const [editSaving, setEditSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<DriverUser | null>(null);
+  const [loadError, setLoadError] = useState<DataLoadErrorState | null>(null);
 
-  useEffect(() => {
+  const load = () => {
+    setLoadError(null);
     api.users.drivers()
       .then((data) => setDrivers(data as DriverUser[]))
-      .catch(() => {});
-  }, []);
+      .catch((e) => setLoadError(toDataLoadError(e, "Couldn't load drivers")));
+  };
+  useEffect(() => { load(); }, []);
 
   const handleAdd = async () => {
     if (!form.name || !form.email) {
@@ -73,8 +77,20 @@ export default function DriversPage() {
     try {
       const found = await api.users.findByEmail(form.email) as { clerkId: string };
       clerkId = found.clerkId;
-    } catch {
-      // Not in Clerk yet — use UUID, they can log in after signing up
+    } catch (e: any) {
+      // Distinguish "user doesn't exist in Clerk yet" (intentional — they'll sign
+      // up later and the auth middleware reconciles by email) from "Clerk API
+      // unreachable" (transient — creating a UUID-based record now would mean
+      // we never got the chance to use the real Clerk ID; abort and let the
+      // admin retry rather than create an unmatched record silently).
+      const msg = String(e?.message ?? '');
+      const isClerkDown = /clerk lookup failed|http 5\d{2}|fetch failed|network/i.test(msg);
+      if (isClerkDown) {
+        setError("Couldn't reach Clerk to verify the email. Please try again in a moment.");
+        setSaving(false);
+        return;
+      }
+      // 404 "No Clerk account found for this email" — fall through to placeholder UUID.
     }
     const id = clerkId ?? crypto.randomUUID();
     const zonesArr = form.zones.split(',').map((z) => z.trim()).filter(Boolean);
@@ -195,6 +211,7 @@ export default function DriversPage() {
 
   return (
     <div>
+      {loadError && <DataLoadError error={loadError} onRetry={load} title="Couldn't load drivers" />}
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-bold text-brand">Drivers</h1>
         {tab === 'list' && (

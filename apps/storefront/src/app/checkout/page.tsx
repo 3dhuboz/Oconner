@@ -1,6 +1,11 @@
 'use client';
 
 export const runtime = 'edge';
+// Stock availability is fetched per-request from the API, so this page must
+// not be statically pre-rendered — otherwise customers would see whatever
+// allocations were live at build time. Same gotcha listed in the handover
+// for the About page.
+export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';

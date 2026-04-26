@@ -5,6 +5,7 @@ import { orders, customers, deliveryDays, stops, stockMovements, notifications, 
 import type { Env, AuthUser } from '../types';
 import { sendEmail, buildOrderEmail, getSubject } from '../lib/email';
 import { deductStock, getStockDayId, reserveDayStock, consumePromoCode } from '../lib/stock';
+import { parseJson } from '../lib/json';
 
 const app = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
 
@@ -30,21 +31,21 @@ app.get('/', async (c) => {
   } else {
     rows = await db.select().from(orders).orderBy(desc(orders.createdAt));
   }
-  return c.json(rows.map((o) => ({ ...o, items: JSON.parse(o.items), deliveryAddress: JSON.parse(o.deliveryAddress) })));
+  return c.json(rows.map((o) => ({ ...o, items: parseJson<unknown[]>(o.items, []), deliveryAddress: parseJson<Record<string, string>>(o.deliveryAddress, {}) })));
 });
 
 app.get('/today', async (c) => {
   const db = drizzle(c.env.DB);
   const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
   const rows = await db.select().from(orders).where(gte(orders.createdAt, todayStart.getTime())).orderBy(desc(orders.createdAt));
-  return c.json(rows.map((o) => ({ ...o, items: JSON.parse(o.items), deliveryAddress: JSON.parse(o.deliveryAddress) })));
+  return c.json(rows.map((o) => ({ ...o, items: parseJson<unknown[]>(o.items, []), deliveryAddress: parseJson<Record<string, string>>(o.deliveryAddress, {}) })));
 });
 
 app.get('/:id', async (c) => {
   const db = drizzle(c.env.DB);
   const [order] = await db.select().from(orders).where(eq(orders.id, c.req.param('id'))).limit(1);
   if (!order) return c.json({ error: 'Not found' }, 404);
-  return c.json({ ...order, items: JSON.parse(order.items), deliveryAddress: JSON.parse(order.deliveryAddress) });
+  return c.json({ ...order, items: parseJson<unknown[]>(order.items, []), deliveryAddress: parseJson<Record<string, string>>(order.deliveryAddress, {}) });
 });
 
 app.post('/', async (c) => {

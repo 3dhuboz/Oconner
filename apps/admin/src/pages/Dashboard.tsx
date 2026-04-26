@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useClerk } from '@clerk/clerk-react';
 import { api, formatCurrency } from '@butcher/shared';
 import type { Order } from '@butcher/shared';
-import { ShoppingBag, DollarSign, Truck, Package, Clock, CalendarDays, AlertTriangle, LogOut, RefreshCw } from 'lucide-react';
+import { ShoppingBag, DollarSign, Truck, Package, Clock, CalendarDays } from 'lucide-react';
 import LiveDeliveryTracker from '../components/LiveDeliveryTracker';
+import DataLoadError, { toDataLoadError, type DataLoadErrorState } from '../components/DataLoadError';
 
 interface Stats {
   totalOrders: number;
@@ -21,8 +21,7 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<Stats>({ totalOrders: 0, totalRevenue: 0, pendingOrders: 0, outForDelivery: 0, todayOrders: 0, todayRevenue: 0, thisWeekOrders: 0, thisWeekRevenue: 0 });
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<{ message: string; isAuth: boolean } | null>(null);
-  const { signOut } = useClerk();
+  const [error, setError] = useState<DataLoadErrorState | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -53,23 +52,14 @@ export default function DashboardPage() {
         thisWeekRevenue: weekFiltered.reduce((s, o) => s + (o.total ?? 0), 0),
       });
       setRecentOrders(paidOrders.slice(0, 10));
-    } catch (e: any) {
-      const msg = String(e?.message ?? 'Unknown error');
-      // Auth-flavoured errors — token expired, role changed, etc.
-      const isAuth = /unauth|forbidden|401|403/i.test(msg);
-      setError({ message: msg, isAuth });
-      // Leave stats at their previous values if this was a refresh; on first load they're 0.
+    } catch (e) {
+      setError(toDataLoadError(e, "Couldn't load dashboard data"));
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => { load(); }, []);
-
-  const handleSignOut = async () => {
-    try { await signOut(); } catch {}
-    window.location.href = '/';
-  };
 
   const cards = [
     { label: 'Total Orders', value: stats.totalOrders, icon: ShoppingBag, color: 'bg-blue-50 text-blue-600' },
@@ -90,37 +80,7 @@ export default function DashboardPage() {
   return (
     <div>
       <h1 className="text-2xl font-bold text-brand mb-6">Dashboard</h1>
-      {error && (
-        <div className={`mb-4 rounded-xl border p-4 flex items-start gap-3 ${error.isAuth ? 'bg-amber-50 border-amber-200 text-amber-900' : 'bg-red-50 border-red-200 text-red-900'}`}>
-          <AlertTriangle className="h-5 w-5 flex-shrink-0 mt-0.5" />
-          <div className="flex-1 min-w-0">
-            <p className="font-semibold">
-              {error.isAuth ? 'Your sign-in looks stale' : "Couldn't load dashboard data"}
-            </p>
-            <p className="text-sm mt-0.5">
-              {error.isAuth
-                ? 'The dashboard is showing zeros because your login session has expired or lost permission. Sign out and sign back in to refresh.'
-                : error.message}
-            </p>
-            <div className="flex flex-wrap gap-2 mt-3">
-              <button
-                onClick={load}
-                className="inline-flex items-center gap-1.5 text-xs font-semibold bg-white border px-3 py-1.5 rounded-lg hover:bg-gray-50"
-              >
-                <RefreshCw className="h-3.5 w-3.5" /> Try again
-              </button>
-              {error.isAuth && (
-                <button
-                  onClick={handleSignOut}
-                  className="inline-flex items-center gap-1.5 text-xs font-semibold bg-amber-600 text-white px-3 py-1.5 rounded-lg hover:bg-amber-700"
-                >
-                  <LogOut className="h-3.5 w-3.5" /> Sign out
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      {error && <DataLoadError error={error} onRetry={load} title="Couldn't load dashboard data" />}
       {/* Auto-hides when no driver run is in progress. */}
       <LiveDeliveryTracker />
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">

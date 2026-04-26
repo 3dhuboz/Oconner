@@ -16,16 +16,24 @@ const DRIVER_URL = import.meta.env.VITE_DRIVER_URL ?? 'https://driver.oconnoragr
 
 function parseTimeWindow(note?: string | null): { earliest?: number; latest?: number } {
   if (!note) return {};
+  // Validate parsed components are in real clock ranges before trusting them.
+  // Without these guards "25am" or "99:99" used to slip through and produce
+  // nonsense ETAs / window-status flags downstream.
   function mins(s: string): number | undefined {
     const m12 = s.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i);
     if (m12) {
       let h = +m12[1]; const m = +(m12[2] ?? 0); const mer = m12[3].toLowerCase();
+      if (h < 1 || h > 12 || m < 0 || m > 59) return undefined;
       if (mer === 'pm' && h !== 12) h += 12;
       if (mer === 'am' && h === 12) h = 0;
       return h * 60 + m;
     }
     const m24 = s.match(/(\d{1,2}):(\d{2})/);
-    if (m24) return +m24[1] * 60 + +m24[2];
+    if (m24) {
+      const h = +m24[1]; const m = +m24[2];
+      if (h < 0 || h > 23 || m < 0 || m > 59) return undefined;
+      return h * 60 + m;
+    }
     return undefined;
   }
   const lo = note.toLowerCase();
@@ -1002,6 +1010,8 @@ function RouteMap({ stops, depotLat, depotLng }: { stops: { lat?: number; lng?: 
     };
 
     // Load Google Maps JS if not already loaded
+    let pollInterval: ReturnType<typeof setInterval> | undefined;
+    let pollTimeout: ReturnType<typeof setTimeout> | undefined;
     if ((window as any).google?.maps) {
       initMap();
     } else {
@@ -1013,12 +1023,18 @@ function RouteMap({ stops, depotLat, depotLng }: { stops: { lat?: number; lng?: 
         script.onload = initMap;
         document.head.appendChild(script);
       } else {
-        const check = setInterval(() => {
-          if ((window as any).google?.maps) { clearInterval(check); initMap(); }
+        pollInterval = setInterval(() => {
+          if ((window as any).google?.maps) { clearInterval(pollInterval!); pollInterval = undefined; initMap(); }
         }, 200);
-        setTimeout(() => clearInterval(check), 10000);
+        pollTimeout = setTimeout(() => { if (pollInterval) clearInterval(pollInterval); }, 10000);
       }
     }
+    // Effect cleanup — without this an unmount before maps loads would leak the
+    // interval indefinitely (e.g. user navigates away while waiting).
+    return () => {
+      if (pollInterval) clearInterval(pollInterval);
+      if (pollTimeout) clearTimeout(pollTimeout);
+    };
   }, [stops, depotLat, depotLng]);
 
   return <div ref={mapRef} style={{ height: 400 }} className="bg-gray-200 rounded-none" />;
