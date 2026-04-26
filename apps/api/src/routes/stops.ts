@@ -4,6 +4,7 @@ import { eq, asc, and, isNull, gt } from 'drizzle-orm';
 import { stops, orders, driverSessions, notifications } from '@butcher/db';
 import { notifyCustomer } from './push';
 import { sendSms } from '../lib/sms';
+import { parseJson } from '../lib/json';
 import type { Env, AuthUser } from '../types';
 
 /** True if we've already recorded a successful notification of this (orderId,type). Used to dedupe SMS across undo/redo. */
@@ -33,14 +34,14 @@ app.get('/', async (c) => {
   const rows = await db.select().from(stops)
     .where(condition)
     .orderBy(asc(stops.sequence));
-  return c.json(rows.map((s) => ({ ...s, address: JSON.parse(s.address), items: JSON.parse(s.items) })));
+  return c.json(rows.map((s) => ({ ...s, address: parseJson<Record<string, string>>(s.address, {}), items: parseJson<unknown[]>(s.items, []) })));
 });
 
 app.get('/:id', async (c) => {
   const db = drizzle(c.env.DB);
   const [stop] = await db.select().from(stops).where(eq(stops.id, c.req.param('id'))).limit(1);
   if (!stop) return c.json({ error: 'Not found' }, 404);
-  return c.json({ ...stop, address: JSON.parse(stop.address), items: JSON.parse(stop.items) });
+  return c.json({ ...stop, address: parseJson<Record<string, string>>(stop.address, {}), items: parseJson<unknown[]>(stop.items, []) });
 });
 
 app.post('/', async (c) => {
@@ -96,7 +97,12 @@ app.patch('/:id/status', async (c) => {
   const [currentStop] = await db.select().from(stops).where(eq(stops.id, stopId)).limit(1);
 
   if (status === 'delivered' && currentStop) {
-    await db.update(orders).set({ status: 'delivered', proofUrl: proofUrl ?? null, updatedAt: now }).where(eq(orders.id, currentStop.orderId));
+    // Manual stops have orderId = null. Skip linked-order updates for them
+    // (otherwise eq(orders.id, null) is a no-op WHERE that returns 0 rows in
+    // SQLite — silent partial behaviour).
+    if (currentStop.orderId) {
+      await db.update(orders).set({ status: 'delivered', proofUrl: proofUrl ?? null, updatedAt: now }).where(eq(orders.id, currentStop.orderId));
+    }
 
     // If the driver attached a proof photo, SMS the customer a link to it.
     // Only customers with a phone number get this; dedup via notifications table so undo+redo doesn't double-send.
@@ -121,8 +127,9 @@ app.patch('/:id/status', async (c) => {
     }
   }
 
-  // If undoing a previously-delivered stop, revert the linked order from delivered -> out_for_delivery
-  if (isUndo && priorStop?.status === 'delivered' && currentStop) {
+  // If undoing a previously-delivered stop, revert the linked order from delivered -> out_for_delivery.
+  // Skip for manual stops (no orderId).
+  if (isUndo && priorStop?.status === 'delivered' && currentStop?.orderId) {
     await db.update(orders).set({ status: 'out_for_delivery', proofUrl: null, updatedAt: now }).where(eq(orders.id, currentStop.orderId));
   }
 
@@ -140,8 +147,10 @@ app.patch('/:id/status', async (c) => {
     if (nextStop && nextStop.status === 'pending') {
       // Mark next stop as en_route
       await db.update(stops).set({ status: 'en_route' }).where(eq(stops.id, nextStop.id));
-      // Update the order to out_for_delivery
-      await db.update(orders).set({ status: 'out_for_delivery', updatedAt: now }).where(eq(orders.id, nextStop.orderId));
+      // Update the linked order — skip for manual stops with no orderId.
+      if (nextStop.orderId) {
+        await db.update(orders).set({ status: 'out_for_delivery', updatedAt: now }).where(eq(orders.id, nextStop.orderId));
+      }
 
       const storefrontUrl = c.env.STOREFRONT_URL || 'https://oconnoragriculture.com.au';
       const trackingUrl = nextStop.orderId ? `${storefrontUrl}/track/${nextStop.orderId}` : storefrontUrl;

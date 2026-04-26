@@ -1,0 +1,11 @@
+-- Adds users.can_drive flag.
+--
+-- Why: Seamus (role='admin') is also the only driver. The driver-list queries
+-- in apps/api filter strictly on role='driver', so admins who also drive were
+-- invisible to those endpoints. canDrive lets one user hold "admin OR staff
+-- with driving" without forcing a multi-role refactor.
+--
+-- This was originally applied to production via raw D1 SQL on 2026-04-17 along
+-- with a UI checkbox in the Staff & Admins edit modal. This file exists so
+-- fresh environments get the column when migrations are run from scratch.
+ALTER TABLE users ADD COLUMN can_drive INTEGER NOT NULL DEFAULT 0;

@@ -179,6 +179,8 @@ export default function LiveDeliveryTracker({ dayId, initialStops = [] }: Props)
       }
     };
 
+    let pollInterval: ReturnType<typeof setInterval> | undefined;
+    let pollTimeout: ReturnType<typeof setTimeout> | undefined;
     if ((window as any).google?.maps) {
       initMap();
     } else {
@@ -190,12 +192,18 @@ export default function LiveDeliveryTracker({ dayId, initialStops = [] }: Props)
         script.onload = initMap;
         document.head.appendChild(script);
       } else {
-        const check = setInterval(() => {
-          if ((window as any).google?.maps) { clearInterval(check); initMap(); }
+        pollInterval = setInterval(() => {
+          if ((window as any).google?.maps) { clearInterval(pollInterval!); pollInterval = undefined; initMap(); }
         }, 200);
-        setTimeout(() => clearInterval(check), 10_000);
+        pollTimeout = setTimeout(() => { if (pollInterval) clearInterval(pollInterval); }, 10_000);
       }
     }
+    // Cleanup — without this, navigating away while maps is loading leaks
+    // the interval until tab close.
+    return () => {
+      if (pollInterval) clearInterval(pollInterval);
+      if (pollTimeout) clearTimeout(pollTimeout);
+    };
   }, [session, stops]);
 
   if (!session) return null;

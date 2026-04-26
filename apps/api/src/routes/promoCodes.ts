@@ -2,9 +2,15 @@ import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/d1';
 import { eq, desc } from 'drizzle-orm';
 import { promoCodes } from '@butcher/db';
+import { requireRole } from '../middleware/auth';
 import type { Env, AuthUser } from '../types';
 
 const app = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
+
+// All promo-code management is admin/staff only. requireAuth runs at the
+// app-level (index.ts), but without this guard any signed-in driver or
+// customer could list/create/edit/delete codes.
+app.use('*', requireRole('admin', 'staff'));
 
 // List all promo codes (admin)
 app.get('/', async (c) => {

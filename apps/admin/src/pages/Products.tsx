@@ -3,6 +3,7 @@ import { api, formatCurrency } from '@butcher/shared';
 import type { Product } from '@butcher/shared';
 import { Plus, Pencil, X, Upload, Sparkles, Image, Trash2, ChevronUp, ChevronDown } from 'lucide-react';
 import { toast } from '../lib/toast';
+import DataLoadError, { toDataLoadError, type DataLoadErrorState } from '../components/DataLoadError';
 
 const CATEGORIES = ['beef', 'packs', 'other'];
 const isStaleUrl = (url: string) => !url || url.includes('pollinations.ai') || url.includes('images.oconner.com.au');
@@ -19,12 +20,15 @@ export default function ProductsPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<Product | null>(null);
   const [deleting, setDeleting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [loadError, setLoadError] = useState<DataLoadErrorState | null>(null);
 
-  useEffect(() => {
+  const load = () => {
+    setLoadError(null);
     api.products.list()
       .then((data) => setProducts((data as Product[]).sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))))
-      .catch(() => {});
-  }, []);
+      .catch((e) => setLoadError(toDataLoadError(e, "Couldn't load products")));
+  };
+  useEffect(() => { load(); }, []);
 
   const moveProduct = async (product: Product, direction: 'up' | 'down') => {
     const sorted = [...products].sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0));
@@ -143,6 +147,7 @@ export default function ProductsPage() {
 
   return (
     <div>
+      {loadError && <DataLoadError error={loadError} onRetry={load} title="Couldn't load products" />}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-brand">Products</h1>
         <button onClick={() => setEditing({ ...EMPTY })} className="flex items-center gap-2 bg-brand text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-mid transition-colors">

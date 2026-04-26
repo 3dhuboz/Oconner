@@ -4,31 +4,7 @@ import { api } from '@butcher/shared';
 import type { Stop, StopStatus } from '@butcher/shared';
 import { ArrowLeft, MapPin, Phone, Navigation, CheckCircle, Camera, AlertTriangle, ChevronRight, Undo2, PackagePlus } from 'lucide-react';
 import { formatWeight } from '@butcher/shared';
-
-/**
- * Detect offal/suet/bones add-on requests typed into the free-text customer
- * note during checkout. Returns the matched excerpts so the driver can see
- * exactly what was asked for ("Suet 2kg") rather than just a generic flag.
- * Used to render a prominent red banner on StopDetail so these add-ons don't
- * get missed when loading the ute.
- */
-const ADDON_KEYWORDS = [
-  'offal', 'suet', 'liver', 'kidney', 'kidneys',
-  'heart', 'hearts', 'tongue', 'tripe', 'brain', 'brains',
-  'oxtail', 'marrow', 'bones', 'trotter', 'trotters',
-];
-function detectAddOns(note: string | null | undefined): string[] {
-  if (!note) return [];
-  const lines = note.split(/[,;\n]+|\.\s+/g).map((s) => s.trim()).filter(Boolean);
-  const matched: string[] = [];
-  for (const line of lines) {
-    const lower = line.toLowerCase();
-    if (ADDON_KEYWORDS.some((k) => new RegExp(`\\b${k}\\b`, 'i').test(lower))) {
-      matched.push(line);
-    }
-  }
-  return matched;
-}
+import { detectAddOns } from '../lib/addOns';
 
 export default function StopDetailPage() {
   const { stopId } = useParams<{ stopId: string }>();
@@ -82,7 +58,10 @@ export default function StopDetailPage() {
       // Reset state for next stop
       setNote('');
       setProofUrl(null);
-      navigate(`/stop/${next.id}`, { replace: true });
+      // Use a regular push (not replace) so the browser back button can
+      // walk back to a previous stop — useful if the driver wants to
+      // double-check something they just delivered.
+      navigate(`/stop/${next.id}`);
     } else {
       navigate('/');
     }
