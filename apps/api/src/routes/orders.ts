@@ -1,10 +1,10 @@
 import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/d1';
-import { eq, desc, inArray, gte } from 'drizzle-orm';
+import { eq, desc, inArray, gte, sql } from 'drizzle-orm';
 import { orders, customers, deliveryDays, stops, stockMovements, notifications, auditLog, deliveryDayStock, promoCodes } from '@butcher/db';
 import type { Env, AuthUser } from '../types';
 import { sendEmail, buildOrderEmail, getSubject } from '../lib/email';
-import { deductStock, getStockDayId } from '../lib/stock';
+import { deductStock, getStockDayId, reserveDayStock, consumePromoCode } from '../lib/stock';
 
 const app = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
 
@@ -84,8 +84,11 @@ app.post('/', async (c) => {
   const subtotal = body.subtotal ?? 0;
   let discount = 0;
   const promoId = (body as any).promoId;
+  let appliedPromoId: string | null = null;
 
-  // Validate and apply promo code
+  // Read promo for discount calculation. The actual increment happens later via
+  // a conditional UPDATE so two concurrent checkouts can't both pass a stale
+  // usedCount < maxUses check.
   if (promoId) {
     const [promo] = await db.select().from(promoCodes).where(eq(promoCodes.id, promoId)).limit(1);
     if (promo && promo.active) {
@@ -94,8 +97,7 @@ app.post('/', async (c) => {
       } else {
         discount = Math.min(promo.value, subtotal);
       }
-      // Increment usage
-      await db.update(promoCodes).set({ usedCount: promo.usedCount + 1 }).where(eq(promoCodes.id, promo.id));
+      appliedPromoId = promo.id;
     }
   }
 
@@ -104,22 +106,37 @@ app.post('/', async (c) => {
   const gst = 0; // no GST on goods
   const total = discountedSubtotal + deliveryFee;
 
-  // ── Day-specific stock validation (pool-aware) ──
+  // ── Day-specific stock validation + atomic reservation (pool-aware) ──
+  // reserveDayStock does a conditional UPDATE per item so concurrent checkouts
+  // can't both pass a stale "sold + qty <= allocated" read; if any item fails,
+  // earlier reservations are rolled back automatically.
   const stockDayId = await getStockDayId(db, body.deliveryDayId);
   const dayAllocations = await db.select().from(deliveryDayStock)
     .where(eq(deliveryDayStock.deliveryDayId, stockDayId));
 
-  if (dayAllocations.length > 0) {
-    // Strict enforcement: products must have an allocation AND not be sold out
-    for (const item of (body.items as any[])) {
-      const alloc = dayAllocations.find((a) => a.productId === item.productId);
-      if (!alloc) {
-        return c.json({ error: `${item.productName} is not allocated for this delivery day` }, 400);
+  const reserveResult = await reserveDayStock(db, dayAllocations, body.items as any[]);
+  if (!reserveResult.ok) {
+    return c.json({ error: reserveResult.error }, 400);
+  }
+
+  // Atomically consume the promo code. If the race is lost (already at
+  // maxUses, or expired between read and now), reject the order before
+  // creating it — and roll back the day-stock reservation we just made.
+  if (appliedPromoId) {
+    const consumed = await consumePromoCode(db, appliedPromoId, now);
+    if (!consumed.ok) {
+      // Compensation rollback for stock we just reserved (decrement by qty,
+      // not "set back to original" — another checkout may have moved sold).
+      for (const item of (body.items as any[])) {
+        const alloc = dayAllocations.find((a) => a.productId === item.productId);
+        if (!alloc) continue;
+        const qty = item.weight ? item.weight / 1000 : (item.weightKg ?? item.quantity ?? 1);
+        if (qty <= 0) continue;
+        await db.update(deliveryDayStock)
+          .set({ sold: sql`${deliveryDayStock.sold} - ${qty}` })
+          .where(eq(deliveryDayStock.id, alloc.id));
       }
-      const qty = item.weight ? item.weight / 1000 : (item.weightKg ?? item.quantity ?? 1);
-      if (alloc.sold + qty > alloc.allocated) {
-        return c.json({ error: `${item.productName} is sold out for this delivery day` }, 400);
-      }
+      return c.json({ error: consumed.error }, 400);
     }
   }
 
@@ -146,21 +163,8 @@ app.post('/', async (c) => {
     updatedAt: now,
   });
 
-  // Deduct stock for each item in the order
+  // Deduct global product stock (separate from per-day allocations above).
   await deductStock(db, body.items as any[], orderId, now);
-
-  // ── Update day-specific stock sold counts ──
-  if (dayAllocations.length > 0) {
-    for (const item of (body.items as any[])) {
-      const alloc = dayAllocations.find((a) => a.productId === item.productId);
-      if (alloc) {
-        const qty = item.weight ? item.weight / 1000 : (item.weightKg ?? item.quantity ?? 1);
-        await db.update(deliveryDayStock)
-          .set({ sold: alloc.sold + qty })
-          .where(eq(deliveryDayStock.id, alloc.id));
-      }
-    }
-  }
 
   const [day] = await db.select().from(deliveryDays).where(eq(deliveryDays.id, body.deliveryDayId)).limit(1);
   if (day) await db.update(deliveryDays).set({ orderCount: day.orderCount + 1 }).where(eq(deliveryDays.id, day.id));
