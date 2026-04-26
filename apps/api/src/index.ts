@@ -145,11 +145,35 @@ app.get('/api/delivery-days', async (c) => {
   return c.json(rows);
 });
 
-app.get('/api/orders/:id', async (c) => {
+// Public tracking endpoint — returns only the fields the storefront's
+// /track/:orderId page needs. Deliberately omits customerEmail, customerPhone,
+// internalNotes, full customer record, etc. so a leaked or guessed order ID
+// can't be used to scrape PII. The full GET /api/orders/:id is auth-gated in
+// routes/orders.ts and additionally requires ownership or staff role.
+app.get('/api/orders/:id/tracking', async (c) => {
   const db = drizzle(c.env.DB);
   const [order] = await db.select().from(ordersTable).where(eq(ordersTable.id, c.req.param('id'))).limit(1);
   if (!order) return c.json({ error: 'Not found' }, 404);
-  return c.json({ ...order, items: JSON.parse(order.items), deliveryAddress: JSON.parse(order.deliveryAddress) });
+  let items: unknown[] = [];
+  let deliveryAddress: Record<string, string> = {};
+  try { items = JSON.parse(order.items); } catch {}
+  try { deliveryAddress = JSON.parse(order.deliveryAddress); } catch {}
+  return c.json({
+    id: order.id,
+    status: order.status,
+    paymentStatus: order.paymentStatus,
+    deliveryDayId: order.deliveryDayId,
+    deliveryAddress,
+    items,
+    subtotal: order.subtotal,
+    deliveryFee: order.deliveryFee,
+    gst: order.gst,
+    total: order.total,
+    proofUrl: order.proofUrl,
+    customerName: order.customerName, // first-name / display name only — already on the address label
+    createdAt: order.createdAt,
+    updatedAt: order.updatedAt,
+  });
 });
 
 app.post('/api/orders', async (c) => {
@@ -403,21 +427,23 @@ app.post('/api/staff/invite', requireAuth, requireRole('admin'), async (c) => {
   const body = await c.req.json<{ name: string; email: string; role: string }>();
   if (!body.email || !body.name) return c.json({ error: 'Name and email required' }, 400);
 
-  const { sendEmail } = await import('./lib/email');
+  const { sendEmail, escapeHtml } = await import('./lib/email');
   const adminUrl = c.env.STOREFRONT_URL?.replace('butcher-storefront', 'butcher-admin') || 'https://admin.oconnoragriculture.com.au';
 
+  // Escape user-supplied fields before interpolating into the email body
+  // (admin can be tricked into sending HTML/script payloads via name/role).
   const html = `
     <div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:20px">
       <h2 style="color:#4E7732">Welcome to O'Connor Agriculture</h2>
-      <p>Hi ${body.name},</p>
-      <p>You've been invited to join the <strong>O'Connor Agriculture</strong> team as <strong>${body.role}</strong>.</p>
+      <p>Hi ${escapeHtml(body.name)},</p>
+      <p>You've been invited to join the <strong>O'Connor Agriculture</strong> team as <strong>${escapeHtml(body.role)}</strong>.</p>
       <p>Click the button below to create your account and get access to the admin dashboard:</p>
       <div style="text-align:center;margin:30px 0">
-        <a href="${adminUrl}" style="background:#4E7732;color:white;padding:12px 30px;text-decoration:none;border-radius:8px;font-weight:bold;display:inline-block">
+        <a href="${escapeHtml(adminUrl)}" style="background:#4E7732;color:white;padding:12px 30px;text-decoration:none;border-radius:8px;font-weight:bold;display:inline-block">
           Create Your Account
         </a>
       </div>
-      <p style="color:#666;font-size:13px">Use your email <strong>${body.email}</strong> when signing up so your account is linked automatically.</p>
+      <p style="color:#666;font-size:13px">Use your email <strong>${escapeHtml(body.email)}</strong> when signing up so your account is linked automatically.</p>
       <hr style="border:none;border-top:1px solid #eee;margin:20px 0">
       <p style="color:#999;font-size:12px">O'Connor Agriculture — Paddock to plate</p>
     </div>

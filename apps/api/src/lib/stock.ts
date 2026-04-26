@@ -38,9 +38,17 @@ export async function deductStock(db: any, items: OrderItem[], orderId: string, 
     const { delta: absDelta, unit } = getKgDelta(item, product);
     if (absDelta === 0) continue;
     const delta = -absDelta;
-    const newStock = Math.max(0, product.stockOnHand + delta);
 
-    await db.update(products).set({ stockOnHand: newStock, updatedAt: now }).where(eq(products.id, item.productId));
+    // Atomic SQL delta — without this, a refund webhook running concurrently
+    // with a new-order checkout would both read the same `stockOnHand`,
+    // compute their respective new values, and one of them would clobber the
+    // other. `MAX(...)` clamps at zero so we never write a negative.
+    await db.update(products)
+      .set({
+        stockOnHand: sql`MAX(0, ${products.stockOnHand} + ${delta})`,
+        updatedAt: now,
+      })
+      .where(eq(products.id, item.productId));
     await db.insert(stockMovements).values({
       id: crypto.randomUUID(),
       productId: item.productId,
@@ -162,9 +170,14 @@ export async function restoreStock(db: any, items: OrderItem[], orderId: string,
 
     const { delta, unit } = getKgDelta(item, product);
     if (delta === 0) continue;
-    const newStock = product.stockOnHand + delta;
 
-    await db.update(products).set({ stockOnHand: newStock, updatedAt: now }).where(eq(products.id, item.productId));
+    // Atomic SQL delta — see deductStock for rationale.
+    await db.update(products)
+      .set({
+        stockOnHand: sql`${products.stockOnHand} + ${delta}`,
+        updatedAt: now,
+      })
+      .where(eq(products.id, item.productId));
     await db.insert(stockMovements).values({
       id: crypto.randomUUID(),
       productId: item.productId,
