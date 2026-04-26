@@ -196,12 +196,23 @@ app.post('/', async (c) => {
   return c.json({ id: orderId }, 201);
 });
 
+// Whitelist of allowed order statuses. Without this, any string lands in the
+// status column and downstream UIs / state-machines silently misbehave.
+const VALID_ORDER_STATUSES = new Set([
+  'pending_payment', 'confirmed', 'preparing', 'packed',
+  'out_for_delivery', 'delivered', 'cancelled', 'refunded',
+]);
+
 app.patch('/:id/status', async (c) => {
   const db = drizzle(c.env.DB);
   const { status, packedBy, internalNotes } = await c.req.json<{ status: string; packedBy?: string; internalNotes?: string }>();
   const user = c.get('user');
   const orderId = c.req.param('id');
   const now = Date.now();
+
+  if (!VALID_ORDER_STATUSES.has(status)) {
+    return c.json({ error: `Invalid status "${status}". Must be one of: ${[...VALID_ORDER_STATUSES].join(', ')}` }, 400);
+  }
 
   const [order] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
   if (!order) return c.json({ error: 'Not found' }, 404);

@@ -107,17 +107,25 @@ export default function OrdersPage() {
 
   useEffect(() => { load(); }, [statusFilter]);
 
-  const openCreate = () => {
+  const openCreate = async () => {
     setForm(EMPTY_FORM);
     setItems([]);
     setSelectedProduct('');
     setItemWeight('');
     setItemQty('1');
-    Promise.all([api.products.list() as Promise<Product[]>, api.deliveryDays.list() as Promise<DeliveryDay[]>])
-      .then(([prods, days]) => {
-        setProducts((prods as Product[]).filter((p) => p.active !== false));
-        setDeliveryDays(days as DeliveryDay[]);
-      }).catch(() => {});
+    // Await Promise.all BEFORE opening the modal so dropdowns aren't empty
+    // for the first second. Previously the modal opened immediately and a
+    // fast typist could submit with stale/missing data.
+    try {
+      const [prods, days] = await Promise.all([
+        api.products.list() as Promise<Product[]>,
+        api.deliveryDays.list() as Promise<DeliveryDay[]>,
+      ]);
+      setProducts((prods as Product[]).filter((p) => p.active !== false));
+      setDeliveryDays(days as DeliveryDay[]);
+    } catch {
+      // best-effort — toast already covers other failure paths
+    }
     setShowCreate(true);
   };
 
@@ -297,7 +305,7 @@ export default function OrdersPage() {
   const editSubtotal = editItems.reduce((s, i) => s + i.lineTotal, 0);
   const editTotal = editSubtotal + (editForm.deliveryFee || 0);
 
-  const openEdit = (order: Order) => {
+  const openEdit = async (order: Order) => {
     const addr = order.deliveryAddress ?? { line1: '', line2: '', suburb: '', state: 'QLD', postcode: '' };
     setEditForm({
       customerName: order.customerName ?? '',
@@ -328,11 +336,17 @@ export default function OrdersPage() {
     setEditSelectedProduct('');
     setEditItemWeight('');
     setEditItemQty('1');
-    Promise.all([api.products.list() as Promise<Product[]>, api.deliveryDays.list() as Promise<DeliveryDay[]>])
-      .then(([prods, days]) => {
-        setProducts((prods as Product[]).filter((p) => p.active !== false));
-        setDeliveryDays(days as DeliveryDay[]);
-      }).catch(() => {});
+    // Await before opening so the line-total recalc never runs against stale prices.
+    try {
+      const [prods, days] = await Promise.all([
+        api.products.list() as Promise<Product[]>,
+        api.deliveryDays.list() as Promise<DeliveryDay[]>,
+      ]);
+      setProducts((prods as Product[]).filter((p) => p.active !== false));
+      setDeliveryDays(days as DeliveryDay[]);
+    } catch {
+      // best-effort
+    }
     setEditingOrder(order);
   };
 

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api, formatCurrency, ORDER_STATUS_LABELS } from '@butcher/shared';
 import type { Order, OrderStatus } from '@butcher/shared';
-import { ArrowLeft, Printer } from 'lucide-react';
+import { ArrowLeft, Printer, AlertTriangle } from 'lucide-react';
 import { toast } from '../lib/toast';
 
 const STATUSES: OrderStatus[] = ['pending_payment', 'confirmed', 'preparing', 'packed', 'out_for_delivery', 'delivered', 'cancelled', 'refunded'];
@@ -20,8 +20,16 @@ export default function OrderDetailPage() {
       .catch(() => {});
   }, [orderId]);
 
+  const [confirmRefund, setConfirmRefund] = useState<OrderStatus | null>(null);
   const handleStatusChange = async (status: OrderStatus) => {
     if (!orderId) return;
+    // Refund is special: marking the column as 'refunded' here does NOT move
+    // money. Surface a confirmation modal so admin understands they still
+    // need to issue the refund through Square (or whatever processor) first.
+    if (status === 'refunded') {
+      setConfirmRefund(status);
+      return;
+    }
     setSaving(true);
     try {
       await api.orders.updateStatus(orderId, status);
@@ -31,6 +39,21 @@ export default function OrderDetailPage() {
       toast('Failed to update status', 'error');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const confirmAndApplyRefund = async () => {
+    if (!orderId || !confirmRefund) return;
+    setSaving(true);
+    try {
+      await api.orders.updateStatus(orderId, confirmRefund);
+      setOrder((prev) => prev ? { ...prev, status: confirmRefund } : prev);
+      toast('Order marked as refunded');
+    } catch {
+      toast('Failed to update status', 'error');
+    } finally {
+      setSaving(false);
+      setConfirmRefund(null);
     }
   };
 
@@ -140,6 +163,33 @@ export default function OrderDetailPage() {
           </table>
         </div>
       </div>
+
+      {confirmRefund && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="bg-amber-100 rounded-full p-2 flex-shrink-0">
+                <AlertTriangle className="h-5 w-5 text-amber-700" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-bold text-gray-900">Mark order as refunded?</h3>
+                <p className="text-sm text-gray-600 mt-1">
+                  This only updates the status column — it does <strong>not</strong> move money.
+                  Issue the actual refund in your <strong>Square dashboard first</strong>, then mark the order here.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setConfirmRefund(null)} className="px-4 py-2 text-sm border rounded-lg hover:bg-gray-50">
+                Cancel
+              </button>
+              <button onClick={confirmAndApplyRefund} disabled={saving} className="px-4 py-2 text-sm bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-60 font-medium">
+                {saving ? 'Saving…' : 'Mark refunded'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -90,7 +90,14 @@ export default function DeliveryRunsTab({ dayId }: { dayId: string }) {
   };
 
   const handleDelete = async (run: DeliveryRun) => {
-    if (!confirm(`Delete "${run.name}"? All stops will become unassigned.`)) return;
+    // Show the actual stop count so admin knows what they're unassigning,
+    // not just the abstract "all stops" warning.
+    const runStops = allStops.filter((s) => s.runId === run.id);
+    const stopWord = runStops.length === 1 ? 'stop' : 'stops';
+    const message = runStops.length > 0
+      ? `Delete "${run.name}"?\n\n${runStops.length} ${stopWord} will be unassigned (status preserved). The driver app may still show stale data until they reload.`
+      : `Delete "${run.name}"? It has no stops assigned.`;
+    if (!confirm(message)) return;
     try {
       await api.deliveryRuns.remove(run.id);
       await load();

@@ -63,6 +63,22 @@ export default function StockAllocationTab({ dayId, dayDate }: { dayId: string; 
   }, [dayId]);
 
   const saveAllocations = async () => {
+    // Warn (don't block) if any product is allocated above its on-hand stock.
+    // Some farms intentionally pre-sell more than they have (waiting on a
+    // weekly butcher run), so this is a check, not a hard rule.
+    const overflow = allocations
+      .map((a) => {
+        const prod = products.find((p) => p.id === a.productId);
+        if (!prod || a.allocated <= prod.stockOnHand) return null;
+        return `${a.productName}: allocated ${a.allocated}, only ${prod.stockOnHand} on hand`;
+      })
+      .filter((line): line is string => line !== null);
+    if (overflow.length > 0) {
+      const ok = window.confirm(
+        `Warning — ${overflow.length} product${overflow.length === 1 ? '' : 's'} exceed${overflow.length === 1 ? 's' : ''} stock on hand:\n\n${overflow.join('\n')}\n\nSave anyway?`,
+      );
+      if (!ok) return;
+    }
     setSaving(true);
     try {
       const toSave = allocations.filter((a) => a.allocated > 0);
