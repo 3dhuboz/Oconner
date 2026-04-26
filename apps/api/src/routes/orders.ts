@@ -71,29 +71,30 @@ app.post('/', async (c) => {
 
   let customerId = body.customerId;
   if (!customerId) {
-    const [existing] = await db.select().from(customers).where(eq(customers.email, body.customerEmail)).limit(1);
-    if (existing) {
-      customerId = existing.id;
-      if (body.clerkId && !existing.clerkId) {
-        await db.update(customers).set({ clerkId: body.clerkId, updatedAt: now }).where(eq(customers.id, existing.id));
-      }
-    } else {
-      customerId = crypto.randomUUID();
-      await db.insert(customers).values({
-        id: customerId,
-        email: body.customerEmail,
-        name: body.customerName ?? '',
-        phone: body.customerPhone ?? '',
-        clerkId: body.clerkId ?? null,
-        accountType: 'registered',
-        orderCount: 0,
-        totalSpent: 0,
-        blacklisted: false,
-        notes: '',
-        createdAt: now,
-        updatedAt: now,
-      });
-    }
+    // Race-safe customer upsert (UNIQUE(email) added in this PR's migration).
+    // Two concurrent first-orders from the same email would otherwise both
+    // pass the SELECT and INSERT, creating duplicates.
+    const newId = crypto.randomUUID();
+    const inserted = await db.insert(customers).values({
+      id: newId,
+      email: body.customerEmail,
+      name: body.customerName ?? '',
+      phone: body.customerPhone ?? '',
+      clerkId: body.clerkId ?? null,
+      accountType: 'registered',
+      orderCount: 0,
+      totalSpent: 0,
+      blacklisted: false,
+      notes: '',
+      createdAt: now,
+      updatedAt: now,
+    })
+      .onConflictDoUpdate({
+        target: customers.email,
+        set: { clerkId: sql`COALESCE(${customers.clerkId}, ${body.clerkId ?? null})`, updatedAt: now },
+      })
+      .returning({ id: customers.id });
+    customerId = inserted[0]?.id ?? newId;
   }
 
   // ── Server-side pricing: recalculate delivery fee, discount & GST ──
@@ -185,10 +186,12 @@ app.post('/', async (c) => {
   // Deduct global product stock (separate from per-day allocations above).
   await deductStock(db, body.items as any[], orderId, now);
 
-  const [day] = await db.select().from(deliveryDays).where(eq(deliveryDays.id, body.deliveryDayId)).limit(1);
-  if (day) await db.update(deliveryDays).set({ orderCount: day.orderCount + 1 }).where(eq(deliveryDays.id, day.id));
-  const [cust] = await db.select().from(customers).where(eq(customers.id, customerId)).limit(1);
-  if (cust) await db.update(customers).set({ orderCount: cust.orderCount + 1, totalSpent: cust.totalSpent + total, updatedAt: now }).where(eq(customers.id, customerId));
+  // Atomic counter increments — read-then-write would let two concurrent
+  // orders both compute the same +1 and clobber each other's increment.
+  await db.update(deliveryDays).set({ orderCount: sql`${deliveryDays.orderCount} + 1` }).where(eq(deliveryDays.id, body.deliveryDayId));
+  await db.update(customers)
+    .set({ orderCount: sql`${customers.orderCount} + 1`, totalSpent: sql`${customers.totalSpent} + ${total}`, updatedAt: now })
+    .where(eq(customers.id, customerId));
 
   return c.json({ id: orderId }, 201);
 });
@@ -290,14 +293,14 @@ app.patch('/:id', async (c) => {
   if (body.internalNotes !== undefined) patch.internalNotes = body.internalNotes;
   if (body.status !== undefined) patch.status = body.status;
 
-  // Handle delivery day change
+  // Handle delivery day change — atomic deltas on both old and new day counters.
   if (body.deliveryDayId !== undefined && body.deliveryDayId !== order.deliveryDayId) {
-    // Decrement old day
-    const [oldDay] = await db.select().from(deliveryDays).where(eq(deliveryDays.id, order.deliveryDayId)).limit(1);
-    if (oldDay) await db.update(deliveryDays).set({ orderCount: Math.max(0, oldDay.orderCount - 1) }).where(eq(deliveryDays.id, oldDay.id));
-    // Increment new day
-    const [newDay] = await db.select().from(deliveryDays).where(eq(deliveryDays.id, body.deliveryDayId)).limit(1);
-    if (newDay) await db.update(deliveryDays).set({ orderCount: newDay.orderCount + 1 }).where(eq(deliveryDays.id, newDay.id));
+    await db.update(deliveryDays)
+      .set({ orderCount: sql`MAX(0, ${deliveryDays.orderCount} - 1)` })
+      .where(eq(deliveryDays.id, order.deliveryDayId));
+    await db.update(deliveryDays)
+      .set({ orderCount: sql`${deliveryDays.orderCount} + 1` })
+      .where(eq(deliveryDays.id, body.deliveryDayId));
     patch.deliveryDayId = body.deliveryDayId;
     // Move any existing stops to the new delivery day
     await db.update(stops).set({ deliveryDayId: body.deliveryDayId }).where(eq(stops.orderId, orderId));

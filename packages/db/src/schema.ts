@@ -295,6 +295,17 @@ export const notifications = sqliteTable('notifications', {
   sentAt: integer('sent_at').notNull(),
 });
 
+// ── Webhook idempotency ───────────────────────────────────────────────────────
+// Records the IDs of webhooks we've already processed (Stripe / Square /
+// Square Payment Link, etc.) so retries don't double-deduct stock or send
+// duplicate emails. The `id` column stores the upstream event id (e.g.
+// `evt_1ABC...`); insert-or-fail at the start of each handler is the dedup.
+export const processedWebhooks = sqliteTable('processed_webhooks', {
+  id: text('id').primaryKey(),
+  source: text('source').notNull(), // 'stripe' | 'square'
+  receivedAt: integer('received_at').notNull(),
+});
+
 // ── Audit Log ─────────────────────────────────────────────────────────────────
 export const auditLog = sqliteTable('audit_log', {
   id: text('id').primaryKey(),

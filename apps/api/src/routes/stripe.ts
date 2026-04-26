@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/d1';
 import { eq } from 'drizzle-orm';
-import { orders, customers, notifications } from '@butcher/db';
+import { orders, customers, notifications, processedWebhooks } from '@butcher/db';
 import { sendEmail, buildOrderEmail, getSubject } from '../lib/email';
 import { deductStock, restoreStock } from '../lib/stock';
 import { parseJson } from '../lib/json';
@@ -25,7 +25,7 @@ async function verifyStripeSignature(
   payload: string,
   sigHeader: string,
   secret: string,
-): Promise<{ type: string; data: { object: Record<string, unknown> } }> {
+): Promise<{ id: string; type: string; data: { object: Record<string, unknown> } }> {
   const pairs = sigHeader.split(',');
   let timestamp = '';
   const signatures: string[] = [];
@@ -51,14 +51,14 @@ async function verifyStripeSignature(
   const computed = Array.from(new Uint8Array(sig)).map((b) => b.toString(16).padStart(2, '0')).join('');
 
   if (!signatures.includes(computed)) throw new Error('Signature mismatch');
-  return JSON.parse(payload) as { type: string; data: { object: Record<string, unknown> } };
+  return JSON.parse(payload) as { id: string; type: string; data: { object: Record<string, unknown> } };
 }
 
 app.post('/webhook', async (c) => {
   const rawBody = await c.req.text();
   const sig = c.req.header('stripe-signature') ?? '';
 
-  let event: { type: string; data: { object: Record<string, unknown> } };
+  let event: { id: string; type: string; data: { object: Record<string, unknown> } };
   try {
     event = await verifyStripeSignature(rawBody, sig, c.env.STRIPE_WEBHOOK_SECRET);
   } catch {
@@ -66,6 +66,24 @@ app.post('/webhook', async (c) => {
   }
 
   const db = drizzle(c.env.DB);
+
+  // Idempotency guard: Stripe retries delivery on transient errors / network
+  // hiccups. Without this, a retried payment_intent.succeeded would re-deduct
+  // stock and resend the confirmation email each time. We INSERT-OR-FAIL on
+  // (id, source); duplicate event IDs mean we've already processed this event.
+  if (event.id) {
+    try {
+      await db.insert(processedWebhooks).values({
+        id: event.id,
+        source: 'stripe',
+        receivedAt: Date.now(),
+      });
+    } catch {
+      // PRIMARY KEY conflict — already processed. Return 200 so Stripe stops retrying.
+      return c.json({ ok: true, duplicate: true });
+    }
+  }
+
   const obj = event.data.object;
 
   if (event.type === 'payment_intent.succeeded') {

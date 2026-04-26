@@ -3,7 +3,7 @@ import { cors } from 'hono/cors';
 import type { Env, AuthUser } from './types';
 import { requireAuth, requireRole, verifyClerkToken } from './middleware/auth';
 import { drizzle } from 'drizzle-orm/d1';
-import { eq, desc, asc, and, gte } from 'drizzle-orm';
+import { eq, desc, asc, and, gte, sql } from 'drizzle-orm';
 import { orders as ordersTable, customers as customersTable, products as productsTable, deliveryDays as deliveryDaysTable, subscriptions as subscriptionsTable } from '@butcher/db';
 import { deductStock, getStockDayId, reserveDayStock } from './lib/stock';
 import ordersRouter from './routes/orders';
@@ -183,19 +183,23 @@ app.post('/api/orders', async (c) => {
   const orderId = crypto.randomUUID();
   let customerId = body.customerId;
   if (!customerId) {
-    const [existing] = await db.select().from(customersTable).where(eq(customersTable.email, body.customerEmail)).limit(1);
-    if (existing) {
-      customerId = existing.id;
-      if (body.clerkId && !existing.clerkId)
-        await db.update(customersTable).set({ clerkId: body.clerkId, updatedAt: now }).where(eq(customersTable.id, existing.id));
-    } else {
-      customerId = crypto.randomUUID();
-      await db.insert(customersTable).values({
-        id: customerId, email: body.customerEmail, name: body.customerName ?? '',
-        phone: body.customerPhone ?? '', clerkId: body.clerkId ?? null,
-        accountType: 'registered', orderCount: 0, totalSpent: 0, blacklisted: false, notes: '', createdAt: now, updatedAt: now,
-      });
-    }
+    // Race-safe customer upsert. Without UNIQUE(email) + onConflictDoUpdate,
+    // two simultaneous first-orders from the same new email would both pass
+    // the SELECT check and INSERT, creating duplicate customer rows. We now
+    // rely on the unique index added in this PR to atomically dedup.
+    const newId = crypto.randomUUID();
+    const inserted = await db.insert(customersTable).values({
+      id: newId, email: body.customerEmail, name: body.customerName ?? '',
+      phone: body.customerPhone ?? '', clerkId: body.clerkId ?? null,
+      accountType: 'registered', orderCount: 0, totalSpent: 0, blacklisted: false, notes: '', createdAt: now, updatedAt: now,
+    })
+      .onConflictDoUpdate({
+        target: customersTable.email,
+        // On a duplicate email, only patch clerkId if the existing row hasn't got one yet — preserves admin-set names/phones.
+        set: { clerkId: sql`COALESCE(${customersTable.clerkId}, ${body.clerkId ?? null})`, updatedAt: now },
+      })
+      .returning({ id: customersTable.id });
+    customerId = inserted[0]?.id ?? newId;
   }
   // ── Server-side price verification: recalculate from product DB ──
   const verifiedItems = [];
@@ -234,9 +238,12 @@ app.post('/api/orders', async (c) => {
   await deductStock(db, body.items as any[], orderId, now);
 
   const [day] = await db.select().from(deliveryDaysTable).where(eq(deliveryDaysTable.id, body.deliveryDayId)).limit(1);
-  if (day) await db.update(deliveryDaysTable).set({ orderCount: day.orderCount + 1 }).where(eq(deliveryDaysTable.id, day.id));
-  const [cust] = await db.select().from(customersTable).where(eq(customersTable.id, customerId)).limit(1);
-  if (cust) await db.update(customersTable).set({ orderCount: cust.orderCount + 1, totalSpent: cust.totalSpent + (body.total ?? 0), updatedAt: now }).where(eq(customersTable.id, customerId));
+  // Atomic counter increments — read-then-write would let two concurrent
+  // orders both compute the same +1 and clobber each other's increment.
+  if (day) await db.update(deliveryDaysTable).set({ orderCount: sql`${deliveryDaysTable.orderCount} + 1` }).where(eq(deliveryDaysTable.id, day.id));
+  await db.update(customersTable)
+    .set({ orderCount: sql`${customersTable.orderCount} + 1`, totalSpent: sql`${customersTable.totalSpent} + ${body.total ?? 0}`, updatedAt: now })
+    .where(eq(customersTable.id, customerId));
   return c.json({ id: orderId }, 201);
 });
 
@@ -750,8 +757,10 @@ export const scheduled: ExportedHandlerScheduledHandler<Env> = async (event, env
         });
 
         await deductStock(db, items as any[], orderId, now);
-        await db.update(deliveryDays).set({ orderCount: nextDay.orderCount + 1 }).where(eq(deliveryDays.id, nextDay.id));
-        await db.update(customers).set({ orderCount: customer.orderCount + 1, totalSpent: customer.totalSpent + price, updatedAt: now }).where(eq(customers.id, customerId));
+        await db.update(deliveryDays).set({ orderCount: sql`${deliveryDays.orderCount} + 1` }).where(eq(deliveryDays.id, nextDay.id));
+        await db.update(customers)
+          .set({ orderCount: sql`${customers.orderCount} + 1`, totalSpent: sql`${customers.totalSpent} + ${price}`, updatedAt: now })
+          .where(eq(customers.id, customerId));
 
         const updateData: Record<string, unknown> = { lastOrderGeneratedAt: now, updatedAt: now };
         if (sub.alternateBoxId) updateData.nextIsAlternate = !sub.nextIsAlternate;
