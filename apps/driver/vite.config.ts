@@ -15,6 +15,14 @@ export default defineConfig({
       registerType: 'autoUpdate',
       manifest: false,
       workbox: {
+        // Take control immediately on each release so drivers in the field pick
+        // up bug fixes (e.g. GPS auto-recovery) without having to fully close
+        // and reopen the PWA. Without these flags an updated SW sits "waiting"
+        // until all clients close, which means a driver with the app open all
+        // day stays on stale code through a deploy.
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
         runtimeCaching: [
           {

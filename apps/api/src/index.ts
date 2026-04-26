@@ -5,7 +5,7 @@ import { requireAuth, requireRole, verifyClerkToken } from './middleware/auth';
 import { drizzle } from 'drizzle-orm/d1';
 import { eq, desc, asc, and, gte } from 'drizzle-orm';
 import { orders as ordersTable, customers as customersTable, products as productsTable, deliveryDays as deliveryDaysTable, subscriptions as subscriptionsTable } from '@butcher/db';
-import { deductStock, getStockDayId } from './lib/stock';
+import { deductStock, getStockDayId, reserveDayStock } from './lib/stock';
 import ordersRouter from './routes/orders';
 import productsRouter from './routes/products';
 import deliveryDaysRouter from './routes/deliveryDays';
@@ -192,38 +192,22 @@ app.post('/api/orders', async (c) => {
   body.subtotal = verifiedSubtotal;
   body.total = verifiedSubtotal + (body.deliveryFee ?? 0);
 
-  // ── Pool-aware stock validation ──
+  // ── Pool-aware stock validation + atomic reservation ──
+  // reserveDayStock does a conditional UPDATE per item, so two concurrent
+  // checkouts can't both pass a stale "sold + qty <= allocated" read and
+  // oversell. On any failure earlier reservations are rolled back automatically.
   const { deliveryDayStock } = await import('@butcher/db');
   const stockDayId = await getStockDayId(db, body.deliveryDayId);
   const dayAllocations = await db.select().from(deliveryDayStock).where(eq(deliveryDayStock.deliveryDayId, stockDayId));
-  if (dayAllocations.length > 0) {
-    for (const item of (body.items as any[])) {
-      const alloc = dayAllocations.find((a: any) => a.productId === item.productId);
-      if (!alloc) {
-        // Product has no allocation for this day — block it (strict enforcement)
-        return c.json({ error: `${item.productName} is not available for this delivery day. Please select a different day or contact us.` }, 400);
-      }
-      const qty = item.weight ? item.weight / 1000 : (item.weightKg ?? item.quantity ?? 1);
-      if (alloc.sold + qty > alloc.allocated) {
-        return c.json({ error: `${item.productName} is sold out for this delivery day` }, 400);
-      }
-    }
+
+  const reserveResult = await reserveDayStock(db, dayAllocations, body.items as any[]);
+  if (!reserveResult.ok) {
+    return c.json({ error: reserveResult.error }, 400);
   }
 
   await db.insert(ordersTable).values({ ...body, id: orderId, customerId, items: JSON.stringify(body.items), deliveryAddress: JSON.stringify(body.deliveryAddress), createdAt: now, updatedAt: now });
-  // Deduct stock for each item
+  // Deduct global product stock (separate from per-day allocations above).
   await deductStock(db, body.items as any[], orderId, now);
-
-  // ── Update pool-aware day stock sold counts ──
-  if (dayAllocations.length > 0) {
-    for (const item of (body.items as any[])) {
-      const alloc = dayAllocations.find((a: any) => a.productId === item.productId);
-      if (alloc) {
-        const qty = item.weight ? item.weight / 1000 : (item.weightKg ?? item.quantity ?? 1);
-        await db.update(deliveryDayStock).set({ sold: alloc.sold + qty }).where(eq(deliveryDayStock.id, alloc.id));
-      }
-    }
-  }
 
   const [day] = await db.select().from(deliveryDaysTable).where(eq(deliveryDaysTable.id, body.deliveryDayId)).limit(1);
   if (day) await db.update(deliveryDaysTable).set({ orderCount: day.orderCount + 1 }).where(eq(deliveryDaysTable.id, day.id));

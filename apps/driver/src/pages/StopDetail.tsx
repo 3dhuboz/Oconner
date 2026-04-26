@@ -40,6 +40,13 @@ export default function StopDetailPage() {
   const [proofUrl, setProofUrl] = useState<string | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Surfaces transient errors from the network calls below. Without this, a
+  // failed updateStatus / photo upload would silently optimistic-update the
+  // UI and auto-advance the driver to the next stop, leaving a stop falsely
+  // delivered server-side.
+  const [actionError, setActionError] = useState<{ kind: 'deliver' | 'fail' | 'undo' | 'photo'; message: string } | null>(null);
+  const [pendingRetry, setPendingRetry] = useState<(() => void) | null>(null);
+  const errMsg = (e: unknown) => e instanceof Error && e.message ? e.message : 'Network error — please try again';
 
   useEffect(() => {
     if (!stopId) return;
@@ -90,19 +97,45 @@ export default function StopDetailPage() {
     const file = e.target.files?.[0];
     if (!file || !stopId) return;
     setUploadingPhoto(true);
+    setActionError(null);
+    let uploadedUrl: string | null = null;
     try {
-      const url = await api.images.upload(file, 'proof');
-      setProofUrl(url);
+      uploadedUrl = await api.images.upload(file, 'proof');
+      setProofUrl(uploadedUrl);
       if (captureMode === 'deliver') {
-        // Proof-of-delivery path — photo goes out to customer via SMS on the server side.
-        await api.stops.updateStatus(stopId, { status: 'delivered', proofUrl: url, driverNote: note || undefined });
-        setStop((s) => s ? { ...s, status: 'delivered' as StopStatus, proofUrl: url } : s);
+        // Proof-of-delivery path — photo goes out to customer via SMS on the
+        // server side. Order matters: only mutate local state and auto-advance
+        // AFTER the API call succeeds, otherwise we'd skip past a stop that's
+        // still marked pending server-side.
+        await api.stops.updateStatus(stopId, { status: 'delivered', proofUrl: uploadedUrl, driverNote: note || undefined });
+        setStop((s) => s ? { ...s, status: 'delivered' as StopStatus, proofUrl: uploadedUrl ?? undefined } : s);
         setAllStops((prev) => prev.map((s) => s.id === stopId ? { ...s, status: 'delivered' as StopStatus } : s));
         goToNextOrHome();
       }
       // mode === 'upload': photo stored locally; driver still needs to tap "Mark as Delivered" to commit.
-    } catch {
-      // best-effort
+    } catch (e) {
+      // Photo may have uploaded successfully even if the deliver call failed.
+      // Keep proofUrl set so retrying "Mark as Delivered" reuses the photo.
+      const kind: 'photo' | 'deliver' = uploadedUrl ? 'deliver' : 'photo';
+      setActionError({ kind, message: errMsg(e) });
+      // Stash a retry that bypasses re-uploading the file if we already have it.
+      if (uploadedUrl && captureMode === 'deliver') {
+        const url = uploadedUrl;
+        setPendingRetry(() => async () => {
+          setUpdating(true); setActionError(null);
+          try {
+            await api.stops.updateStatus(stopId, { status: 'delivered', proofUrl: url, driverNote: note || undefined });
+            setStop((s) => s ? { ...s, status: 'delivered' as StopStatus, proofUrl: url } : s);
+            setAllStops((prev) => prev.map((s) => s.id === stopId ? { ...s, status: 'delivered' as StopStatus } : s));
+            setPendingRetry(null);
+            goToNextOrHome();
+          } catch (err) {
+            setActionError({ kind: 'deliver', message: errMsg(err) });
+          } finally {
+            setUpdating(false);
+          }
+        });
+      }
     } finally {
       setUploadingPhoto(false);
       setCaptureMode('upload'); // reset for next time
@@ -112,12 +145,21 @@ export default function StopDetailPage() {
   const updateStatus = async (status: StopStatus, extra?: { driverNote?: string; failReason?: string }) => {
     if (!stopId) return;
     setUpdating(true);
-    await api.stops.updateStatus(stopId, { status, proofUrl: proofUrl ?? undefined, ...extra });
-    setStop((s) => s ? { ...s, status: status } : s);
-    setAllStops((prev) => prev.map((s) => s.id === stopId ? { ...s, status } : s));
-    setUpdating(false);
-    if (status === 'delivered' || status === 'failed') {
-      goToNextOrHome();
+    setActionError(null);
+    try {
+      await api.stops.updateStatus(stopId, { status, proofUrl: proofUrl ?? undefined, ...extra });
+      setStop((s) => s ? { ...s, status: status } : s);
+      setAllStops((prev) => prev.map((s) => s.id === stopId ? { ...s, status } : s));
+      if (status === 'delivered' || status === 'failed') {
+        goToNextOrHome();
+      }
+    } catch (e) {
+      const kind: 'deliver' | 'fail' = status === 'failed' ? 'fail' : 'deliver';
+      setActionError({ kind, message: errMsg(e) });
+      // Cache a retry the user can trigger from the banner.
+      setPendingRetry(() => () => updateStatus(status, extra));
+    } finally {
+      setUpdating(false);
     }
   };
 
@@ -126,11 +168,15 @@ export default function StopDetailPage() {
   const undoStatus = async () => {
     if (!stopId || !stop) return;
     setUpdating(true);
+    setActionError(null);
     try {
       await api.stops.updateStatus(stopId, { status: 'en_route' });
       setProofUrl(null);
       setStop((s) => s ? { ...s, status: 'en_route' as StopStatus, proofUrl: undefined } : s);
       setAllStops((prev) => prev.map((s) => s.id === stopId ? { ...s, status: 'en_route' as StopStatus, proofUrl: undefined } : s));
+    } catch (e) {
+      setActionError({ kind: 'undo', message: errMsg(e) });
+      setPendingRetry(() => undoStatus);
     } finally {
       setUpdating(false);
     }
@@ -198,6 +244,40 @@ export default function StopDetailPage() {
       </header>
 
       <main className="flex-1 overflow-y-auto p-4 space-y-4">
+        {actionError && (
+          <div className="bg-red-50 border-2 border-red-300 rounded-xl p-4 text-red-900 shadow-sm">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="font-bold">
+                  {actionError.kind === 'deliver' && "Delivery wasn't saved"}
+                  {actionError.kind === 'fail' && "Couldn't mark as failed"}
+                  {actionError.kind === 'undo' && "Undo didn't go through"}
+                  {actionError.kind === 'photo' && "Photo upload failed"}
+                </p>
+                <p className="text-sm mt-0.5">{actionError.message}</p>
+                <p className="text-xs text-red-700/80 mt-1">The stop has not been saved. Tap retry below.</p>
+                <div className="flex gap-2 mt-3">
+                  {pendingRetry && (
+                    <button
+                      onClick={() => pendingRetry()}
+                      disabled={updating || uploadingPhoto}
+                      className="bg-red-600 text-white text-sm font-semibold px-4 py-2 rounded-lg disabled:opacity-50"
+                    >
+                      Retry
+                    </button>
+                  )}
+                  <button
+                    onClick={() => { setActionError(null); setPendingRetry(null); }}
+                    className="bg-white border border-red-300 text-red-700 text-sm font-semibold px-3 py-2 rounded-lg"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
         {(() => {
           const addOns = detectAddOns(stop.customerNote);
           if (addOns.length === 0) return null;
