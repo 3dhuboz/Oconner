@@ -126,7 +126,10 @@ export default function TrackOrderPage({ params }: { params: { orderId: string }
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.orders.get(params.orderId)
+    // Use the public tracking endpoint — returns the safe subset of order
+    // fields without customer email/phone/internal notes. The full
+    // /api/orders/:id endpoint is now ownership-checked.
+    api.orders.tracking(params.orderId)
       .then((data) => { setOrder(data as Order); setLoading(false); })
       .catch(() => setLoading(false));
   }, [params.orderId]);

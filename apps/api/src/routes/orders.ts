@@ -45,6 +45,21 @@ app.get('/:id', async (c) => {
   const db = drizzle(c.env.DB);
   const [order] = await db.select().from(orders).where(eq(orders.id, c.req.param('id'))).limit(1);
   if (!order) return c.json({ error: 'Not found' }, 404);
+
+  // Ownership check: staff/admin can read any order; otherwise the requester
+  // must own the order. Without this, any signed-in customer (or driver) could
+  // read another customer's full PII just by guessing or being sent the UUID.
+  const user = c.get('user');
+  if (user.role !== 'admin' && user.role !== 'staff') {
+    // Resolve the requester's customer record by matching the user's email or clerkId.
+    const [requesterCustomer] = await db.select().from(customers)
+      .where(eq(customers.email, user.email))
+      .limit(1);
+    if (!requesterCustomer || order.customerId !== requesterCustomer.id) {
+      return c.json({ error: 'Forbidden' }, 403);
+    }
+  }
+
   return c.json({ ...order, items: parseJson<unknown[]>(order.items, []), deliveryAddress: parseJson<Record<string, string>>(order.deliveryAddress, {}) });
 });
 
@@ -158,7 +173,10 @@ app.post('/', async (c) => {
     deliveryAddress: JSON.stringify(body.deliveryAddress),
     internalNotes: body.internalNotes ?? '',
     fulfillmentType: (body as any).fulfillmentType ?? 'delivery',
-    promoCode: (body as any).promoId ?? null,
+    // Store the human-readable promo code (e.g. "BBQ20"), not the internal
+    // UUID. Receipts, customer-facing emails and the admin order detail all
+    // read this column expecting the code as the customer typed it.
+    promoCode: (body as any).promoCode ?? null,
     promoDiscount: discount ?? 0,
     createdAt: now,
     updatedAt: now,

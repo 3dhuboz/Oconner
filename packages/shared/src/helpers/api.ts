@@ -54,6 +54,8 @@ export const api = {
     list: (status?: string) => api.get(`/api/orders${status ? `?status=${status}` : ''}`),
     today: () => api.get('/api/orders/today'),
     get: (id: string) => api.get(`/api/orders/${id}`),
+    /** Public tracking endpoint — returns redacted order fields safe to expose without auth. */
+    tracking: (id: string) => api.get(`/api/orders/${id}/tracking`),
     create: (data: unknown) => api.post('/api/orders', data),
     updateStatus: (id: string, status: string, extra?: { packedBy?: string; internalNotes?: string }) =>
       api.patch(`/api/orders/${id}/status`, { status, ...extra }),

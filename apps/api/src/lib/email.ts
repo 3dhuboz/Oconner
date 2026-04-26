@@ -1,3 +1,20 @@
+/**
+ * HTML-escape user-supplied strings before interpolating into the email
+ * template. Without this, a customer setting their name to
+ * `<img src=x onerror=fetch(...)>` would land that payload in admin and
+ * customer mailboxes — a real XSS vector against any client that renders
+ * inline HTML.
+ */
+export function escapeHtml(s: string | null | undefined): string {
+  if (s === null || s === undefined) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 export interface OrderEmailData {
   customerName: string;
   orderId: string;
@@ -71,16 +88,19 @@ export function getSubject(type: string, data: OrderEmailData): string {
 }
 
 export function buildOrderEmail(type: string, data: OrderEmailData): string {
+  // All user-controlled fields (customer name, address, product names) are
+  // HTML-escaped before interpolation. The static literals (status copy,
+  // amounts, dates we generated) are safe to interpolate raw.
   const itemsHtml = data.orderItems
     .map((item) => `<tr>
-      <td style="padding:8px;border-bottom:1px solid #eee">${item.productName}</td>
+      <td style="padding:8px;border-bottom:1px solid #eee">${escapeHtml(item.productName)}</td>
       <td style="padding:8px;border-bottom:1px solid #eee;text-align:right">$${(item.lineTotal / 100).toFixed(2)}</td>
     </tr>`)
     .join('');
 
   const bodies: Record<string, string> = {
-    order_confirmation: `<p>Thank you for your order! We've confirmed <strong>#${data.orderId.slice(-8).toUpperCase()}</strong> for delivery on <strong>${data.deliveryDate}</strong>.</p>`,
-    day_before: `<p>Your order is scheduled for delivery <strong>tomorrow, ${data.deliveryDate}</strong>.${(data as any).timeWindow ?? ''} We'll notify you when it's on its way!</p>`,
+    order_confirmation: `<p>Thank you for your order! We've confirmed <strong>#${data.orderId.slice(-8).toUpperCase()}</strong> for delivery on <strong>${escapeHtml(data.deliveryDate)}</strong>.</p>`,
+    day_before: `<p>Your order is scheduled for delivery <strong>tomorrow, ${escapeHtml(data.deliveryDate)}</strong>.${escapeHtml(String((data as any).timeWindow ?? ''))} We'll notify you when it's on its way!</p>`,
     out_for_delivery: `<p>Your order is on its way! Our driver is heading to you now.</p>`,
     delivered: `<p>Your order has been successfully delivered. Thank you for choosing O'Connor Agriculture!</p>`,
     order_cancelled: `<p>Your order <strong>#${data.orderId.slice(-8).toUpperCase()}</strong> has been cancelled. Contact us if this is an error.</p>`,
@@ -95,7 +115,7 @@ export function buildOrderEmail(type: string, data: OrderEmailData): string {
     <h1 style="color:white;margin:0;font-size:24px">O'Connor Agriculture</h1>
   </div>
   <div style="background:#f9f9f9;padding:24px;border:1px solid #eee;border-top:none;border-radius:0 0 8px 8px">
-    <p>Hi ${data.customerName},</p>
+    <p>Hi ${escapeHtml(data.customerName)},</p>
     ${bodies[type] ?? '<p>Your order has been updated.</p>'}
     <table style="width:100%;border-collapse:collapse;margin:16px 0">
       <thead><tr style="background:#4E7732;color:white">
@@ -110,9 +130,9 @@ export function buildOrderEmail(type: string, data: OrderEmailData): string {
         <tr><td style="padding:8px;font-weight:bold;text-align:right" colspan="2">Total: $${(data.total / 100).toFixed(2)}</td></tr>
       </tfoot>
     </table>
-    <p><strong>Delivery Address:</strong> ${data.deliveryAddress}</p>
-    <p><a href="${data.trackingUrl}" style="background:#4E7732;color:white;padding:12px 24px;text-decoration:none;border-radius:6px;display:inline-block">Track My Order</a></p>
-    ${data.proofUrl ? `<p><a href="${data.proofUrl}">View Proof of Delivery</a></p>` : ''}
+    <p><strong>Delivery Address:</strong> ${escapeHtml(data.deliveryAddress)}</p>
+    <p><a href="${escapeHtml(data.trackingUrl)}" style="background:#4E7732;color:white;padding:12px 24px;text-decoration:none;border-radius:6px;display:inline-block">Track My Order</a></p>
+    ${data.proofUrl ? `<p><a href="${escapeHtml(data.proofUrl)}">View Proof of Delivery</a></p>` : ''}
     <hr style="margin:24px 0;border:none;border-top:1px solid #eee">
     <p style="font-size:12px;color:#999">O'Connor Agriculture — Fresh quality meat delivered to your door.</p>
   </div>
