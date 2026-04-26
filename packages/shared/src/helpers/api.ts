@@ -158,19 +158,37 @@ export const api = {
   },
 
   images: {
+    /**
+     * Upload an image. Times out after 30s — without this, a driver on a poor
+     * 3G connection trying to upload a 10MB photo would block the StopDetail
+     * delivery flow indefinitely. The driver UI catches AbortError and shows
+     * a friendly retry banner.
+     */
     upload: async (file: File, folder?: string): Promise<string> => {
       const headers = await authHeaders();
       const formData = new FormData();
       formData.append('file', file);
       if (folder) formData.append('folder', folder);
-      const res = await fetch(`${API_URL}/api/images/upload`, {
-        method: 'POST',
-        headers: { Authorization: headers.Authorization ?? '' },
-        body: formData,
-      });
-      if (!res.ok) throw new Error('Upload failed');
-      const data = await res.json() as { url: string; key: string };
-      return data.url;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30_000);
+      try {
+        const res = await fetch(`${API_URL}/api/images/upload`, {
+          method: 'POST',
+          headers: { Authorization: headers.Authorization ?? '' },
+          body: formData,
+          signal: controller.signal,
+        });
+        if (!res.ok) throw new Error(`Upload failed (HTTP ${res.status})`);
+        const data = await res.json() as { url: string; key: string };
+        return data.url;
+      } catch (e) {
+        if ((e as Error)?.name === 'AbortError') {
+          throw new Error('Upload took too long — please try again');
+        }
+        throw e;
+      } finally {
+        clearTimeout(timeout);
+      }
     },
     generate: async (prompt: string): Promise<string> => {
       const data = await request<{ url: string }>('POST', '/api/images/generate', { prompt });

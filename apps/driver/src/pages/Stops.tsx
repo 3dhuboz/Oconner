@@ -108,14 +108,21 @@ export default function StopsPage() {
     }
   };
 
+  const [endingDay, setEndingDay] = useState(false);
   const handleEndDay = async () => {
-    if (sessionId) {
-      await api.drivers.endSession(sessionId);
-    }
-    setTrackingEnabled(false);
-    setSessionId(null);
-    if (deliveryDay?.id) {
-      try { localStorage.removeItem(`ocn-driver-session:${deliveryDay.id}`); } catch {}
+    if (endingDay) return; // double-tap guard — drivers tend to double-tap on bumpy roads
+    setEndingDay(true);
+    try {
+      if (sessionId) {
+        await api.drivers.endSession(sessionId);
+      }
+      setTrackingEnabled(false);
+      setSessionId(null);
+      if (deliveryDay?.id) {
+        try { localStorage.removeItem(`ocn-driver-session:${deliveryDay.id}`); } catch {}
+      }
+    } finally {
+      setEndingDay(false);
     }
   };
 
@@ -166,8 +173,8 @@ export default function StopsPage() {
             ) : (
               <div className="flex gap-2">
                 <GPSStatusBadge status={gpsStatus} />
-                <button onClick={handleEndDay} className="bg-white/10 border border-white/20 rounded-xl px-4 py-2 text-sm">
-                  End Day
+                <button onClick={handleEndDay} disabled={endingDay} className="bg-white/10 border border-white/20 rounded-xl px-4 py-2 text-sm disabled:opacity-50">
+                  {endingDay ? 'Ending…' : 'End Day'}
                 </button>
               </div>
             )}
