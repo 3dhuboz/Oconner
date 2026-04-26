@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { notifyCustomer } from './push';
 import { drizzle } from 'drizzle-orm/d1';
-import { eq, asc, gte, and } from 'drizzle-orm';
+import { eq, asc, gte, and, sql } from 'drizzle-orm';
 import { deliveryDays, orders, stops, notifications, subscriptions, customers, users, deliveryRuns, products, deliveryDayStock, auditLog } from '@butcher/db';
 import { deductStock, getStockDayId } from '../lib/stock';
 import { sendEmail, buildOrderEmail, getSubject } from '../lib/email';
@@ -210,14 +210,15 @@ app.post('/:id/generate-stops', async (c) => {
 
     await deductStock(db, [item], orderId, now);
 
-    // Update delivery day order count
-    const [day] = await db.select().from(deliveryDays).where(eq(deliveryDays.id, dayId)).limit(1);
-    if (day) await db.update(deliveryDays).set({ orderCount: day.orderCount + 1 }).where(eq(deliveryDays.id, dayId));
+    // Atomic counter updates — read-then-write would race with concurrent
+    // order creation against the same day or customer.
+    await db.update(deliveryDays)
+      .set({ orderCount: sql`${deliveryDays.orderCount} + 1` })
+      .where(eq(deliveryDays.id, dayId));
 
-    // Update customer stats
     await db.update(customers).set({
-      orderCount: customer.orderCount + 1,
-      totalSpent: customer.totalSpent + price,
+      orderCount: sql`${customers.orderCount} + 1`,
+      totalSpent: sql`${customers.totalSpent} + ${price}`,
       updatedAt: now,
     }).where(eq(customers.id, customerId));
 

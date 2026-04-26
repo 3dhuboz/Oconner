@@ -48,7 +48,17 @@ app.delete('/subscribe', async (c) => {
   if (!endpoint) return c.json({ error: 'Missing endpoint' }, 400);
 
   const db = drizzle(c.env.DB);
-  await db.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, endpoint));
+
+  // Ownership check: the endpoint string must match a subscription owned by
+  // the requesting customer. Without this, anyone authed could DELETE another
+  // customer's subscription if they obtained the endpoint URL — a quiet DoS.
+  const { and: dbAnd } = await import('drizzle-orm');
+  const [customer] = await db.select().from(customers).where(eq(customers.clerkId, clerk.clerkId)).limit(1);
+  if (!customer) return c.json({ error: 'Customer record not found' }, 404);
+  await db.delete(pushSubscriptions).where(dbAnd(
+    eq(pushSubscriptions.endpoint, endpoint),
+    eq(pushSubscriptions.customerId, customer.id),
+  ));
   return c.json({ ok: true });
 });
 

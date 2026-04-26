@@ -55,16 +55,40 @@ export default function StopsPage() {
   }, [deliveryDay?.id]);
 
   // Restore an in-flight session on page load so a browser refresh doesn't
-  // orphan it (the server still thinks the session is active — without this
-  // the "End Day" button silently no-ops because sessionId is null).
+  // orphan it. Reconcile with the server so we don't end up out of sync:
+  //   - localStorage has stored id but server says it's no longer active → clear local
+  //   - localStorage empty but server has an active session for this day → adopt server's id
+  //   - both agree → use it
   useEffect(() => {
-    if (!deliveryDay?.id) return;
+    if (!deliveryDay?.id || sessionId) return;
+    let cancelled = false;
     const key = `ocn-driver-session:${deliveryDay.id}`;
     const stored = localStorage.getItem(key);
-    if (stored && !sessionId) {
-      setSessionId(stored);
-      setTrackingEnabled(true);
-    }
+    (async () => {
+      try {
+        const active = await api.drivers.activeSessions() as Array<{ id: string; deliveryDayId: string; active: boolean }>;
+        if (cancelled) return;
+        const serverSession = active.find((s) => s.deliveryDayId === deliveryDay.id && s.active);
+        const targetId = serverSession?.id ?? null;
+
+        if (targetId) {
+          // Server has an active session for this day — adopt that id and persist.
+          setSessionId(targetId);
+          setTrackingEnabled(true);
+          try { localStorage.setItem(key, targetId); } catch {}
+        } else if (stored) {
+          // localStorage thinks we have a session but server disagrees — drop it.
+          try { localStorage.removeItem(key); } catch {}
+        }
+      } catch {
+        // Network failure — fall back to whatever localStorage says, like before.
+        if (stored && !cancelled) {
+          setSessionId(stored);
+          setTrackingEnabled(true);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
   }, [deliveryDay?.id, sessionId]);
 
   const handleBeginRoute = async () => {
