@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { notifyCustomer } from './push';
 import { drizzle } from 'drizzle-orm/d1';
 import { eq, asc, gte, and } from 'drizzle-orm';
-import { deliveryDays, orders, stops, notifications, subscriptions, customers, users, deliveryRuns, products, deliveryDayStock } from '@butcher/db';
+import { deliveryDays, orders, stops, notifications, subscriptions, customers, users, deliveryRuns, products, deliveryDayStock, auditLog } from '@butcher/db';
 import { deductStock, getStockDayId } from '../lib/stock';
 import { sendEmail, buildOrderEmail, getSubject } from '../lib/email';
 import type { Env, AuthUser } from '../types';
@@ -485,8 +485,100 @@ app.put('/:id/stock-pool', async (c) => {
     if (poolSourceId === dayId) return c.json({ error: 'Cannot link a day to itself' }, 400);
   }
 
+  // Capture any allocations that were sitting on this day BEFORE we link it to a
+  // pool. These would otherwise be orphaned — invisible to the UI (which reads
+  // through the pool source) but still in the DB. That's how this week's run
+  // ended up with Seamus seeing fewer products than he'd configured.
+  // We migrate them into the pool source on link, and copy them down on unlink.
+  let migratedSummary: { added: string[]; merged: string[]; orphansDeleted: number; copiedDown?: number } | undefined;
+
+  // If we're UNLINKING (poolSourceId === null) and the day was previously
+  // pooled, copy the pool's current allocations down onto this day so the
+  // admin doesn't end up with an empty day. Use sold=0 because the day is
+  // newly-independent — its sold counter starts fresh.
+  const [currentDay] = await db.select().from(deliveryDays).where(eq(deliveryDays.id, dayId)).limit(1);
+  if (poolSourceId === null && currentDay?.stockPoolId) {
+    const poolRows = await db.select().from(deliveryDayStock).where(eq(deliveryDayStock.deliveryDayId, currentDay.stockPoolId));
+    if (poolRows.length > 0) {
+      // Don't double-write if the day already has its own rows somehow.
+      const existingOnDay = await db.select().from(deliveryDayStock).where(eq(deliveryDayStock.deliveryDayId, dayId));
+      if (existingOnDay.length === 0) {
+        await db.insert(deliveryDayStock).values(poolRows.map((r) => ({
+          id: crypto.randomUUID(),
+          deliveryDayId: dayId,
+          productId: r.productId,
+          productName: r.productName,
+          allocated: r.allocated,
+          sold: 0,
+          createdAt: Date.now(),
+        })));
+        migratedSummary = { added: [], merged: [], orphansDeleted: 0, copiedDown: poolRows.length };
+      }
+    }
+  }
+
+  if (poolSourceId) {
+    const orphans = await db.select().from(deliveryDayStock).where(eq(deliveryDayStock.deliveryDayId, dayId));
+    if (orphans.length > 0) {
+      const poolRows = await db.select().from(deliveryDayStock).where(eq(deliveryDayStock.deliveryDayId, poolSourceId));
+      const poolByProduct = new Map(poolRows.map((r) => [r.productId, r]));
+      const added: string[] = [];
+      const merged: string[] = [];
+      const now = Date.now();
+      for (const orphan of orphans) {
+        const existing = poolByProduct.get(orphan.productId);
+        if (existing) {
+          // Merge: take MAX(allocated) — assume Seamus's most recent intent —
+          // and SUM(sold) so already-deducted orders aren't lost.
+          const newAlloc = Math.max(existing.allocated, orphan.allocated);
+          const newSold = existing.sold + orphan.sold;
+          if (newAlloc !== existing.allocated || newSold !== existing.sold) {
+            await db.update(deliveryDayStock)
+              .set({ allocated: newAlloc, sold: newSold })
+              .where(eq(deliveryDayStock.id, existing.id));
+            merged.push(orphan.productName);
+          }
+        } else {
+          // Insert into the pool source — preserve the orphan's allocated and sold.
+          await db.insert(deliveryDayStock).values({
+            id: crypto.randomUUID(),
+            deliveryDayId: poolSourceId,
+            productId: orphan.productId,
+            productName: orphan.productName,
+            allocated: orphan.allocated,
+            sold: orphan.sold,
+            createdAt: now,
+          });
+          added.push(orphan.productName);
+        }
+      }
+      // Clear the now-redundant orphan rows on this day.
+      await db.delete(deliveryDayStock).where(eq(deliveryDayStock.deliveryDayId, dayId));
+      migratedSummary = { added, merged, orphansDeleted: orphans.length };
+    }
+  }
+
   await db.update(deliveryDays).set({ stockPoolId: poolSourceId }).where(eq(deliveryDays.id, dayId));
-  return c.json({ ok: true });
+
+  // Audit log so future "where did my allocations go" investigations are traceable.
+  try {
+    const user = c.get('user');
+    await db.insert(auditLog).values({
+      id: crypto.randomUUID(),
+      action: poolSourceId ? 'link_stock_pool' : 'unlink_stock_pool',
+      entity: 'delivery_days',
+      entityId: dayId,
+      before: JSON.stringify({}),
+      after: JSON.stringify({ stockPoolId: poolSourceId, migrated: migratedSummary }),
+      adminUid: user?.id ?? null,
+      adminEmail: user?.email ?? null,
+      timestamp: Date.now(),
+    });
+  } catch {
+    // best-effort
+  }
+
+  return c.json({ ok: true, migrated: migratedSummary });
 });
 
 // Copy allocations from a previous delivery day
