@@ -7,10 +7,10 @@ export const runtime = 'edge';
 // for the About page.
 export const dynamic = 'force-dynamic';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
-import { api, formatCurrency } from '@butcher/shared';
+import { api, formatCurrency, dayServesPostcode } from '@butcher/shared';
 import type { DeliveryDay } from '@butcher/shared';
 import { useCart } from '@/lib/cart';
 import Navbar from '@/components/Navbar';
@@ -43,8 +43,32 @@ export default function CheckoutPage() {
   const BULK_IDS = ['prod-quarter-share', 'prod-half-share'];
   const hasBulkItem = items.some((i) => BULK_IDS.includes(i.productId));
 
+  // Filter delivery days to those that actually serve the customer's postcode.
+  // Pickup days are never area-restricted — the customer collects, so any
+  // postcode is fine. Days with no zones configured also stay visible (legacy
+  // safety: don't hide an admin-created day just because zones weren't filled).
+  const availableDays = useMemo(() => {
+    const pc = form.postcode.trim();
+    if (!pc) return deliveryDays;
+    return deliveryDays.filter((d) => {
+      if ((d as any).type === 'pickup') return true;
+      return dayServesPostcode((d as any).zones, pc);
+    });
+  }, [deliveryDays, form.postcode]);
+
+  // If the customer changes postcode mid-flow and the selected day is no
+  // longer available, snap to the first available day (or clear).
+  useEffect(() => {
+    if (!selectedDayId) return;
+    if (!availableDays.find((d) => d.id === selectedDayId)) {
+      setSelectedDayId(availableDays[0]?.id ?? '');
+    }
+  }, [availableDays, selectedDayId]);
+
   const selectedDay = deliveryDays.find((d) => d.id === selectedDayId);
   const isPickup = (selectedDay as any)?.type === 'pickup';
+  const postcodeEntered = form.postcode.trim().length === 4;
+  const noDayServesPostcode = postcodeEntered && availableDays.filter((d) => (d as any).type !== 'pickup').length === 0;
   const subtotal = total();
   const promoDiscount = promoApplied?.discount ?? 0;
   const discountedSubtotal = Math.max(0, subtotal - promoDiscount);
@@ -92,6 +116,12 @@ export default function CheckoutPage() {
     if (items.length === 0) { setError('Your cart is empty.'); return; }
     if (!isPickup && form.line1 && !/^\d/.test(form.line1.trim())) {
       setError('Please include a street number in your address (e.g. 12 Katrina Boulevard).');
+      return;
+    }
+    // Defence-in-depth: even if the dropdown filter is bypassed somehow,
+    // refuse to submit when the chosen day doesn't actually serve this postcode.
+    if (!isPickup && selectedDay && !dayServesPostcode((selectedDay as any).zones, form.postcode)) {
+      setError(`Sorry — postcode ${form.postcode} isn't on this run's route. Please pick a different delivery day.`);
       return;
     }
     setSubmitting(true);
@@ -183,9 +213,18 @@ export default function CheckoutPage() {
               <h2 className="text-lg font-semibold mb-4">Delivery Day</h2>
               {deliveryDays.length === 0 ? (
                 <p className="text-amber-600 text-sm">No delivery days available. Please check back soon.</p>
+              ) : !postcodeEntered ? (
+                <p className="text-gray-500 text-sm bg-gray-50 border border-gray-200 rounded-lg px-4 py-3">
+                  Enter your delivery address above and we'll show you the next runs that come through your area.
+                </p>
+              ) : noDayServesPostcode ? (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
+                  <p className="font-medium">We don't currently have a run scheduled for postcode {form.postcode}.</p>
+                  <p className="mt-1 text-amber-700">Check the <a href="/delivery-days" className="underline font-medium">delivery calendar</a> for upcoming dates, or get in touch and we'll see what we can do.</p>
+                </div>
               ) : (
                 <select value={selectedDayId} onChange={(e) => setSelectedDayId(e.target.value)} className="w-full border rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand text-sm">
-                  {deliveryDays.map((day) => {
+                  {availableDays.map((day) => {
                     const date = new Date(day.date);
                     return (
                       <option key={day.id} value={day.id}>
@@ -317,7 +356,7 @@ export default function CheckoutPage() {
 
               <button
                 type="submit"
-                disabled={submitting || deliveryDays.length === 0}
+                disabled={submitting || deliveryDays.length === 0 || (!isPickup && noDayServesPostcode) || !selectedDayId}
                 className="w-full mt-6 bg-brand text-white py-3 rounded-lg font-medium hover:bg-brand-mid transition-colors disabled:opacity-50"
               >
                 {submitting ? 'Placing Order…' : `Place Order — ${formatCurrency(grandTotal)}`}
