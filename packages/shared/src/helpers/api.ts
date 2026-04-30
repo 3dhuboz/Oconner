@@ -155,6 +155,13 @@ export const api = {
       if (to) params.set('to', String(to));
       return api.get(`/api/reports/revenue?${params}`);
     },
+    runs: (from?: number, to?: number) => {
+      const params = new URLSearchParams();
+      if (from) params.set('from', String(from));
+      if (to) params.set('to', String(to));
+      const qs = params.toString();
+      return api.get(`/api/reports/runs${qs ? `?${qs}` : ''}`);
+    },
   },
 
   images: {
