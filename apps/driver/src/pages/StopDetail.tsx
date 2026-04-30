@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '@butcher/shared';
 import type { Stop, StopStatus } from '@butcher/shared';
-import { ArrowLeft, MapPin, Phone, Navigation, CheckCircle, Camera, AlertTriangle, ChevronRight, Undo2, PackagePlus } from 'lucide-react';
+import { ArrowLeft, MapPin, Phone, Navigation, CheckCircle, Camera, AlertTriangle, ChevronRight, Undo2, PackagePlus, Coffee } from 'lucide-react';
 import { formatWeight } from '@butcher/shared';
 import { detectAddOns } from '../lib/addOns';
 
@@ -83,13 +83,14 @@ export default function StopDetailPage() {
       setProofUrl(uploadedUrl);
       if (captureMode === 'deliver') {
         // Proof-of-delivery path — photo goes out to customer via SMS on the
-        // server side. Order matters: only mutate local state and auto-advance
-        // AFTER the API call succeeds, otherwise we'd skip past a stop that's
-        // still marked pending server-side.
+        // server side. Order matters: only mutate local state AFTER the API
+        // call succeeds, otherwise we'd flag a stop delivered locally that's
+        // still pending server-side.
         await api.stops.updateStatus(stopId, { status: 'delivered', proofUrl: uploadedUrl, driverNote: note || undefined });
         setStop((s) => s ? { ...s, status: 'delivered' as StopStatus, proofUrl: uploadedUrl ?? undefined } : s);
         setAllStops((prev) => prev.map((s) => s.id === stopId ? { ...s, status: 'delivered' as StopStatus } : s));
-        goToNextOrHome();
+        // No auto-advance — driver chooses when to move on (or take a break)
+        // from the delivered-state UI below.
       }
       // mode === 'upload': photo stored locally; driver still needs to tap "Mark as Delivered" to commit.
     } catch (e) {
@@ -107,7 +108,7 @@ export default function StopDetailPage() {
             setStop((s) => s ? { ...s, status: 'delivered' as StopStatus, proofUrl: url } : s);
             setAllStops((prev) => prev.map((s) => s.id === stopId ? { ...s, status: 'delivered' as StopStatus } : s));
             setPendingRetry(null);
-            goToNextOrHome();
+            // No auto-advance — driver controls the move to the next stop.
           } catch (err) {
             setActionError({ kind: 'deliver', message: errMsg(err) });
           } finally {
@@ -129,9 +130,10 @@ export default function StopDetailPage() {
       await api.stops.updateStatus(stopId, { status, proofUrl: proofUrl ?? undefined, ...extra });
       setStop((s) => s ? { ...s, status: status } : s);
       setAllStops((prev) => prev.map((s) => s.id === stopId ? { ...s, status } : s));
-      if (status === 'delivered' || status === 'failed') {
-        goToNextOrHome();
-      }
+      // Don't auto-advance to the next stop — Seamus asked to control that
+      // manually. The post-delivered/failed UI below shows a "Next: <name>"
+      // button he can tap when he's ready, plus a "Take a break" option to
+      // go back to the run list.
     } catch (e) {
       const kind: 'deliver' | 'fail' = status === 'failed' ? 'fail' : 'deliver';
       setActionError({ kind, message: errMsg(e) });
@@ -419,18 +421,37 @@ export default function StopDetailPage() {
         )}
         {stop.status === 'delivered' && (
           <div className="space-y-2">
-            <div className="flex items-center justify-center gap-2 py-2 text-green-600 font-semibold">
-              <CheckCircle className="h-5 w-5" />
-              Delivered {totalStops > 0 && <span className="text-gray-400 font-normal text-sm">({deliveredCount}/{totalStops})</span>}
+            {/* Big success banner — driver chose not to auto-advance, so this
+                is now the "what next?" screen rather than a momentary blip. */}
+            <div className="bg-green-50 border-2 border-green-200 rounded-xl p-4 flex items-center gap-3">
+              <div className="bg-green-600 rounded-full p-2 flex-shrink-0">
+                <CheckCircle className="h-6 w-6 text-white" />
+              </div>
+              <div className="flex-1">
+                <p className="font-bold text-green-900">Delivered to {stop.customerName.split(' ')[0]}</p>
+                {totalStops > 0 && (
+                  <p className="text-sm text-green-700">{deliveredCount} of {totalStops} stops complete</p>
+                )}
+              </div>
             </div>
             {nextStop ? (
-              <button
-                onClick={goToNextOrHome}
-                className="w-full bg-brand text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2"
-              >
-                Next: {nextStop.customerName}
-                <ChevronRight className="h-5 w-5" />
-              </button>
+              <>
+                <button
+                  onClick={goToNextOrHome}
+                  className="w-full bg-brand text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 text-base"
+                >
+                  Start Next Delivery
+                  <ChevronRight className="h-5 w-5" />
+                </button>
+                <p className="text-center text-xs text-gray-500">Up next: {nextStop.customerName}</p>
+                <button
+                  onClick={() => navigate('/')}
+                  className="w-full bg-white border border-gray-300 text-gray-700 py-2.5 rounded-xl font-medium flex items-center justify-center gap-2"
+                >
+                  <Coffee className="h-4 w-4" />
+                  Take a break — back to run list
+                </button>
+              </>
             ) : (
               <button
                 onClick={() => navigate('/')}
@@ -452,18 +473,33 @@ export default function StopDetailPage() {
         )}
         {stop.status === 'failed' && (
           <div className="space-y-2">
-            <div className="flex items-center justify-center gap-2 py-2 text-red-600 font-semibold">
-              <AlertTriangle className="h-5 w-5" />
-              Delivery Failed
+            <div className="bg-red-50 border-2 border-red-200 rounded-xl p-4 flex items-center gap-3">
+              <div className="bg-red-600 rounded-full p-2 flex-shrink-0">
+                <AlertTriangle className="h-6 w-6 text-white" />
+              </div>
+              <div className="flex-1">
+                <p className="font-bold text-red-900">Marked as not delivered</p>
+                <p className="text-sm text-red-700">{stop.customerName}</p>
+              </div>
             </div>
             {nextStop ? (
-              <button
-                onClick={goToNextOrHome}
-                className="w-full bg-brand text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2"
-              >
-                Next: {nextStop.customerName}
-                <ChevronRight className="h-5 w-5" />
-              </button>
+              <>
+                <button
+                  onClick={goToNextOrHome}
+                  className="w-full bg-brand text-white py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 text-base"
+                >
+                  Start Next Delivery
+                  <ChevronRight className="h-5 w-5" />
+                </button>
+                <p className="text-center text-xs text-gray-500">Up next: {nextStop.customerName}</p>
+                <button
+                  onClick={() => navigate('/')}
+                  className="w-full bg-white border border-gray-300 text-gray-700 py-2.5 rounded-xl font-medium flex items-center justify-center gap-2"
+                >
+                  <Coffee className="h-4 w-4" />
+                  Take a break — back to run list
+                </button>
+              </>
             ) : (
               <button
                 onClick={() => navigate('/')}
