@@ -19,6 +19,23 @@ app.post('/session', async (c) => {
   const user = c.get('user');
   const { deliveryDayId, totalStops } = await c.req.json<{ deliveryDayId: string; totalStops: number }>();
   const now = Date.now();
+
+  // Idempotent: if this driver already has an active session for this day,
+  // return that one instead of creating a duplicate. The driver app now
+  // auto-creates a session on stops-page mount as a safety net for drivers
+  // who skip the "Begin Route" button — without idempotency that auto-create
+  // would race with the manual button and leave us with two sessions.
+  const [existing] = await db.select().from(driverSessions)
+    .where(and(
+      eq(driverSessions.driverUid, user.id),
+      eq(driverSessions.deliveryDayId, deliveryDayId),
+      eq(driverSessions.active, true),
+    ))
+    .limit(1);
+  if (existing) {
+    return c.json({ id: existing.id, reused: true }, 200);
+  }
+
   const id = crypto.randomUUID();
   await db.insert(driverSessions).values({
     id,
