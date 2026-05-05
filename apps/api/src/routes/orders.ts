@@ -6,6 +6,7 @@ import type { Env, AuthUser } from '../types';
 import { sendEmail, buildOrderEmail, getSubject } from '../lib/email';
 import { deductStock, getStockDayId, reserveDayStock, consumePromoCode } from '../lib/stock';
 import { parseJson } from '../lib/json';
+import { dayServesPostcode } from '../lib/zones';
 
 const app = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
 
@@ -68,6 +69,28 @@ app.post('/', async (c) => {
   const body = await c.req.json<typeof orders.$inferInsert & { deliveryAddress: object; items: object[]; clerkId?: string }>();
   const now = Date.now();
   const orderId = crypto.randomUUID();
+
+  // ── Postcode-vs-zone guard ──────────────────────────────────────────────
+  // Reject delivery orders whose postcode isn't on the chosen day's route.
+  // Without this, the storefront dropdown's filter is the only line of defence
+  // and a misbehaving client (or older cached bundle) could still slip an
+  // out-of-area order through — like the Round Hill 4677 order that ended up
+  // on a Gladstone-zone 4680 run.
+  const fulfillmentType = (body as any).fulfillmentType ?? 'delivery';
+  if (fulfillmentType !== 'pickup' && body.deliveryDayId) {
+    const [day] = await db.select({ zones: deliveryDays.zones, type: deliveryDays.type })
+      .from(deliveryDays)
+      .where(eq(deliveryDays.id, body.deliveryDayId))
+      .limit(1);
+    if (day && day.type !== 'pickup') {
+      const customerPostcode = (body.deliveryAddress as Record<string, string> | undefined)?.postcode ?? '';
+      if (!dayServesPostcode(day.zones, customerPostcode)) {
+        return c.json({
+          error: `Postcode ${customerPostcode || '(missing)'} isn't on this delivery day's route. Please choose a different day.`,
+        }, 400);
+      }
+    }
+  }
 
   let customerId = body.customerId;
   if (!customerId) {

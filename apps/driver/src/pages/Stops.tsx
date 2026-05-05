@@ -54,13 +54,24 @@ export default function StopsPage() {
       });
   }, [deliveryDay?.id]);
 
-  // Restore an in-flight session on page load so a browser refresh doesn't
-  // orphan it. Reconcile with the server so we don't end up out of sync:
-  //   - localStorage has stored id but server says it's no longer active → clear local
-  //   - localStorage empty but server has an active session for this day → adopt server's id
-  //   - both agree → use it
+  // Restore an in-flight session on page load (so a refresh doesn't orphan it)
+  // and auto-create one if none exists yet. Previously the driver had to tap
+  // "Begin Route" to create the session — but tapping a stop card directly
+  // skipped that step, so Seamus did entire runs without a session, which
+  // broke the live admin map and customer tracking links.
+  //
+  // Reconcile order:
+  //   - server has an active session for this day → adopt it (handles refresh)
+  //   - server says no session, localStorage has stale id → drop the stale id
+  //   - server says no session, none in localStorage → CREATE one
+  //   - network failed → fall back to localStorage (offline-tolerant)
+  //
+  // Auto-creation guard: only fires once per (user, day) thanks to the
+  // sessionId-set check at the top. The startSession endpoint is also
+  // idempotent on the server side, so a double-fire is a non-issue.
   useEffect(() => {
-    if (!deliveryDay?.id || sessionId) return;
+    if (!deliveryDay?.id || !user || sessionId) return;
+    if (stops.length === 0) return; // no point creating a session if there's nothing to deliver
     let cancelled = false;
     const key = `ocn-driver-session:${deliveryDay.id}`;
     const stored = localStorage.getItem(key);
@@ -69,19 +80,33 @@ export default function StopsPage() {
         const active = await api.drivers.activeSessions() as Array<{ id: string; deliveryDayId: string; active: boolean }>;
         if (cancelled) return;
         const serverSession = active.find((s) => s.deliveryDayId === deliveryDay.id && s.active);
-        const targetId = serverSession?.id ?? null;
 
-        if (targetId) {
-          // Server has an active session for this day — adopt that id and persist.
-          setSessionId(targetId);
+        if (serverSession?.id) {
+          // Server has an active session — adopt it and persist locally.
+          setSessionId(serverSession.id);
           setTrackingEnabled(true);
-          try { localStorage.setItem(key, targetId); } catch {}
-        } else if (stored) {
-          // localStorage thinks we have a session but server disagrees — drop it.
+          try { localStorage.setItem(key, serverSession.id); } catch {}
+          return;
+        }
+
+        // Server has no session for today. Drop a stale local id if present,
+        // then auto-create.
+        if (stored) {
           try { localStorage.removeItem(key); } catch {}
         }
+        const created = await api.drivers.startSession({
+          deliveryDayId: deliveryDay.id,
+          driverName: user.fullName ?? user.primaryEmailAddress?.emailAddress ?? 'Driver',
+          totalStops: stops.length,
+        }) as { id: string };
+        if (cancelled) return;
+        setSessionId(created.id);
+        setTrackingEnabled(true);
+        try { localStorage.setItem(key, created.id); } catch {}
       } catch {
         // Network failure — fall back to whatever localStorage says, like before.
+        // Don't try to create a session offline; we'll auto-create on the next
+        // mount when we're back online.
         if (stored && !cancelled) {
           setSessionId(stored);
           setTrackingEnabled(true);
@@ -89,7 +114,7 @@ export default function StopsPage() {
       }
     })();
     return () => { cancelled = true; };
-  }, [deliveryDay?.id, sessionId]);
+  }, [deliveryDay?.id, sessionId, stops.length, user]);
 
   const handleBeginRoute = async () => {
     if (!deliveryDay?.id || !user) return;

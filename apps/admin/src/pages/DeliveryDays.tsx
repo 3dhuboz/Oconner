@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { api } from '@butcher/shared';
+import { useEffect, useMemo, useState } from 'react';
+import { api, extractPostcodes } from '@butcher/shared';
 import type { DeliveryDay } from '@butcher/shared';
 import { Plus, X, CalendarDays, ClipboardList, RefreshCw, AlertTriangle, Pencil, MapPin, Save, Trash2, Store, BarChart3, Link2 } from 'lucide-react';
 import { toast } from '../lib/toast';
@@ -146,6 +146,54 @@ export default function DeliveryDaysPage() {
 
   const allPast = days.length > 0 && days.every((d) => d.date < Date.now());
 
+  // Build a map of postcode → days that include it (future + active only).
+  // We use this to flag zone misconfigurations: if the same postcode appears
+  // on two upcoming active days, that's almost always a mistake — e.g. an
+  // Agnes Water (4677) booking ended up on a Rocky run because someone added
+  // 4677 to a Thursday Rocky day's zones by accident.
+  const postcodeConflicts = useMemo(() => {
+    const now = Date.now();
+    const map = new Map<string, string[]>();
+    for (const d of days) {
+      if (!d.active) continue;
+      if (d.date < now) continue;
+      const codes = extractPostcodes((d as any).zones ?? '');
+      for (const pc of codes) {
+        const arr = map.get(pc) ?? [];
+        arr.push(d.id!);
+        map.set(pc, arr);
+      }
+    }
+    // Keep only postcodes appearing on more than one day
+    const conflicts = new Map<string, string[]>();
+    for (const [pc, ids] of map) {
+      if (ids.length > 1) conflicts.set(pc, ids);
+    }
+    return conflicts;
+  }, [days]);
+
+  // For a given day, compute its conflicts: { postcode, otherDayLabels[] }
+  const getDayConflicts = (day: DeliveryDay): Array<{ postcode: string; others: string[] }> => {
+    if (!day.active) return [];
+    if (day.date < Date.now()) return [];
+    const codes = extractPostcodes((day as any).zones ?? '');
+    const out: Array<{ postcode: string; others: string[] }> = [];
+    for (const pc of codes) {
+      const ids = postcodeConflicts.get(pc);
+      if (!ids) continue;
+      const others = ids
+        .filter((id) => id !== day.id)
+        .map((id) => {
+          const other = days.find((x) => x.id === id);
+          if (!other) return '';
+          return new Date(other.date).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
+        })
+        .filter(Boolean);
+      if (others.length > 0) out.push({ postcode: pc, others });
+    }
+    return out;
+  };
+
   return (
     <div>
       {loadError && <DataLoadError error={loadError} onRetry={load} title="Couldn't load delivery days" />}
@@ -185,11 +233,12 @@ export default function DeliveryDaysPage() {
           const date = typeof day.date === 'number' ? new Date(day.date) : new Date();
           const isPast = date < new Date();
           const zones = (day as any).zones as string | undefined;
+          const conflicts = getDayConflicts(day);
           return (
-            <div key={day.id} className={`bg-white rounded-xl border p-5 ${isPast ? 'opacity-60' : ''}`}>
+            <div key={day.id} className={`bg-white rounded-xl border p-5 ${isPast ? 'opacity-60' : ''} ${conflicts.length > 0 ? 'border-amber-300' : ''}`}>
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold flex items-center gap-2">
+                  <p className="font-semibold flex items-center gap-2 flex-wrap">
                     {date.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
                     {(day as any).type === 'pickup' && (
                       <span className="inline-flex items-center gap-1 text-xs font-medium bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">
@@ -199,6 +248,14 @@ export default function DeliveryDaysPage() {
                     {((day as any).stockPoolId || days.some((d) => (d as any).stockPoolId === day.id)) && (
                       <span className="inline-flex items-center gap-1 text-xs font-medium bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
                         <Link2 className="h-3 w-3" /> Shared Stock
+                      </span>
+                    )}
+                    {conflicts.length > 0 && (
+                      <span
+                        className="inline-flex items-center gap-1 text-xs font-medium bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full"
+                        title={conflicts.map((c) => `${c.postcode} also on: ${c.others.join(', ')}`).join('\n')}
+                      >
+                        <AlertTriangle className="h-3 w-3" /> Postcode overlap
                       </span>
                     )}
                   </p>
@@ -211,6 +268,22 @@ export default function DeliveryDaysPage() {
                     <p className="text-xs text-brand mt-1 flex items-center gap-1">
                       <MapPin className="h-3 w-3" /> {zones}
                     </p>
+                  )}
+                  {conflicts.length > 0 && (
+                    <div className="mt-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs">
+                      <p className="font-semibold text-amber-800 flex items-center gap-1.5">
+                        <AlertTriangle className="h-3.5 w-3.5" /> The same postcode is on multiple upcoming runs
+                      </p>
+                      <ul className="mt-1 space-y-0.5 text-amber-700">
+                        {conflicts.map((c) => (
+                          <li key={c.postcode}>
+                            <span className="font-mono font-semibold">{c.postcode}</span> also on{' '}
+                            <span className="font-medium">{c.others.join(', ')}</span>
+                          </li>
+                        ))}
+                      </ul>
+                      <p className="text-amber-600 mt-1.5">A booking from this postcode could land on the wrong run — edit the day's zones to remove the duplicate.</p>
+                    </div>
                   )}
                 </div>
                 <div className="flex items-center gap-3 flex-shrink-0">

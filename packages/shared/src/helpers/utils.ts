@@ -40,3 +40,41 @@ export function distanceMetres(
 export function shortId(id: string): string {
   return id.slice(-8).toUpperCase();
 }
+
+/**
+ * Extract every 4-digit postcode from a delivery-day zones string.
+ *
+ * Zone strings look like:
+ *   "Agnes Water (4677), Seventeen Seventy (4677), Bororen (4678)"
+ *   "Gladstone, Calliope (4680), Boyne Island (4680)"
+ *
+ * We just pull every standalone 4-digit run — this is the only reliable
+ * signal, since town names without a postcode (like the bare "Gladstone"
+ * above) are ambiguous and the postcoded entries already cover the area.
+ */
+export function extractPostcodes(zones?: string | null): string[] {
+  if (!zones) return [];
+  const matches = zones.match(/\b\d{4}\b/g);
+  if (!matches) return [];
+  return Array.from(new Set(matches));
+}
+
+/**
+ * Does this delivery day serve the given customer postcode?
+ *
+ * Returns `true` if the day's zones list includes the postcode (or if the
+ * day has no zones configured — we don't want to break legacy/admin-created
+ * days that weren't tagged). Returns `false` only when zones are present
+ * AND the postcode isn't in them.
+ *
+ * This was added after a Round Hill (4677) order ended up on a Gladstone-zone
+ * (4680) delivery day. The checkout dropdown was showing every active day
+ * regardless of the customer's postcode.
+ */
+export function dayServesPostcode(zones: string | null | undefined, customerPostcode: string | null | undefined): boolean {
+  const pc = (customerPostcode ?? '').trim();
+  if (!pc) return true; // can't validate without a postcode — let downstream UX prompt
+  const list = extractPostcodes(zones);
+  if (list.length === 0) return true; // no zones configured → don't block
+  return list.includes(pc);
+}
