@@ -31,22 +31,33 @@ export default function ProductsPage() {
   useEffect(() => { load(); }, []);
 
   const moveProduct = async (product: Product, direction: 'up' | 'down') => {
-    const sorted = [...products].sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0));
+    // Sort with name as a tiebreaker so the order is deterministic even when
+    // two products share the same displayOrder (the original swap-by-value
+    // logic silently no-op'd when the two neighbours were tied — Seamus hit
+    // exactly that with 1/4 Beast Share + 5kg Favourites Box both at 10).
+    const sorted = [...products].sort((a, b) =>
+      (a.displayOrder ?? 0) - (b.displayOrder ?? 0) || a.name.localeCompare(b.name)
+    );
     const idx = sorted.findIndex((p) => p.id === product.id);
     const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
     if (swapIdx < 0 || swapIdx >= sorted.length) return;
-    const other = sorted[swapIdx];
-    const myOrder = product.displayOrder ?? idx;
-    const otherOrder = other.displayOrder ?? swapIdx;
+
+    // Move the item in the array, then reassign sequential display_orders
+    // (1..N) based on the new positions. This guarantees every product ends
+    // up with a unique displayOrder after any move, so future swaps work
+    // even if the data started out with ties. Only persist the products
+    // whose order actually changed — usually 2, more if ties needed healing.
+    const reordered = [...sorted];
+    [reordered[idx], reordered[swapIdx]] = [reordered[swapIdx], reordered[idx]];
+    const updates = reordered
+      .map((p, i) => ({ p, newOrder: i + 1 }))
+      .filter(({ p, newOrder }) => (p.displayOrder ?? -1) !== newOrder);
+
     try {
-      await Promise.all([
-        api.products.update(product.id!, { displayOrder: otherOrder }),
-        api.products.update(other.id!, { displayOrder: myOrder }),
-      ]);
-      setProducts((prev) => prev.map((p) =>
-        p.id === product.id ? { ...p, displayOrder: otherOrder } :
-        p.id === other.id ? { ...p, displayOrder: myOrder } : p
-      ).sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0)));
+      await Promise.all(updates.map(({ p, newOrder }) =>
+        api.products.update(p.id!, { displayOrder: newOrder })
+      ));
+      setProducts(reordered.map((p, i) => ({ ...p, displayOrder: i + 1 })));
     } catch {
       toast('Failed to reorder', 'error');
     }
