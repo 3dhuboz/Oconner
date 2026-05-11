@@ -113,14 +113,26 @@ export default function AddressAutocomplete({ value, onChange, className }: Prop
   };
 
   const selectSuggestion = (s: Suggestion) => {
+    // Photon often doesn't have house-number-level data for regional/rural
+    // streets — it just returns the street name. If the user typed a number
+    // (e.g. "33 lilyvale esplanade") and selected a suggestion that came back
+    // as just "Lilyvale Esplanade", merge their number back in so they don't
+    // have to manually re-type it. Real customer case: Jo Sharp at 33 Lilyvale
+    // Esplanade, Boyne Island couldn't proceed because the checkout requires
+    // line1 to start with a digit and the geocoded result didn't have one.
+    const userNumberMatch = query.match(/^\s*(\d+[A-Za-z]?(?:\/\d+[A-Za-z]?)?)\s+/);
+    const suggestionHasNumber = /^\d/.test(s.line1);
+    const line1 = !suggestionHasNumber && userNumberMatch
+      ? `${userNumberMatch[1]} ${s.line1}`
+      : s.line1;
     onChange({
-      line1: s.line1,
+      line1,
       line2: value.line2,
       suburb: s.suburb,
       state: s.state || value.state,
       postcode: s.postcode,
     });
-    setQuery(s.line1);
+    setQuery(line1);
     setShowDropdown(false);
     setSuggestions([]);
   };
