@@ -124,14 +124,23 @@ export default function AddressAutocomplete({ value, onChange }: Props) {
     const street = p.street ?? p.name ?? '';
     const stateCode = AU_STATE_MAP[p.state ?? ''] ?? value.state;
 
+    // Nominatim often doesn't have house-number data for regional/rural
+    // streets — it returns just the street name. If the user typed a number
+    // and the suggestion doesn't have one, keep their number so line1
+    // becomes "33 Lilyvale Esplanade" instead of just "Lilyvale Esplanade".
+    // Same fix shipped on storefront after Jo Sharp's 4680 Boyne Island case.
+    const userNumberMatch = !streetNum ? query.match(/^\s*(\d+[A-Za-z]?(?:\/\d+[A-Za-z]?)?)\s+/) : null;
+    const effectiveNum = streetNum || (userNumberMatch ? userNumberMatch[1] : '');
+    const line1 = `${effectiveNum} ${street}`.trim();
+
     onChange({
-      line1: `${streetNum} ${street}`.trim(),
+      line1,
       line2: value.line2,
       suburb: p.city ?? '',
       state: stateCode,
       postcode: p.postcode ?? '',
     });
-    setQuery(`${streetNum} ${street}`.trim());
+    setQuery(line1);
     setShowDropdown(false);
     setSuggestions([]);
   };
