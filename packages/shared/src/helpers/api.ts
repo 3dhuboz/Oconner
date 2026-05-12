@@ -86,6 +86,9 @@ export const api = {
     listByRun: (runId: string) => api.get(`/api/stops?runId=${runId}`),
     listUnassigned: (deliveryDayId: string) => api.get(`/api/stops?deliveryDayId=${deliveryDayId}&unassigned=true`),
     create: (data: unknown) => api.post('/api/stops', data),
+    update: (id: string, data: { customerName?: string; customerPhone?: string; customerNote?: string; address?: object }) =>
+      api.patch(`/api/stops/${id}`, data),
+    delete: (id: string) => api.delete(`/api/stops/${id}`),
     updateStatus: (id: string, data: { status: string; driverNote?: string; flagReason?: string; proofUrl?: string }) =>
       api.patch(`/api/stops/${id}/status`, data),
     updateSequence: (id: string, sequence: number, estimatedArrival?: number) => api.patch(`/api/stops/${id}/sequence`, { sequence, estimatedArrival }),

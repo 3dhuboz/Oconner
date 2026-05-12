@@ -63,6 +63,42 @@ app.post('/', async (c) => {
   return c.json({ id }, 201);
 });
 
+// Edit a stop's customer-facing details. Primarily used by the manifest's
+// "Edit Manual Stop" flow — manual stops can't be edited via OrderDetail
+// because they have no linked order. We null out lat/lng on address change
+// so the next /geocode-stops sweep refreshes coordinates for the map.
+app.patch('/:id', async (c) => {
+  const db = drizzle(c.env.DB);
+  const stopId = c.req.param('id');
+  const body = await c.req.json<{
+    customerName?: string;
+    customerPhone?: string;
+    customerNote?: string;
+    address?: object;
+  }>();
+  const patch: Partial<typeof stops.$inferInsert> = {};
+  if (body.customerName !== undefined) patch.customerName = body.customerName;
+  if (body.customerPhone !== undefined) patch.customerPhone = body.customerPhone;
+  if (body.customerNote !== undefined) patch.customerNote = body.customerNote;
+  if (body.address !== undefined) {
+    patch.address = JSON.stringify(body.address);
+    patch.lat = null;
+    patch.lng = null;
+  }
+  if (Object.keys(patch).length === 0) return c.json({ ok: true });
+  await db.update(stops).set(patch).where(eq(stops.id, stopId));
+  return c.json({ ok: true });
+});
+
+// Delete a stop. Used by manual-stop "Delete" button — for order-linked
+// stops the admin should cancel the underlying order instead (which can
+// then be regenerated into a stop on a different day).
+app.delete('/:id', async (c) => {
+  const db = drizzle(c.env.DB);
+  await db.delete(stops).where(eq(stops.id, c.req.param('id')));
+  return c.json({ ok: true });
+});
+
 app.patch('/:id/status', async (c) => {
   const db = drizzle(c.env.DB);
   const { status, driverNote, flagReason, proofUrl } = await c.req.json<{

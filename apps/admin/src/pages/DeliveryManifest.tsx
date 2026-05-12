@@ -10,7 +10,7 @@ import AddressAutocomplete from '../components/AddressAutocomplete';
 import {
   ArrowLeft, Route, Printer, Bell, Package, FileText,
   CheckCircle, Clock, Navigation, AlertTriangle, User, Camera,
-  Eye, MapPin, Timer, TrendingUp, ChevronUp, ChevronDown, Info, Send, Layers, BarChart3, Sparkles, X, ClipboardCopy, Download, Plus,
+  Eye, MapPin, Timer, TrendingUp, ChevronUp, ChevronDown, Info, Send, Layers, BarChart3, Sparkles, X, ClipboardCopy, Download, Plus, Pencil, Trash2,
 } from 'lucide-react';
 
 const DRIVER_URL = import.meta.env.VITE_DRIVER_URL ?? 'https://driver.oconnoragriculture.com.au';
@@ -236,12 +236,52 @@ export default function DeliveryManifestPage() {
   const [lastPushed, setLastPushed] = useState<Date | null>(null);
   const [showExplainer, setShowExplainer] = useState(false);
   const [showAddStop, setShowAddStop] = useState(false);
+  const [editingStopId, setEditingStopId] = useState<string | null>(null);
   const [manualStop, setManualStop] = useState({
     name: '',
     addr: { line1: '', line2: '', suburb: '', state: 'QLD', postcode: '' },
     note: '',
   });
   const [addingStop, setAddingStop] = useState(false);
+
+  /** Open the manual-stop modal pre-filled from an existing stop (edit mode). */
+  const openEditStop = (stop: Stop) => {
+    const a = (stop.address ?? {}) as Partial<{ line1: string; line2: string; suburb: string; state: string; postcode: string }>;
+    setEditingStopId(stop.id!);
+    setManualStop({
+      name: stop.customerName ?? '',
+      addr: {
+        line1: a.line1 ?? '',
+        line2: a.line2 ?? '',
+        suburb: a.suburb ?? '',
+        state: a.state ?? 'QLD',
+        postcode: a.postcode ?? '',
+      },
+      note: stop.customerNote ?? '',
+    });
+    setShowAddStop(true);
+  };
+
+  /** Reset modal state to a clean "add new" state. */
+  const resetStopModal = () => {
+    setShowAddStop(false);
+    setEditingStopId(null);
+    setManualStop({ name: '', addr: { line1: '', line2: '', suburb: '', state: 'QLD', postcode: '' }, note: '' });
+  };
+
+  /** Delete a stop after a confirm prompt. Used for manual stops. */
+  const deleteStop = async (stop: Stop) => {
+    if (!dayId) return;
+    if (!window.confirm(`Delete stop "${stop.customerName}"? This can't be undone.`)) return;
+    try {
+      await api.stops.delete(stop.id!);
+      const updated = await api.stops.list(dayId) as Stop[];
+      setStops(updated);
+      toast('Stop deleted');
+    } catch {
+      toast('Failed to delete stop', 'error');
+    }
+  };
 
   useEffect(() => {
     if (!dayId) return;
@@ -759,6 +799,26 @@ export default function DeliveryManifestPage() {
                   <div className="flex items-center gap-2 flex-shrink-0 text-sm text-gray-500">
                     <User className="h-4 w-4" />
                     {stop.customerPhone}
+                    {/* Manual stops (no linked order) get inline edit/delete.
+                        Order-linked stops should be edited via Order Detail. */}
+                    {!stop.orderId && (
+                      <>
+                        <button
+                          onClick={() => openEditStop(stop)}
+                          className="ml-2 p-1.5 rounded hover:bg-indigo-50 text-indigo-600"
+                          title="Edit manual stop"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          onClick={() => deleteStop(stop)}
+                          className="p-1.5 rounded hover:bg-red-50 text-red-500"
+                          title="Delete manual stop"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               );
@@ -767,15 +827,19 @@ export default function DeliveryManifestPage() {
         )}
       </div>
 
-      {/* ── Add Manual Stop Modal ── */}
+      {/* ── Add / Edit Manual Stop Modal ── */}
       {showAddStop && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowAddStop(false)}>
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={resetStopModal}>
           <div className="bg-white rounded-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="font-semibold text-lg">Add Manual Stop</h2>
-              <button onClick={() => setShowAddStop(false)}><X className="h-5 w-5 text-gray-400" /></button>
+              <h2 className="font-semibold text-lg">{editingStopId ? 'Edit Manual Stop' : 'Add Manual Stop'}</h2>
+              <button onClick={resetStopModal}><X className="h-5 w-5 text-gray-400" /></button>
             </div>
-            <p className="text-xs text-gray-400 mb-4">Add a custom stop to this delivery run — not linked to an order.</p>
+            <p className="text-xs text-gray-400 mb-4">
+              {editingStopId
+                ? 'Update the label, address, or notes for this manual stop.'
+                : 'Add a custom stop to this delivery run — not linked to an order.'}
+            </p>
             <div className="space-y-3">
               <div>
                 <label className="text-xs text-gray-500 mb-1 block">Name / Label *</label>
@@ -795,54 +859,62 @@ export default function DeliveryManifestPage() {
               </div>
             </div>
             <div className="flex gap-3 mt-5">
-              <button onClick={() => setShowAddStop(false)} className="flex-1 border py-2.5 rounded-lg text-sm font-medium hover:bg-gray-50">Cancel</button>
+              <button onClick={resetStopModal} className="flex-1 border py-2.5 rounded-lg text-sm font-medium hover:bg-gray-50">Cancel</button>
               <button
                 disabled={!manualStop.name.trim() || !manualStop.addr.line1.trim() || !manualStop.addr.suburb.trim() || !manualStop.addr.postcode.trim() || addingStop}
                 onClick={async () => {
                   if (!dayId || !manualStop.name.trim()) return;
                   setAddingStop(true);
+                  const address = {
+                    line1: manualStop.addr.line1,
+                    line2: manualStop.addr.line2,
+                    suburb: manualStop.addr.suburb,
+                    state: manualStop.addr.state || 'QLD',
+                    postcode: manualStop.addr.postcode,
+                  };
                   try {
-                    await api.post('/api/stops', {
-                      deliveryDayId: dayId,
-                      orderId: `manual-${crypto.randomUUID().slice(0, 8)}`,
-                      customerId: 'manual',
-                      customerName: manualStop.name,
-                      customerPhone: '',
-                      address: {
-                        line1: manualStop.addr.line1,
-                        line2: manualStop.addr.line2,
-                        suburb: manualStop.addr.suburb,
-                        state: manualStop.addr.state || 'QLD',
-                        postcode: manualStop.addr.postcode,
-                      },
-                      customerNote: manualStop.note,
-                      items: [],
-                      sequence: stops.length + 1,
-                      status: 'pending',
-                    });
-                    // Fire-and-wait geocode so this stop gets lat/lng and shows
-                    // on the manifest map. Nominatim is slow (~1s) so we wait
-                    // for it before refreshing — Seamus expects to see the pin.
+                    if (editingStopId) {
+                      await api.stops.update(editingStopId, {
+                        customerName: manualStop.name,
+                        customerNote: manualStop.note,
+                        address,
+                      });
+                    } else {
+                      await api.post('/api/stops', {
+                        deliveryDayId: dayId,
+                        orderId: `manual-${crypto.randomUUID().slice(0, 8)}`,
+                        customerId: 'manual',
+                        customerName: manualStop.name,
+                        customerPhone: '',
+                        address,
+                        customerNote: manualStop.note,
+                        items: [],
+                        sequence: stops.length + 1,
+                        status: 'pending',
+                      });
+                    }
+                    // Re-geocode so the new (or moved) pin shows on the manifest
+                    // map. For edits we nulled lat/lng server-side; for creates
+                    // they start null. Either way the next sweep covers it.
                     try {
                       await api.deliveryDays.geocodeStops(dayId);
                     } catch {
-                      // Non-fatal — the stop still exists; map just won't show it
+                      // Non-fatal — the stop still exists; map just won't refresh
                       // until a re-geocode runs.
                     }
                     const updated = await api.stops.list(dayId) as Stop[];
                     setStops(updated);
-                    setShowAddStop(false);
-                    setManualStop({ name: '', addr: { line1: '', line2: '', suburb: '', state: 'QLD', postcode: '' }, note: '' });
-                    toast('Manual stop added');
+                    toast(editingStopId ? 'Stop updated' : 'Manual stop added');
+                    resetStopModal();
                   } catch {
-                    toast('Failed to add stop', 'error');
+                    toast(editingStopId ? 'Failed to update stop' : 'Failed to add stop', 'error');
                   } finally {
                     setAddingStop(false);
                   }
                 }}
                 className="flex-1 bg-brand text-white py-2.5 rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-brand-mid"
               >
-                {addingStop ? 'Adding…' : 'Add Stop'}
+                {addingStop ? (editingStopId ? 'Saving…' : 'Adding…') : (editingStopId ? 'Save Changes' : 'Add Stop')}
               </button>
             </div>
           </div>
