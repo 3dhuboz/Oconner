@@ -6,6 +6,7 @@ import { toast } from '../lib/toast';
 import DeliveryRunsTab from './DeliveryRunsTab';
 import StockAllocationTab from '../components/StockAllocationTab';
 import LiveDeliveryTracker from '../components/LiveDeliveryTracker';
+import AddressAutocomplete from '../components/AddressAutocomplete';
 import {
   ArrowLeft, Route, Printer, Bell, Package, FileText,
   CheckCircle, Clock, Navigation, AlertTriangle, User, Camera,
@@ -235,7 +236,11 @@ export default function DeliveryManifestPage() {
   const [lastPushed, setLastPushed] = useState<Date | null>(null);
   const [showExplainer, setShowExplainer] = useState(false);
   const [showAddStop, setShowAddStop] = useState(false);
-  const [manualStop, setManualStop] = useState({ name: '', address: '', note: '' });
+  const [manualStop, setManualStop] = useState({
+    name: '',
+    addr: { line1: '', line2: '', suburb: '', state: 'QLD', postcode: '' },
+    note: '',
+  });
   const [addingStop, setAddingStop] = useState(false);
 
   useEffect(() => {
@@ -777,8 +782,12 @@ export default function DeliveryManifestPage() {
                 <input value={manualStop.name} onChange={(e) => setManualStop((s) => ({ ...s, name: e.target.value }))} placeholder="e.g. Drop off at Steve's" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
               </div>
               <div>
-                <label className="text-xs text-gray-500 mb-1 block">Address</label>
-                <input value={manualStop.address} onChange={(e) => setManualStop((s) => ({ ...s, address: e.target.value }))} placeholder="e.g. 123 Main St, Gladstone" className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+                <label className="text-xs text-gray-500 mb-1 block">Address *</label>
+                <AddressAutocomplete
+                  value={manualStop.addr}
+                  onChange={(addr) => setManualStop((s) => ({ ...s, addr }))}
+                />
+                <p className="text-[11px] text-gray-400 mt-1">Pick from the dropdown so we can plot it on the map. Suburb + postcode are required.</p>
               </div>
               <div>
                 <label className="text-xs text-gray-500 mb-1 block">Notes</label>
@@ -788,7 +797,7 @@ export default function DeliveryManifestPage() {
             <div className="flex gap-3 mt-5">
               <button onClick={() => setShowAddStop(false)} className="flex-1 border py-2.5 rounded-lg text-sm font-medium hover:bg-gray-50">Cancel</button>
               <button
-                disabled={!manualStop.name.trim() || addingStop}
+                disabled={!manualStop.name.trim() || !manualStop.addr.line1.trim() || !manualStop.addr.suburb.trim() || !manualStop.addr.postcode.trim() || addingStop}
                 onClick={async () => {
                   if (!dayId || !manualStop.name.trim()) return;
                   setAddingStop(true);
@@ -799,16 +808,31 @@ export default function DeliveryManifestPage() {
                       customerId: 'manual',
                       customerName: manualStop.name,
                       customerPhone: '',
-                      address: { line1: manualStop.address, suburb: '', state: 'QLD', postcode: '' },
+                      address: {
+                        line1: manualStop.addr.line1,
+                        line2: manualStop.addr.line2,
+                        suburb: manualStop.addr.suburb,
+                        state: manualStop.addr.state || 'QLD',
+                        postcode: manualStop.addr.postcode,
+                      },
                       customerNote: manualStop.note,
                       items: [],
                       sequence: stops.length + 1,
                       status: 'pending',
                     });
+                    // Fire-and-wait geocode so this stop gets lat/lng and shows
+                    // on the manifest map. Nominatim is slow (~1s) so we wait
+                    // for it before refreshing — Seamus expects to see the pin.
+                    try {
+                      await api.deliveryDays.geocodeStops(dayId);
+                    } catch {
+                      // Non-fatal — the stop still exists; map just won't show it
+                      // until a re-geocode runs.
+                    }
                     const updated = await api.stops.list(dayId) as Stop[];
                     setStops(updated);
                     setShowAddStop(false);
-                    setManualStop({ name: '', address: '', note: '' });
+                    setManualStop({ name: '', addr: { line1: '', line2: '', suburb: '', state: 'QLD', postcode: '' }, note: '' });
                     toast('Manual stop added');
                   } catch {
                     toast('Failed to add stop', 'error');
