@@ -6,6 +6,7 @@ import { deliveryDays, orders, stops, notifications, subscriptions, customers, u
 import { deductStock, getStockDayId } from '../lib/stock';
 import { sendEmail, buildOrderEmail, getSubject, buildBroadcastEmail } from '../lib/email';
 import { sendSms } from '../lib/sms';
+import { formatBrisbaneDate, formatBrisbaneTime } from '../lib/time';
 import type { Env, AuthUser } from '../types';
 
 const app = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
@@ -355,17 +356,11 @@ app.post('/:id/send-reminders', async (c) => {
   const pendingOrders = allOrders.filter((o) => !['cancelled', 'refunded', 'delivered'].includes(o.status));
   const allStops = await db.select().from(stops).where(eq(stops.deliveryDayId, dayId));
 
-  const dateLabel = new Date(day.date).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' });
+  // Brisbane TZ — Workers run in UTC, so naive toLocaleDateString / getHours
+  // were rendering as UTC (off by 10h). Customers saw "between 2am and 4am"
+  // for a noon Brisbane window. Always format via the helpers in lib/time.
+  const dateLabel = formatBrisbaneDate(day.date);
   let sent = 0;
-
-  const fmtTime = (ms: number) => {
-    const d = new Date(ms);
-    const h = d.getHours();
-    const m = d.getMinutes();
-    const ampm = h >= 12 ? 'pm' : 'am';
-    const h12 = h % 12 || 12;
-    return m === 0 ? `${h12}${ampm}` : `${h12}:${m.toString().padStart(2, '0')}${ampm}`;
-  };
 
   for (const order of pendingOrders) {
     // Find the stop's estimated arrival to build a ±1hr window
@@ -373,8 +368,8 @@ app.post('/:id/send-reminders', async (c) => {
     let timeWindowText = '';
     if (stop?.estimatedArrival) {
       const eta = stop.estimatedArrival;
-      const windowStart = fmtTime(eta - 60 * 60 * 1000); // 1 hour before
-      const windowEnd = fmtTime(eta + 60 * 60 * 1000);   // 1 hour after
+      const windowStart = formatBrisbaneTime(eta - 60 * 60 * 1000); // 1 hour before
+      const windowEnd = formatBrisbaneTime(eta + 60 * 60 * 1000);   // 1 hour after
       timeWindowText = ` We expect to arrive between <strong>${windowStart} and ${windowEnd}</strong>. Please ensure someone is home during this window.`;
     }
 
@@ -402,7 +397,7 @@ app.post('/:id/send-reminders', async (c) => {
     await notifyCustomer(db, order.customerId, {
       title: "O'Connor — Delivery Tomorrow",
       body: stop?.estimatedArrival
-        ? `Your delivery is scheduled for tomorrow ${dateLabel}. Expected arrival between ${fmtTime(stop.estimatedArrival - 3600000)} and ${fmtTime(stop.estimatedArrival + 3600000)}. Please ensure someone is home.`
+        ? `Your delivery is scheduled for tomorrow ${dateLabel}. Expected arrival between ${formatBrisbaneTime(stop.estimatedArrival - 3600000)} and ${formatBrisbaneTime(stop.estimatedArrival + 3600000)}. Please ensure someone is home.`
         : `Your order is on its way ${dateLabel}. Check your order summary for details.`,
       url: `${c.env.STOREFRONT_URL}/track/${order.id}`,
     }, c.env);
@@ -732,8 +727,7 @@ app.post('/:id/generate-post', async (c) => {
   // Get orders for product info if no allocations
   const dayOrders = await db.select().from(orders).where(eq(orders.deliveryDayId, dayId));
 
-  const date = new Date(day.date);
-  const dateStr = date.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const dateStr = formatBrisbaneDate(day.date, { weekday: 'long', year: 'numeric' });
   const zones = (day as any).zones || '';
   const isPickup = (day as any).type === 'pickup';
   const marketLocation = (day as any).marketLocation || '';

@@ -780,7 +780,8 @@ export const scheduled: ExportedHandlerScheduledHandler<Env> = async (event, env
     for (const day of tomorrowDays) {
       const pendingOrders = await db.select().from(orders)
         .where(and(eq(orders.deliveryDayId, day.id), eq(orders.status, 'confirmed')));
-      const dateLabel = new Date(day.date).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' });
+      const { formatBrisbaneDate } = await import('./lib/time');
+      const dateLabel = formatBrisbaneDate(day.date);
 
       for (const order of pendingOrders) {
         const emailData = {

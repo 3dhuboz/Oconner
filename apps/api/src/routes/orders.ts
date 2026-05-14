@@ -4,6 +4,7 @@ import { eq, desc, inArray, gte, sql } from 'drizzle-orm';
 import { orders, customers, deliveryDays, stops, stockMovements, notifications, auditLog, deliveryDayStock, promoCodes } from '@butcher/db';
 import type { Env, AuthUser } from '../types';
 import { sendEmail, buildOrderEmail, getSubject } from '../lib/email';
+import { formatBrisbaneShortDate } from '../lib/time';
 import { deductStock, getStockDayId, reserveDayStock, consumePromoCode } from '../lib/stock';
 import { parseJson } from '../lib/json';
 import { dayServesPostcode } from '../lib/zones';
@@ -269,7 +270,7 @@ app.patch('/:id/status', async (c) => {
       deliveryFee: order.deliveryFee,
       gst: order.gst,
       total: order.total,
-      deliveryDate: new Date(order.createdAt).toLocaleDateString('en-AU'),
+      deliveryDate: formatBrisbaneShortDate(order.createdAt, { year: true }),
       deliveryAddress: formatAddress(addrParsed),
       trackingUrl: `${c.env.STOREFRONT_URL}/track/${orderId}`,
       proofUrl: order.proofUrl ?? undefined,
