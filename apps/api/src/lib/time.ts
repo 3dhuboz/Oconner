@@ -30,8 +30,8 @@ export function formatBrisbaneTime(ms: number): string {
   // s looks like "1:30 PM" or "12:00 AM"
   return s
     .toLowerCase()
-    .replace(/\s+/g, '')      // "1:30pm"
-    .replace(/:00(?=[ap]m)$/, ''); // "1pm" if minute is 00, else unchanged
+    .replace(/\s+/g, '')        // "1:30pm"
+    .replace(/:00(?=[ap]m$)/, ''); // "1pm" if minute is 00, else unchanged
 }
 
 /**
