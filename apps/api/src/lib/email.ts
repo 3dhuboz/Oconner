@@ -139,3 +139,37 @@ export function buildOrderEmail(type: string, data: OrderEmailData): string {
 </body>
 </html>`;
 }
+
+/**
+ * Render a plain custom-message email for admin broadcasts (e.g. "running
+ * late today", "rescheduled to Friday"). No order details — the message
+ * itself is the content. Customer name and message are HTML-escaped;
+ * newlines become <br>.
+ */
+export function buildBroadcastEmail(opts: {
+  customerName: string;
+  message: string;
+  ctaUrl?: string;
+  ctaText?: string;
+}): string {
+  const safeMessage = escapeHtml(opts.message).replace(/\n/g, '<br>');
+  const cta = opts.ctaUrl && opts.ctaText
+    ? `<p style="margin-top:24px"><a href="${escapeHtml(opts.ctaUrl)}" style="background:#4E7732;color:white;padding:12px 24px;text-decoration:none;border-radius:6px;display:inline-block">${escapeHtml(opts.ctaText)}</a></p>`
+    : '';
+  return `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="font-family:Arial,sans-serif;color:#333;max-width:600px;margin:0 auto;padding:20px">
+  <div style="background:#4E7732;padding:20px;border-radius:8px 8px 0 0">
+    <h1 style="color:white;margin:0;font-size:24px">O'Connor Agriculture</h1>
+  </div>
+  <div style="background:#f9f9f9;padding:24px;border:1px solid #eee;border-top:none;border-radius:0 0 8px 8px">
+    <p>Hi ${escapeHtml(opts.customerName)},</p>
+    <p style="white-space:pre-wrap">${safeMessage}</p>
+    ${cta}
+    <hr style="margin:24px 0;border:none;border-top:1px solid #eee">
+    <p style="font-size:12px;color:#999">— Seamus, O'Connor Agriculture</p>
+  </div>
+</body>
+</html>`;
+}

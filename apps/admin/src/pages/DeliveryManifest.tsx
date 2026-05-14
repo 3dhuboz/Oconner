@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, formatCurrency } from '@butcher/shared';
 import type { Stop, Order } from '@butcher/shared';
@@ -229,6 +229,12 @@ export default function DeliveryManifestPage() {
   const [generating, setGenerating] = useState(false);
   const [notifying, setNotifying] = useState(false);
   const [notifySent, setNotifySent] = useState(false);
+  // Custom-broadcast modal: lets Seamus send an ad-hoc SMS + email to every
+  // customer on the run (e.g. "running late today, truck issue").
+  const [showBroadcast, setShowBroadcast] = useState(false);
+  const [broadcastSubject, setBroadcastSubject] = useState("Update from O'Connor Agriculture");
+  const [broadcastMessage, setBroadcastMessage] = useState('');
+  const [broadcastSending, setBroadcastSending] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [routeOptimised, setRouteOptimised] = useState(false);
   const [stopReasons, setStopReasons] = useState<Record<string, string>>({});
@@ -381,6 +387,37 @@ export default function DeliveryManifestPage() {
       setNotifying(false);
     }
   };
+
+  /** Send a custom broadcast (SMS + email + push) to everyone on this run. */
+  const sendBroadcast = async () => {
+    if (!dayId || !broadcastMessage.trim()) return;
+    setBroadcastSending(true);
+    try {
+      const result = await api.deliveryDays.broadcast(dayId, {
+        subject: broadcastSubject.trim() || undefined,
+        message: broadcastMessage.trim(),
+      }) as { sms: { sent: number; failed: number }; email: { sent: number; failed: number }; totalStops: number };
+      const summary = `Sent SMS to ${result.sms.sent} customer${result.sms.sent !== 1 ? 's' : ''}${result.sms.failed ? ` (${result.sms.failed} failed)` : ''}, email to ${result.email.sent}`;
+      toast(summary);
+      setShowBroadcast(false);
+      setBroadcastMessage('');
+    } catch {
+      toast('Failed to send broadcast', 'error');
+    } finally {
+      setBroadcastSending(false);
+    }
+  };
+
+  /** Eligible stop count for the broadcast preview ("Will message X customers"). */
+  const broadcastEligibleCount = useMemo(() => {
+    const skipStatuses = new Set(['cancelled', 'refunded', 'delivered']);
+    const ordersById = new Map(orders.map((o) => [o.id, o]));
+    return stops.filter((s) => {
+      const o = s.orderId ? ordersById.get(s.orderId) : null;
+      if (o && skipStatuses.has(o.status)) return false;
+      return Boolean(s.customerPhone || o?.customerPhone);
+    }).length;
+  }, [stops, orders]);
 
   const delivered = stops.filter((s) => s.status === 'delivered').length;
   const total = stops.length;
@@ -536,6 +573,14 @@ export default function DeliveryManifestPage() {
         >
           <Bell className="h-4 w-4" />
           {notifySent ? '✓ Notification Sent' : notifying ? 'Sending…' : 'Notify Customers — Delivery Tomorrow'}
+        </button>
+        <button
+          onClick={() => setShowBroadcast(true)}
+          className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700"
+          title="Send a custom SMS + email to every customer on this run"
+        >
+          <Send className="h-4 w-4" />
+          Send Custom Message
         </button>
       </div>
 
@@ -921,6 +966,90 @@ export default function DeliveryManifestPage() {
         </div>
       )}
       </>)}
+
+      {/* ── Custom Broadcast Modal ── */}
+      {showBroadcast && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => !broadcastSending && setShowBroadcast(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-lg flex items-center gap-2"><Send className="h-5 w-5 text-indigo-600" /> Send Custom Message</h2>
+              <button onClick={() => setShowBroadcast(false)} disabled={broadcastSending}><X className="h-5 w-5 text-gray-400" /></button>
+            </div>
+            <p className="text-xs text-gray-500 mb-4">
+              Sends an SMS to every customer on this run who has a phone number, plus an email to anyone with an account. Use for one-off updates that don't fit the regular templates.
+            </p>
+
+            {/* Quick templates — chips that pre-fill the message field */}
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              <span className="text-xs text-gray-400 mr-1 self-center">Quick:</span>
+              {[
+                { label: 'Running late', text: "Quick heads up — I'm running a bit behind schedule today. I'll still be there, just later than usual. Apologies for the inconvenience and thanks for your patience!" },
+                { label: 'Truck issue', text: "Unfortunately the truck is out of action today so I'm running well behind. I'll still get to everyone but it'll be later than planned. Thanks for understanding." },
+                { label: 'Weather delay', text: "Heads up — weather is slowing things down today. I'll still be making deliveries but expect a longer arrival window. Thanks for your patience!" },
+              ].map((t) => (
+                <button
+                  key={t.label}
+                  type="button"
+                  onClick={() => setBroadcastMessage(t.text)}
+                  className="text-xs border border-indigo-200 text-indigo-700 px-2 py-1 rounded-full hover:bg-indigo-50"
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Email Subject</label>
+                <input
+                  value={broadcastSubject}
+                  onChange={(e) => setBroadcastSubject(e.target.value)}
+                  placeholder="Update from O'Connor Agriculture"
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Message *</label>
+                <textarea
+                  value={broadcastMessage}
+                  onChange={(e) => setBroadcastMessage(e.target.value)}
+                  rows={6}
+                  placeholder="Type your message here…"
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  {broadcastMessage.length} chars · SMS will be prefixed with "O'Connor Agriculture: "
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2 text-xs text-indigo-800">
+              Will message <strong>{broadcastEligibleCount}</strong> customer{broadcastEligibleCount !== 1 ? 's' : ''} on this run.
+            </div>
+
+            <div className="flex gap-3 mt-5">
+              <button
+                onClick={() => setShowBroadcast(false)}
+                disabled={broadcastSending}
+                className="flex-1 border py-2.5 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (window.confirm(`Send this message to ${broadcastEligibleCount} customer${broadcastEligibleCount !== 1 ? 's' : ''}?`)) {
+                    sendBroadcast();
+                  }
+                }}
+                disabled={!broadcastMessage.trim() || broadcastEligibleCount === 0 || broadcastSending}
+                className="flex-1 bg-indigo-600 text-white py-2.5 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {broadcastSending ? 'Sending…' : `Send to ${broadcastEligibleCount}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Social Post Modal ── */}
       {socialPost && (
