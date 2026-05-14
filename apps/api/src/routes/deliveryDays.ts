@@ -4,7 +4,8 @@ import { drizzle } from 'drizzle-orm/d1';
 import { eq, asc, gte, and, sql } from 'drizzle-orm';
 import { deliveryDays, orders, stops, notifications, subscriptions, customers, users, deliveryRuns, products, deliveryDayStock, auditLog } from '@butcher/db';
 import { deductStock, getStockDayId } from '../lib/stock';
-import { sendEmail, buildOrderEmail, getSubject } from '../lib/email';
+import { sendEmail, buildOrderEmail, getSubject, buildBroadcastEmail } from '../lib/email';
+import { sendSms } from '../lib/sms';
 import type { Env, AuthUser } from '../types';
 
 const app = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
@@ -418,6 +419,114 @@ app.post('/:id/send-reminders', async (c) => {
   }
 
   return c.json({ sent, total: pendingOrders.length });
+});
+
+/**
+ * Send a custom broadcast (SMS + email) to every active stop on a delivery day.
+ *
+ * Used by Seamus when the canned "delivery tomorrow" template doesn't cover
+ * the situation — e.g. truck breakdown, running late, weather cancellation.
+ * SMS hits every stop with a phone number (including manual stops without an
+ * order). Email goes to the order's customerEmail when present. Push notifies
+ * customers who have an account.
+ *
+ * Each send is recorded to the notifications table with a distinct type so
+ * we can audit broadcasts separately from automated emails.
+ */
+app.post('/:id/broadcast', async (c) => {
+  const db = drizzle(c.env.DB);
+  const dayId = c.req.param('id');
+  const body = await c.req.json<{ subject?: string; message: string }>();
+  const message = (body.message ?? '').trim();
+  if (!message) return c.json({ error: 'Message is required' }, 400);
+  const subject = (body.subject ?? '').trim() || "Update from O'Connor Agriculture";
+
+  const [day] = await db.select().from(deliveryDays).where(eq(deliveryDays.id, dayId)).limit(1);
+  if (!day) return c.json({ error: 'Not found' }, 404);
+
+  const allStops = await db.select().from(stops).where(eq(stops.deliveryDayId, dayId));
+  const allOrders = await db.select().from(orders).where(eq(orders.deliveryDayId, dayId));
+  const ordersById = new Map(allOrders.map((o) => [o.id, o]));
+
+  let smsSent = 0, smsFailed = 0, emailSent = 0, emailFailed = 0;
+  const now = Date.now();
+
+  for (const stop of allStops) {
+    const order = stop.orderId ? ordersById.get(stop.orderId) ?? null : null;
+    // Skip stops whose order is cancelled / refunded / already delivered —
+    // there's no point messaging someone whose run today is done or void.
+    if (order && ['cancelled', 'refunded', 'delivered'].includes(order.status)) continue;
+
+    const recipientName = stop.customerName ?? order?.customerName ?? 'there';
+    const recipientPhone = stop.customerPhone || order?.customerPhone || '';
+    const recipientEmail = order?.customerEmail ?? '';
+
+    // SMS — fast and reaches everyone (including manual stops)
+    if (recipientPhone) {
+      const smsBody = `O'Connor Agriculture: ${message}`;
+      const smsResult = await sendSms(c.env, recipientPhone, smsBody);
+      if (smsResult.ok) smsSent++; else smsFailed++;
+      await db.insert(notifications).values({
+        id: crypto.randomUUID(),
+        orderId: order?.id ?? null,
+        customerId: order?.customerId ?? null,
+        type: 'admin_broadcast_sms',
+        status: smsResult.ok ? 'sent' : 'failed',
+        // notifications.recipientEmail is NOT NULL. For SMS-only sends we
+        // store the phone number here so the audit row still has a recipient.
+        recipientEmail: recipientEmail || recipientPhone,
+        error: smsResult.ok ? null : (smsResult.error ?? 'sms send failed'),
+        sentAt: now,
+      });
+    }
+
+    // Email — only for stops with a linked order (manual stops don't have email)
+    if (recipientEmail) {
+      const result = await sendEmail({
+        apiKey: c.env.RESEND_API_KEY,
+        from: c.env.FROM_EMAIL,
+        to: recipientEmail,
+        subject,
+        html: buildBroadcastEmail({
+          customerName: recipientName,
+          message,
+          ctaUrl: order ? `${c.env.STOREFRONT_URL}/track/${order.id}` : undefined,
+          ctaText: order ? 'Track my order' : undefined,
+        }),
+      });
+      if (result) emailSent++; else emailFailed++;
+      await db.insert(notifications).values({
+        id: crypto.randomUUID(),
+        orderId: order?.id ?? null,
+        customerId: order?.customerId ?? null,
+        type: 'admin_broadcast_email',
+        status: result ? 'sent' : 'failed',
+        recipientEmail,
+        resendId: result?.id ?? null,
+        sentAt: now,
+      });
+    }
+
+    // Push — best-effort, swallows errors so one bad subscription doesn't
+    // tank the rest of the broadcast loop.
+    if (order?.customerId) {
+      try {
+        await notifyCustomer(db, order.customerId, {
+          title: subject,
+          body: message,
+          url: `${c.env.STOREFRONT_URL}/track/${order.id}`,
+        }, c.env);
+      } catch {
+        // ignore — SMS / email already covered audit + delivery
+      }
+    }
+  }
+
+  return c.json({
+    sms: { sent: smsSent, failed: smsFailed },
+    email: { sent: emailSent, failed: emailFailed },
+    totalStops: allStops.length,
+  });
 });
 
 // ── Delivery Day Stock Allocations ───────────────────────────────────────────
