@@ -230,7 +230,18 @@ app.post('/:id/generate-stops', async (c) => {
     await db.update(subscriptions).set(updateData).where(eq(subscriptions.id, sub.id));
   }
 
-  // Now generate stops from all orders (including just-created subscription orders)
+  // Now generate stops from all orders (including just-created subscription orders).
+  // Filter out orders we shouldn't be planning a stop for:
+  //   - pending_payment: customer hasn't finished checkout; if they bail, we'd
+  //     leave a phantom stop on the manifest (happened to Jo Sharp).
+  //   - cancelled / refunded: order is dead.
+  //   - delivered: already done; creating a new stop would resurrect it.
+  // out_for_delivery and packed are intentionally allowed — the stop should
+  // already exist for those, but if for some reason it's missing we want
+  // generate-stops to recreate it rather than silently skip.
+  const DELIVERABLE_STATUSES = new Set([
+    'confirmed', 'preparing', 'packed', 'out_for_delivery',
+  ]);
   const dayOrders = await db.select().from(orders).where(eq(orders.deliveryDayId, dayId));
   const existingStops = await db.select({ orderId: stops.orderId }).from(stops).where(eq(stops.deliveryDayId, dayId));
   const existingOrderIds = new Set(existingStops.map((s) => s.orderId));
@@ -238,6 +249,7 @@ app.post('/:id/generate-stops', async (c) => {
   let created = 0;
   for (const order of dayOrders) {
     if (existingOrderIds.has(order.id)) continue;
+    if (!DELIVERABLE_STATUSES.has(order.status)) continue;
     const addr = JSON.parse(order.deliveryAddress) as { line1: string; suburb: string; postcode: string };
     const geo = await geocodeAddress(addr);
     await db.insert(stops).values({
@@ -351,9 +363,11 @@ app.post('/:id/send-reminders', async (c) => {
   const [day] = await db.select().from(deliveryDays).where(eq(deliveryDays.id, dayId)).limit(1);
   if (!day) return c.json({ error: 'Not found' }, 404);
 
-  // Send to all active orders (not cancelled/refunded/delivered)
+  // Send to all active orders (not cancelled/refunded/delivered, and not
+  // pending_payment — those are abandoned checkouts that haven't paid yet,
+  // emailing them tomorrow-delivery confirmations is misleading).
   const allOrders = await db.select().from(orders).where(eq(orders.deliveryDayId, dayId));
-  const pendingOrders = allOrders.filter((o) => !['cancelled', 'refunded', 'delivered'].includes(o.status));
+  const pendingOrders = allOrders.filter((o) => !['cancelled', 'refunded', 'delivered', 'pending_payment'].includes(o.status));
   const allStops = await db.select().from(stops).where(eq(stops.deliveryDayId, dayId));
 
   // Brisbane TZ — Workers run in UTC, so naive toLocaleDateString / getHours
@@ -448,9 +462,10 @@ app.post('/:id/broadcast', async (c) => {
 
   for (const stop of allStops) {
     const order = stop.orderId ? ordersById.get(stop.orderId) ?? null : null;
-    // Skip stops whose order is cancelled / refunded / already delivered —
-    // there's no point messaging someone whose run today is done or void.
-    if (order && ['cancelled', 'refunded', 'delivered'].includes(order.status)) continue;
+    // Skip stops whose order is cancelled / refunded / already delivered or
+    // never paid — there's no point messaging someone whose run today is done
+    // or void, or who never finished checkout.
+    if (order && ['cancelled', 'refunded', 'delivered', 'pending_payment'].includes(order.status)) continue;
 
     const recipientName = stop.customerName ?? order?.customerName ?? 'there';
     const recipientPhone = stop.customerPhone || order?.customerPhone || '';

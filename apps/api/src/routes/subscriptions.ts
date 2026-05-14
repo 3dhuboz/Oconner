@@ -1,9 +1,89 @@
 import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/d1';
-import { desc, eq, and, gte, asc, sql } from 'drizzle-orm';
-import { subscriptions, customers, orders, deliveryDays, products } from '@butcher/db';
+import { desc, eq, and, gte, asc, sql, inArray } from 'drizzle-orm';
+import { subscriptions, customers, orders, deliveryDays, stops, products } from '@butcher/db';
 import { deductStock } from '../lib/stock';
 import type { Env, AuthUser } from '../types';
+
+/**
+ * When a subscription is deactivated (status moved off 'active') or deleted,
+ * any orders that the subscription auto-generated for FUTURE delivery days
+ * become stale — Seamus doesn't want to deliver them, and they shouldn't sit
+ * on the manifest. Cancel the orders, remove their stops, and decrement the
+ * counters that orders.ts incremented at creation time.
+ *
+ * Match orders to the subscription by:
+ *   1) same customer
+ *   2) delivery day still in the future
+ *   3) notes string starts with "Subscription: " and includes the sub's box name
+ *   4) status is still cancellable (not already delivered / cancelled / refunded
+ *      / out_for_delivery — those are too far along to undo)
+ *
+ * Real-world case that prompted this: Andrea McDonald had a fortnightly sub,
+ * the cron generated an order, then the sub was deleted in favour of a
+ * monthly one. The fortnightly order sat on the manifest as a phantom.
+ */
+async function cancelFutureSubscriptionOrders(
+  db: ReturnType<typeof drizzle>,
+  sub: typeof subscriptions.$inferSelect,
+): Promise<{ cancelled: number }> {
+  const now = Date.now();
+  const NOT_CANCELLABLE = new Set(['delivered', 'cancelled', 'refunded', 'out_for_delivery']);
+
+  // Resolve customerId — older subs may not have it stored, so fall back to email.
+  let customerId = sub.customerId;
+  if (!customerId) {
+    const [cust] = await db.select().from(customers).where(eq(customers.email, sub.email)).limit(1);
+    if (!cust) return { cancelled: 0 };
+    customerId = cust.id;
+  }
+
+  const futureDays = await db.select({ id: deliveryDays.id })
+    .from(deliveryDays).where(gte(deliveryDays.date, now));
+  if (futureDays.length === 0) return { cancelled: 0 };
+  const futureDayIds = futureDays.map((d) => d.id);
+
+  const candidateOrders = await db.select().from(orders).where(
+    and(
+      eq(orders.customerId, customerId),
+      inArray(orders.deliveryDayId, futureDayIds),
+    ),
+  );
+
+  let cancelled = 0;
+  for (const order of candidateOrders) {
+    if (NOT_CANCELLABLE.has(order.status)) continue;
+    if (!order.notes?.startsWith('Subscription:')) continue;
+    // Match the subscription's box name so we don't accidentally cancel an
+    // order from a different sub the same customer may have.
+    if (!order.notes.includes(sub.boxName)) continue;
+
+    await db.update(orders).set({
+      status: 'cancelled',
+      paymentStatus: 'cancelled',
+      internalNotes: (order.internalNotes ? order.internalNotes + '\n' : '')
+        + `[auto-cancelled: subscription ${sub.id} (${sub.boxName} ${sub.frequency}) was deactivated]`,
+      updatedAt: now,
+    }).where(eq(orders.id, order.id));
+
+    // Drop the stop so the order disappears from the manifest map / list.
+    await db.delete(stops).where(eq(stops.orderId, order.id));
+
+    // Decrement counters that were incremented when the order was generated.
+    // Guard against going below zero in case the counter is already stale.
+    await db.update(deliveryDays)
+      .set({ orderCount: sql`${deliveryDays.orderCount} - 1` })
+      .where(and(eq(deliveryDays.id, order.deliveryDayId), gte(deliveryDays.orderCount, 1)));
+    await db.update(customers).set({
+      orderCount: sql`${customers.orderCount} - 1`,
+      totalSpent: sql`${customers.totalSpent} - ${order.total}`,
+      updatedAt: now,
+    }).where(and(eq(customers.id, customerId), gte(customers.orderCount, 1)));
+
+    cancelled++;
+  }
+  return { cancelled };
+}
 
 const SQUARE_API = 'https://connect.squareup.com/v2';
 
@@ -458,6 +538,7 @@ app.post('/', async (c) => {
 
 app.patch('/:id', async (c) => {
   const db = drizzle(c.env.DB);
+  const subId = c.req.param('id');
   const body = await c.req.json<{
     status?: string;
     boxId?: string;
@@ -475,14 +556,36 @@ app.patch('/:id', async (c) => {
     if ((body as any)[key] !== undefined) allowed[key] = (body as any)[key];
   }
   allowed.updatedAt = Date.now();
-  await db.update(subscriptions).set(allowed).where(eq(subscriptions.id, c.req.param('id')));
-  return c.json({ ok: true });
+
+  // If the sub is being deactivated, snapshot it first so we can cancel any
+  // future orders it had already auto-generated. Snapshot must happen BEFORE
+  // the update so the helper sees the original boxName/frequency for matching.
+  let cancelled = 0;
+  if (allowed.status && allowed.status !== 'active') {
+    const [current] = await db.select().from(subscriptions).where(eq(subscriptions.id, subId)).limit(1);
+    if (current && current.status === 'active') {
+      const result = await cancelFutureSubscriptionOrders(db, current);
+      cancelled = result.cancelled;
+    }
+  }
+
+  await db.update(subscriptions).set(allowed).where(eq(subscriptions.id, subId));
+  return c.json({ ok: true, cancelledFutureOrders: cancelled });
 });
 
 app.delete('/:id', async (c) => {
   const db = drizzle(c.env.DB);
-  await db.delete(subscriptions).where(eq(subscriptions.id, c.req.param('id')));
-  return c.json({ ok: true });
+  const subId = c.req.param('id');
+  // Snapshot the subscription before deletion so we can clean up its
+  // auto-generated future orders (boxName + frequency are used for matching).
+  const [current] = await db.select().from(subscriptions).where(eq(subscriptions.id, subId)).limit(1);
+  let cancelled = 0;
+  if (current) {
+    const result = await cancelFutureSubscriptionOrders(db, current);
+    cancelled = result.cancelled;
+  }
+  await db.delete(subscriptions).where(eq(subscriptions.id, subId));
+  return c.json({ ok: true, cancelledFutureOrders: cancelled });
 });
 
 // Generate an order from an active subscription for the next delivery day
