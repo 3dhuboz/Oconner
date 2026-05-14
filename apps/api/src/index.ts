@@ -803,6 +803,41 @@ export const scheduled: ExportedHandlerScheduledHandler<Env> = async (event, env
       }
     }
 
+    // ── 2.5 Sweep abandoned pending_payment orders ──
+    // An order is created the moment the customer clicks "Place Order" on the
+    // storefront, with status='pending_payment' and the day's order_count
+    // incremented. If they never finish Square checkout, the order sits
+    // forever, eats a maxOrders slot, and (if a stop was generated) shows on
+    // the manifest. Sweep anything stuck > 12h here. Fix #1 (generate-stops
+    // status filter) already prevents new phantom stops, but this is the
+    // belt-and-braces cleanup for the orders themselves.
+    try {
+      const { stops: stopsTable } = await import('@butcher/db');
+      const stale = await db.select().from(orders)
+        .where(and(eq(orders.status, 'pending_payment'), lt(orders.createdAt, Date.now() - 12 * 60 * 60 * 1000)));
+      for (const order of stale) {
+        await db.update(orders).set({
+          status: 'cancelled',
+          paymentStatus: 'cancelled',
+          internalNotes: (order.internalNotes ? order.internalNotes + '\n' : '')
+            + '[auto-cancelled by daily cron: pending_payment > 12h, customer abandoned checkout]',
+          updatedAt: Date.now(),
+        }).where(eq(orders.id, order.id));
+        await db.delete(stopsTable).where(eq(stopsTable.orderId, order.id));
+        await db.update(deliveryDaysTable)
+          .set({ orderCount: sql`${deliveryDaysTable.orderCount} - 1` })
+          .where(and(eq(deliveryDaysTable.id, order.deliveryDayId), gte(deliveryDaysTable.orderCount, 1)));
+        await db.update(customersTable).set({
+          orderCount: sql`${customersTable.orderCount} - 1`,
+          totalSpent: sql`${customersTable.totalSpent} - ${order.total}`,
+          updatedAt: Date.now(),
+        }).where(and(eq(customersTable.id, order.customerId), gte(customersTable.orderCount, 1)));
+      }
+      if (stale.length > 0) console.log(`[cron] auto-cancelled ${stale.length} stale pending_payment orders`);
+    } catch (e) {
+      console.error('Stale order sweep failed:', e);
+    }
+
     // ── 3. Thursday meat audit email ──
     const today = new Date();
     if (today.getDay() === 4) { // Thursday
