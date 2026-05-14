@@ -3,6 +3,7 @@ import { drizzle } from 'drizzle-orm/d1';
 import { eq } from 'drizzle-orm';
 import { orders, customers, notifications, processedWebhooks } from '@butcher/db';
 import { sendEmail, buildOrderEmail, getSubject } from '../lib/email';
+import { formatBrisbaneShortDate } from '../lib/time';
 import { deductStock, restoreStock } from '../lib/stock';
 import { parseJson } from '../lib/json';
 import type { Env, AuthUser } from '../types';
@@ -107,7 +108,7 @@ app.post('/webhook', async (c) => {
           deliveryFee: order.deliveryFee,
           gst: order.gst,
           total: order.total,
-          deliveryDate: new Date(order.createdAt).toLocaleDateString('en-AU'),
+          deliveryDate: formatBrisbaneShortDate(order.createdAt, { year: true }),
           deliveryAddress: addr,
           trackingUrl: `${c.env.STOREFRONT_URL}/track/${orderId}`,
         };
