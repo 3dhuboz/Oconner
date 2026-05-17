@@ -169,6 +169,41 @@ export default function SubscriptionsPage() {
     }
   };
 
+  // Open the subscription modal directly in edit mode (skip the read-only view).
+  // Used by the inline "Edit" pencil button on the list — without this the only
+  // way to reach the editor was clicking the customer's name, which wasn't
+  // obvious from the actions column.
+  const openEditMode = async (s: Subscription) => {
+    setViewingSub(s);
+    setCustomerAddress('');
+    if (s.customerId) {
+      try {
+        const cust = await api.get(`/api/customers/${s.customerId}`) as any;
+        const addrs = JSON.parse(cust?.addresses ?? '[]');
+        if (addrs.length > 0) {
+          const a = addrs[0];
+          setCustomerAddress(`${a.line1}${a.line2 ? ', ' + a.line2 : ''}, ${a.suburb} ${a.state} ${a.postcode}`);
+        }
+      } catch {}
+    }
+    const toDateStr = (ms?: number | null) => ms ? new Date(ms).toISOString().split('T')[0] : '';
+    setEditForm({
+      boxId: s.boxId,
+      boxName: s.boxName,
+      alternateBoxId: s.alternateBoxId ?? null,
+      alternateBoxName: s.alternateBoxName ?? null,
+      frequency: s.frequency,
+      customerName: s.customerName ?? '',
+      email: s.email,
+      customerPhone: s.customerPhone ?? '',
+      createdAt: s.createdAt,
+      lastOrderGeneratedAt: s.lastOrderGeneratedAt,
+      _startDate: toDateStr(s.createdAt),
+      _nextDate: toDateStr(s.lastOrderGeneratedAt),
+    } as any);
+    setEditingSub(true);
+  };
+
   const handleCreate = async () => {
     if (!form.email || !form.boxId) { toast('Email and box are required', 'error'); return; }
     setSaving(true);
@@ -277,6 +312,13 @@ export default function SubscriptionsPage() {
                     </div>
                   </div>
                   <div className="flex flex-col gap-2 flex-shrink-0">
+                    <button
+                      onClick={() => openEditMode(s)}
+                      className="flex items-center gap-1 bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-indigo-100"
+                      title="Edit subscription — change box, frequency or details"
+                    >
+                      <Pencil className="h-3.5 w-3.5" /> Edit
+                    </button>
                     {s.status === 'pending' && (
                       <>
                         <button onClick={() => setStatus(s.id, 'active')}
@@ -364,7 +406,10 @@ export default function SubscriptionsPage() {
         const startEdit = () => {
           const toDateStr = (ms?: number | null) => ms ? new Date(ms).toISOString().split('T')[0] : '';
           setEditForm({
-            boxId: s.boxId, boxName: s.boxName, frequency: s.frequency,
+            boxId: s.boxId, boxName: s.boxName,
+            alternateBoxId: s.alternateBoxId ?? null,
+            alternateBoxName: s.alternateBoxName ?? null,
+            frequency: s.frequency,
             customerName: s.customerName ?? '', email: s.email, customerPhone: s.customerPhone ?? '',
             createdAt: s.createdAt, lastOrderGeneratedAt: s.lastOrderGeneratedAt,
             _startDate: toDateStr(s.createdAt), _nextDate: toDateStr(s.lastOrderGeneratedAt),
@@ -425,6 +470,27 @@ export default function SubscriptionsPage() {
                     }} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
                       {boxProducts.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                     </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 font-medium mb-1 block">Alternate Box (optional)</label>
+                    <select value={editForm.alternateBoxId ?? ''} onChange={(e) => {
+                      const box = boxProducts.find((p) => p.id === e.target.value);
+                      setEditForm({
+                        ...editForm,
+                        alternateBoxId: e.target.value || null,
+                        alternateBoxName: box?.name ?? null,
+                      });
+                    }} className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
+                      <option value="">No alternate — same box every time</option>
+                      {boxProducts.filter((p) => p.id !== editForm.boxId).map((p) => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                    {editForm.alternateBoxId && (
+                      <p className="text-xs text-gray-400 mt-1">
+                        Alternates between <strong>{editForm.boxName}</strong> and <strong>{editForm.alternateBoxName}</strong> each delivery.
+                      </p>
+                    )}
                   </div>
                   <div>
                     <label className="text-xs text-gray-500 font-medium mb-1 block">Frequency</label>
