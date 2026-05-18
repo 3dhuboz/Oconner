@@ -582,6 +582,93 @@ app.post('/:id/invoice', async (c) => {
   }
 });
 
+// ── Cancel a previously-sent Square Invoice ──
+// Square's API only allows cancelling invoices in DRAFT, SCHEDULED, UNPAID, or
+// PARTIALLY_PAID state. Once a customer has paid, you have to refund manually
+// in the Square Dashboard — there's no "uncharge" path.
+//
+// Added after an admin accidentally sent invoices for two cancelled orders
+// (Andrea's duplicate fortnightly, Jo Sharp's abandoned-checkout). The cancel
+// path uses the most recent invoice ID recorded in internal_notes — the
+// sendInvoice handler appends `Square invoice sent: ${id}` after each
+// successful send, so the LAST match in the chain is the live invoice.
+app.post('/:id/invoice/cancel', async (c) => {
+  const accessToken = c.env.SQUARE_ACCESS_TOKEN;
+  if (!accessToken) return c.json({ error: 'Square not configured' }, 400);
+
+  const db = drizzle(c.env.DB);
+  const orderId = c.req.param('id');
+  const [order] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+  if (!order) return c.json({ error: 'Order not found' }, 404);
+
+  // Extract the most-recently-sent Square invoice ID from internal_notes.
+  // Format written by POST /invoice: `Square invoice sent: inv:0-...`
+  const notes = order.internalNotes ?? '';
+  const matches = [...notes.matchAll(/Square invoice sent:\s*(inv:[^\s\n]+)/g)];
+  const invoiceId = matches.length ? matches[matches.length - 1][1] : null;
+  if (!invoiceId) {
+    return c.json({ error: 'No Square invoice ID found on this order' }, 400);
+  }
+
+  const squareFetch = async (method: string, path: string, body?: unknown) => {
+    const res = await fetch(`${SQUARE_API}${path}`, {
+      method,
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        'Square-Version': '2024-01-18',
+      },
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+    return res.json() as Promise<any>;
+  };
+
+  try {
+    // Square's cancel endpoint requires the current invoice version to prevent
+    // racing against another update. Fetch the invoice first to read it.
+    const fetched = await squareFetch('GET', `/invoices/${invoiceId}`);
+    if (fetched.errors) {
+      return c.json({ error: 'Failed to load invoice from Square', details: fetched.errors }, 400);
+    }
+    const invoice = fetched.invoice;
+    if (!invoice) {
+      return c.json({ error: 'Square returned no invoice for that ID' }, 404);
+    }
+
+    // Square uses uppercase strings: DRAFT, SCHEDULED, UNPAID, PARTIALLY_PAID,
+    // PAID, REFUNDED, PARTIALLY_REFUNDED, CANCELED, FAILED, PAYMENT_PENDING.
+    // Only the first four are cancellable.
+    const CANCELLABLE = new Set(['DRAFT', 'SCHEDULED', 'UNPAID', 'PARTIALLY_PAID']);
+    if (!CANCELLABLE.has(invoice.status)) {
+      return c.json({
+        error: `Invoice is in state ${invoice.status} and can't be cancelled. `
+          + `Paid invoices need a manual refund in the Square Dashboard.`,
+      }, 400);
+    }
+
+    const cancelResult = await squareFetch('POST', `/invoices/${invoiceId}/cancel`, {
+      version: invoice.version ?? 0,
+    });
+    if (cancelResult.errors) {
+      return c.json({ error: 'Square refused to cancel the invoice', details: cancelResult.errors }, 400);
+    }
+
+    // Flip local payment_status. If the order itself is cancelled, the invoice
+    // shouldn't have existed at all — revert to 'cancelled'. Otherwise return
+    // to 'pending_payment' so the order's still on the to-collect list.
+    const newPaymentStatus = order.status === 'cancelled' ? 'cancelled' : 'pending_payment';
+    await db.update(orders).set({
+      paymentStatus: newPaymentStatus,
+      internalNotes: `${order.internalNotes ?? ''}\nSquare invoice cancelled: ${invoiceId}`.trim(),
+      updatedAt: Date.now(),
+    }).where(eq(orders.id, orderId));
+
+    return c.json({ ok: true, invoiceId, paymentStatus: newPaymentStatus });
+  } catch (e: any) {
+    return c.json({ error: e?.message ?? 'Invoice cancellation failed' }, 500);
+  }
+});
+
 // ── Square Payment Link (for storefront checkout) ──
 app.post('/:id/payment-link', async (c) => {
   const accessToken = c.env.SQUARE_ACCESS_TOKEN;
