@@ -8,7 +8,23 @@ export type OrderStatus =
   | 'cancelled'
   | 'refunded';
 
-export type PaymentStatus = 'paid' | 'failed' | 'refunded' | 'partial_refund' | 'invoiced';
+// Keep in sync with the values written by apps/api routes & cron handlers.
+// Verified against the production orders table: 'paid', 'invoice_sent',
+// 'awaiting_payment', 'cancelled', 'pending_payment' all exist in the wild.
+// 'payment_failed' is written by the subscription auto-charge fallback,
+// 'invoiced' / 'failed' / 'refunded' / 'partial_refund' are historical or
+// staff-set values from the admin UI.
+export type PaymentStatus =
+  | 'paid'
+  | 'pending_payment'
+  | 'awaiting_payment'
+  | 'invoice_sent'
+  | 'invoiced'
+  | 'payment_failed'
+  | 'failed'
+  | 'cancelled'
+  | 'refunded'
+  | 'partial_refund';
 
 export type PaymentProvider = 'stripe' | 'square';
 
