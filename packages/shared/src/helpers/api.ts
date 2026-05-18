@@ -61,6 +61,8 @@ export const api = {
       api.patch(`/api/orders/${id}/status`, { status, ...extra }),
     update: (id: string, data: unknown) => api.patch(`/api/orders/${id}`, data),
     remove: (id: string) => api.delete(`/api/orders/${id}`),
+    /** Create a Square invoice for an unpaid order and email it to the customer. */
+    sendInvoice: (id: string) => api.post(`/api/orders/${id}/invoice`, {}),
   },
 
   deliveryDays: {

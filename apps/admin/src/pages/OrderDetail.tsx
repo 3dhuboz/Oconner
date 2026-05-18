@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api, formatCurrency, ORDER_STATUS_LABELS } from '@butcher/shared';
 import type { Order, OrderStatus } from '@butcher/shared';
-import { ArrowLeft, Printer, AlertTriangle, Pencil, X } from 'lucide-react';
+import { ArrowLeft, Printer, AlertTriangle, Pencil, X, Send } from 'lucide-react';
 import { toast } from '../lib/toast';
 import AddressAutocomplete from '../components/AddressAutocomplete';
 
@@ -68,6 +68,43 @@ export default function OrderDetailPage() {
   };
 
   const handlePrint = () => window.print();
+
+  // ── Square Invoice action ──
+  // Hits the existing POST /api/orders/:id/invoice endpoint which:
+  //   1. Finds-or-creates a Square customer for the order's email
+  //   2. Creates a Square Order with the line items + delivery fee
+  //   3. Creates and PUBLISHES an invoice (emails it to the customer)
+  //   4. Flips this order's paymentStatus to 'invoice_sent'
+  //
+  // Wired up after we discovered subscription orders were shipping with a
+  // hardcoded paymentStatus='paid' but no Square charge — Andrea McDonald
+  // got her box and realised she'd never been billed. This button lets
+  // Seamus retroactively collect on those orders without writing one-off
+  // scripts.
+  const [sendingInvoice, setSendingInvoice] = useState(false);
+  const handleSendInvoice = async () => {
+    if (!orderId || !order) return;
+    if (!order.customerEmail) {
+      toast('Order has no customer email — add one before sending an invoice', 'error');
+      return;
+    }
+    const confirmed = window.confirm(
+      `Send Square invoice for ${formatCurrency(order.total)} to ${order.customerEmail}?\n\n`
+      + `Square will email a payment link to the customer. The order's payment status will move to "invoice sent" until they pay.`,
+    );
+    if (!confirmed) return;
+    setSendingInvoice(true);
+    try {
+      await api.orders.sendInvoice(orderId);
+      // Reflect the new payment status locally without a full refetch.
+      setOrder((prev) => prev ? ({ ...prev, paymentStatus: 'invoice_sent' } as Order) : prev);
+      toast(`Invoice sent to ${order.customerEmail}`);
+    } catch (e: any) {
+      toast(e?.message ?? 'Failed to send invoice', 'error');
+    } finally {
+      setSendingInvoice(false);
+    }
+  };
 
   // ── Edit modal state ───────────────────────────────────────────────────────
   // Seamus reported he couldn't amend an order on his phone (e.g. fix a wrong
@@ -190,11 +227,31 @@ export default function OrderDetailPage() {
                   (order as any).paymentStatus === 'paid' ? 'bg-green-100 text-green-700'
                     : (order as any).paymentStatus === 'refunded' ? 'bg-blue-100 text-blue-700'
                     : (order as any).paymentStatus === 'failed' ? 'bg-red-100 text-red-700'
+                    : (order as any).paymentStatus === 'invoice_sent' ? 'bg-indigo-100 text-indigo-700'
                     : 'bg-yellow-100 text-yellow-700'
                 }`}>
-                  {((order as any).paymentStatus ?? 'pending').charAt(0).toUpperCase() + ((order as any).paymentStatus ?? 'pending').slice(1)}
+                  {((order as any).paymentStatus ?? 'pending').replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
                 </span>
               </p>
+              {/* Show "Send Square Invoice" for any order that isn't already paid
+                  or refunded. Especially useful for subscription orders that
+                  shipped without being charged — and for re-sending if the
+                  customer claims they didn't get the first email. */}
+              {(order as any).paymentStatus !== 'paid' && (order as any).paymentStatus !== 'refunded' && (
+                <button
+                  onClick={handleSendInvoice}
+                  disabled={sendingInvoice}
+                  className="mt-2 flex items-center gap-1.5 bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-indigo-100 disabled:opacity-50"
+                  title="Create a Square invoice and email it to the customer"
+                >
+                  <Send className="h-3.5 w-3.5" />
+                  {sendingInvoice
+                    ? 'Sending…'
+                    : (order as any).paymentStatus === 'invoice_sent'
+                      ? 'Re-send Square Invoice'
+                      : 'Send Square Invoice'}
+                </button>
+              )}
             </div>
           </div>
         </div>
