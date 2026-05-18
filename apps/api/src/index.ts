@@ -679,6 +679,17 @@ export const scheduled: ExportedHandlerScheduledHandler<Env> = async (event, env
     const db = drizzle(env.DB);
 
     // ── 1. Auto-generate subscription orders for due subscriptions ──
+    // PREVIOUSLY: this loop did its own db.insert(orders) with a hardcoded
+    // `paymentStatus: 'paid'` — no Square charge ever fired. That's how
+    // Andrea McDonald received an unpaid 10kg box and asked Seamus where
+    // the charge was. $2,210 of unpaid deliveries had built up across
+    // 4 customers.
+    //
+    // NOW: route through the shared createSubscriptionOrder helper, which
+    // tries to auto-charge a saved Square card and falls back to
+    // `payment_status='pending_payment'` when no card exists. The order
+    // still ships (forceStatus='confirmed') — Seamus delivers and collects
+    // payment via the Send Square Invoice button in admin.
     try {
       const now = Date.now();
       const FREQ_MS: Record<string, number> = {
@@ -686,7 +697,7 @@ export const scheduled: ExportedHandlerScheduledHandler<Env> = async (event, env
         fortnightly: 14 * 24 * 60 * 60 * 1000,
         monthly: 30 * 24 * 60 * 60 * 1000,
       };
-      const { deductStock } = await import('./lib/stock');
+      const { createSubscriptionOrder } = await import('./lib/subscriptions');
 
       const activeSubs = await db.select().from(subscriptions).where(eq(subscriptions.status, 'active'));
 
@@ -724,43 +735,27 @@ export const scheduled: ExportedHandlerScheduledHandler<Env> = async (event, env
         if (!boxProduct) [boxProduct] = await db.select().from(products).where(eq(products.id, `prod-${boxId}-box`)).limit(1);
         if (!boxProduct) [boxProduct] = await db.select().from(products).where(like(products.name, `%${boxName.replace(' Box', '')}%Box%`)).limit(1);
         const price = boxProduct?.fixedPrice ?? 0;
+        const resolvedBoxId = boxProduct?.id ?? boxId;
         if (!price) continue;
 
-        // Find next active delivery day
-        const [nextDay] = await db.select().from(deliveryDays)
-          .where(and(eq(deliveryDays.active, true), gte(deliveryDays.date, now)))
-          .orderBy(deliveryDays.date).limit(1);
-        if (!nextDay) continue;
-
-        const orderId = crypto.randomUUID();
-        const items = [{ productId: boxProduct?.id ?? boxId, productName: boxName, quantity: 1, isMeatPack: true, lineTotal: price }];
-
-        await db.insert(orders).values({
-          id: orderId,
+        const orderId = await createSubscriptionOrder(db, {
           customerId,
-          customerName: customer.name ?? sub.email,
-          customerEmail: sub.email,
-          customerPhone: customer.phone ?? '',
-          deliveryDayId: nextDay.id,
-          deliveryAddress: JSON.stringify(address),
-          items: JSON.stringify(items),
-          subtotal: price,
-          deliveryFee: 0,
-          gst: Math.round(price / 11),
-          total: price,
-          status: 'confirmed',
-          paymentStatus: 'paid',
+          email: sub.email,
+          name: customer.name ?? sub.email,
+          phone: customer.phone ?? '',
+          address,
+          boxId: resolvedBoxId,
+          boxName,
+          frequency: sub.frequency,
+          price,
           subscriptionId: sub.id,
-          internalNotes: `Auto-generated from ${boxName} ${sub.frequency} subscription`,
-          createdAt: now,
-          updatedAt: now,
+          now,
+          env,
+          // Ship the order even when no card on file — the truck rolls on
+          // schedule and we send a Square Invoice to collect afterwards.
+          forceStatus: 'confirmed',
         });
-
-        await deductStock(db, items as any[], orderId, now);
-        await db.update(deliveryDays).set({ orderCount: sql`${deliveryDays.orderCount} + 1` }).where(eq(deliveryDays.id, nextDay.id));
-        await db.update(customers)
-          .set({ orderCount: sql`${customers.orderCount} + 1`, totalSpent: sql`${customers.totalSpent} + ${price}`, updatedAt: now })
-          .where(eq(customers.id, customerId));
+        if (!orderId) continue; // no upcoming delivery day
 
         const updateData: Record<string, unknown> = { lastOrderGeneratedAt: now, updatedAt: now };
         if (sub.alternateBoxId) updateData.nextIsAlternate = !sub.nextIsAlternate;

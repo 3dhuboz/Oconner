@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/d1';
-import { desc, eq, and, gte, asc, sql, inArray } from 'drizzle-orm';
+import { desc, eq, and, gte, sql, inArray } from 'drizzle-orm';
 import { subscriptions, customers, orders, deliveryDays, stops, products } from '@butcher/db';
-import { deductStock } from '../lib/stock';
+import { createSubscriptionOrder } from '../lib/subscriptions';
 import type { Env, AuthUser } from '../types';
 
 /**
@@ -100,6 +100,9 @@ const FREQUENCY_MAP: Record<string, string> = {
   monthly: 'MONTHLY',
 };
 
+// Square API call helper kept local to this file (used by /checkout flow for
+// new subscription signups). The subscription-order creation logic itself
+// lives in ../lib/subscriptions.ts.
 async function squareRequest(accessToken: string, path: string, body: unknown): Promise<Record<string, unknown>> {
   const res = await fetch(`${SQUARE_API}${path}`, {
     method: 'POST',
@@ -111,148 +114,6 @@ async function squareRequest(accessToken: string, path: string, body: unknown): 
     body: JSON.stringify(body),
   });
   return res.json() as Promise<Record<string, unknown>>;
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function createSubscriptionOrder(db: any, opts: {
-  customerId: string;
-  email: string;
-  name: string;
-  phone: string;
-  address: { line1: string; line2?: string; suburb: string; state: string; postcode: string };
-  boxId: string;
-  boxName: string;
-  price: number; // cents
-  subscriptionId: string;
-  now: number;
-  env?: Env; // pass env to enable auto-charging
-}) {
-  // Find the next upcoming active delivery day
-  const [nextDay] = await db.select().from(deliveryDays)
-    .where(and(eq(deliveryDays.active, true), gte(deliveryDays.date, opts.now)))
-    .orderBy(asc(deliveryDays.date))
-    .limit(1);
-  if (!nextDay) return null; // No delivery day available
-
-  const orderId = crypto.randomUUID();
-  const gst = Math.round(opts.price / 11); // GST inclusive
-  const subtotal = opts.price - gst;
-
-  const item = {
-    productId: opts.boxId,
-    productName: opts.boxName,
-    isMeatPack: true,
-    quantity: 1,
-    lineTotal: opts.price,
-  };
-
-  // ── Try to auto-charge saved card ──
-  let paymentStatus = 'pending_payment'; // default — only set to 'paid' after successful charge
-  let paymentIntentId = '';
-  let chargeFailureReason: string | null = null;
-  if (opts.env?.SQUARE_ACCESS_TOKEN && opts.env?.SQUARE_LOCATION_ID) {
-    const [cust] = await db.select().from(customers).where(eq(customers.id, opts.customerId)).limit(1);
-    if (cust?.squareCardId && cust?.squareCustomerId) {
-      try {
-        const chargeResult = await squareRequest(opts.env.SQUARE_ACCESS_TOKEN, '/payments', {
-          idempotency_key: crypto.randomUUID(),
-          source_id: cust.squareCardId,
-          amount_money: { amount: opts.price, currency: 'AUD' },
-          customer_id: cust.squareCustomerId,
-          location_id: opts.env.SQUARE_LOCATION_ID,
-          autocomplete: true,
-          note: `Subscription renewal: ${opts.boxName}`,
-        });
-
-        if (chargeResult.errors) {
-          console.error('Auto-charge failed:', JSON.stringify(chargeResult.errors));
-          paymentStatus = 'payment_failed';
-          chargeFailureReason = JSON.stringify(chargeResult.errors).slice(0, 500);
-        } else {
-          paymentIntentId = ((chargeResult.payment as any)?.id ?? '') as string;
-          paymentStatus = 'paid';
-        }
-      } catch (e) {
-        console.error('Auto-charge error:', e);
-        paymentStatus = 'payment_failed';
-        chargeFailureReason = String(e).slice(0, 500);
-      }
-    } else {
-      // No saved card — mark as needing payment
-      paymentStatus = 'pending_payment';
-    }
-  }
-
-  // If the saved card failed (likely revoked / expired / CVV change), pause
-  // the subscription so the cron doesn't keep retrying the same dead card,
-  // and email the customer asking them to re-enter payment details. Without
-  // this, the failure is silent: the order still gets created, customer
-  // expects delivery, charge never lands.
-  if (paymentStatus === 'payment_failed' && opts.subscriptionId) {
-    try {
-      await db.update(subscriptions)
-        .set({ status: 'payment_action_required', updatedAt: opts.now })
-        .where(eq(subscriptions.id, opts.subscriptionId));
-      const { sendEmail } = await import('../lib/email');
-      const accountUrl = `${opts.env?.STOREFRONT_URL ?? 'https://oconnoragriculture.com.au'}/account`;
-      await sendEmail({
-        apiKey: opts.env?.RESEND_API_KEY ?? '',
-        from: opts.env?.FROM_EMAIL ?? "O'Connor Agriculture <orders@oconnoragriculture.com.au>",
-        to: opts.email,
-        subject: 'Action needed: update payment details for your O\'Connor subscription',
-        html: `
-          <div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:20px;color:#333">
-            <h2 style="color:#4E7732">Your subscription needs a new card</h2>
-            <p>Hi ${opts.name},</p>
-            <p>We tried to charge your saved card for this fortnight's <strong>${opts.boxName}</strong> subscription delivery, but the payment didn't go through.</p>
-            <p>Your subscription is paused until you re-enter card details. Click below to update — your usual schedule resumes as soon as a new card is on file.</p>
-            <p style="text-align:center;margin:28px 0">
-              <a href="${accountUrl}" style="background:#4E7732;color:white;padding:12px 28px;text-decoration:none;border-radius:8px;font-weight:bold">Update payment details</a>
-            </p>
-            <p style="color:#666;font-size:13px">If you've recently changed banks or your card expired, this is the most common reason. Once updated, your next box ships on the original schedule.</p>
-          </div>`,
-      });
-    } catch (e) {
-      console.error('subscription pause/notify failed:', e);
-    }
-  }
-
-  await db.insert(orders).values({
-    id: orderId,
-    customerId: opts.customerId,
-    customerEmail: opts.email,
-    customerName: opts.name,
-    customerPhone: opts.phone,
-    items: JSON.stringify([item]),
-    subtotal,
-    deliveryFee: 0,
-    gst,
-    total: opts.price,
-    status: paymentStatus === 'paid' ? 'confirmed' : 'pending_payment',
-    deliveryDayId: nextDay.id,
-    deliveryAddress: JSON.stringify(opts.address),
-    postcodeZone: '',
-    paymentIntentId,
-    paymentProvider: 'square',
-    paymentStatus,
-    notes: `Subscription box: ${opts.boxName}${paymentStatus === 'payment_failed' ? ' — AUTO-CHARGE FAILED' : ''}`,
-    createdAt: opts.now,
-    updatedAt: opts.now,
-  });
-
-  // Deduct stock for the subscription box
-  await deductStock(db, [item], orderId, opts.now);
-
-  // Atomic counter updates (no read-then-write so concurrent flows can't
-  // clobber each other's increments).
-  await db.update(deliveryDays).set({ orderCount: sql`${deliveryDays.orderCount} + 1` }).where(eq(deliveryDays.id, nextDay.id));
-  await db.update(customers).set({
-    orderCount: sql`${customers.orderCount} + 1`,
-    totalSpent: sql`${customers.totalSpent} + ${opts.price}`,
-    updatedAt: opts.now,
-  }).where(eq(customers.id, opts.customerId));
-
-  return orderId;
 }
 
 const app = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
@@ -380,13 +241,17 @@ app.post('/checkout', async (c) => {
         createdAt: now, updatedAt: now,
       });
 
-      // 6. Create first order (already paid)
+      // 6. Create first order (already paid via the inline card charge above).
+      // Mode-1 (sourceId provided) means we just charged the customer's card
+      // successfully — auto-charge inside createSubscriptionOrder will succeed
+      // again because the card is now saved, so status flips to 'confirmed'
+      // automatically.
       await createSubscriptionOrder(db, {
         customerId: customerId!,
         email: body.email, name: body.name, phone: body.phone,
         address: { line1: body.address, suburb: body.suburb, state: 'QLD', postcode: body.postcode },
-        boxId: body.boxId, boxName: body.boxName, price,
-        subscriptionId: subId, now,
+        boxId: body.boxId, boxName: body.boxName, frequency: body.frequency, price,
+        subscriptionId: subId, now, env: c.env,
       });
 
       return c.json({ ok: true, subscriptionId: subId, cardLast4, cardBrand });
@@ -428,11 +293,15 @@ app.post('/checkout', async (c) => {
     createdAt: now, updatedAt: now,
   });
 
+  // Mode-2: customer is redirected to Square's hosted Payment Link. We don't
+  // know the outcome yet, so the order is created as pending_payment and
+  // status stays as 'pending_payment' (not 'confirmed') — it'll be confirmed
+  // only when payment lands. Cron-sweep cancels it if abandoned > 12h.
   await createSubscriptionOrder(db, {
     customerId: customerId!,
     email: body.email, name: body.name, phone: body.phone,
     address: { line1: body.address, suburb: body.suburb, state: 'QLD', postcode: body.postcode },
-    boxId: body.boxId, boxName: body.boxName, price,
+    boxId: body.boxId, boxName: body.boxName, frequency: body.frequency, price,
     subscriptionId: subId, now,
   });
 
@@ -519,6 +388,11 @@ app.post('/', async (c) => {
     orderPrice = prod?.fixedPrice ?? 0;
   }
   if (customerId && body.address && orderPrice) {
+    // Admin-created sub via POST /. Force the order to 'confirmed' so it
+    // ships on the manifest — admin creates these for customers they intend
+    // to deliver to, and we don't want the cron-sweep to cancel it after 12h
+    // just because the customer has no card on file. Seamus will send a
+    // Square Invoice from the Order Detail page to collect.
     await createSubscriptionOrder(db, {
       customerId,
       email: body.email,
@@ -527,9 +401,12 @@ app.post('/', async (c) => {
       address: { line1: body.address, suburb: body.suburb ?? '', state: 'QLD', postcode: body.postcode ?? '' },
       boxId: body.boxId,
       boxName: body.boxName,
+      frequency: body.frequency,
       price: orderPrice,
       subscriptionId: id,
       now,
+      env: c.env,
+      forceStatus: 'confirmed',
     });
   }
 
@@ -643,6 +520,10 @@ app.post('/:id/generate-order', async (c) => {
   }
 
   const now = Date.now();
+  // Manual "create order now" from the admin Subscriptions page. Force the
+  // resulting order to 'confirmed' so it ships even when no saved card is on
+  // file — Seamus is explicitly creating this for delivery and will collect
+  // payment via Send Square Invoice in admin.
   const orderId = await createSubscriptionOrder(db, {
     customerId,
     email: sub.email,
@@ -651,10 +532,12 @@ app.post('/:id/generate-order', async (c) => {
     address,
     boxId: resolvedBoxId,
     boxName,
+    frequency: sub.frequency,
     price,
     subscriptionId: sub.id,
     now,
     env: c.env,
+    forceStatus: 'confirmed',
   });
 
   if (!orderId) return c.json({ error: 'No upcoming delivery day available' }, 400);
@@ -740,6 +623,8 @@ app.post('/auto-generate', async (c) => {
     const resolvedBoxId = boxProduct?.id ?? boxId;
     if (!price) { errors.push(`${sub.email}: box product not found or no price`); continue; }
 
+    // Batch /auto-generate endpoint — same intent as the cron and as
+    // /generate-order: create + ship + collect payment after. Force confirmed.
     const orderId = await createSubscriptionOrder(db, {
       customerId,
       email: sub.email,
@@ -748,10 +633,12 @@ app.post('/auto-generate', async (c) => {
       address,
       boxId: resolvedBoxId,
       boxName,
+      frequency: sub.frequency,
       price,
       subscriptionId: sub.id,
       now,
       env: c.env,
+      forceStatus: 'confirmed',
     });
 
     if (!orderId) { errors.push(`${sub.email}: no upcoming delivery day`); continue; }
