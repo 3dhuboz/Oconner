@@ -185,44 +185,31 @@ app.post('/:id/generate-stops', async (c) => {
     const price = boxProduct?.fixedPrice ?? 0;
     if (!price) continue;
 
+    // PREVIOUSLY: this inlined db.insert(orders) with a hardcoded
+    // `paymentStatus: 'paid'` — same fake-paid bug as the cron path.
+    // NOW: use the shared helper so payment status reflects reality
+    // (auto-charge saved card if available, else pending_payment).
+    // forceStatus: 'confirmed' keeps the order on the manifest for Seamus
+    // to deliver; Send Square Invoice in admin chases payment after.
     const resolvedBoxId = boxProduct.id!;
-    const orderId = crypto.randomUUID();
-    const gst = Math.round(price / 11);
-    const subtotal = price - gst;
-    const item = { productId: resolvedBoxId, productName: boxName, isMeatPack: true, quantity: 1, lineTotal: price };
-
-    await db.insert(orders).values({
-      id: orderId,
+    const { createSubscriptionOrder } = await import('../lib/subscriptions');
+    const orderId = await createSubscriptionOrder(db, {
       customerId,
-      customerEmail: sub.email,
-      customerName: customer.name ?? sub.email,
-      customerPhone: customer.phone ?? '',
-      items: JSON.stringify([item]),
-      subtotal, deliveryFee: 0, gst, total: price,
-      status: 'confirmed',
+      email: sub.email,
+      name: customer.name ?? sub.email,
+      phone: customer.phone ?? '',
+      address,
+      boxId: resolvedBoxId,
+      boxName,
+      frequency: sub.frequency,
+      price,
+      subscriptionId: sub.id,
+      now,
+      env: c.env,
+      forceStatus: 'confirmed',
       deliveryDayId: dayId,
-      deliveryAddress: JSON.stringify(address),
-      postcodeZone: '',
-      paymentIntentId: '',
-      paymentProvider: 'square',
-      paymentStatus: 'paid',
-      notes: `Subscription: ${boxName} (${sub.frequency})`,
-      createdAt: now, updatedAt: now,
     });
-
-    await deductStock(db, [item], orderId, now);
-
-    // Atomic counter updates — read-then-write would race with concurrent
-    // order creation against the same day or customer.
-    await db.update(deliveryDays)
-      .set({ orderCount: sql`${deliveryDays.orderCount} + 1` })
-      .where(eq(deliveryDays.id, dayId));
-
-    await db.update(customers).set({
-      orderCount: sql`${customers.orderCount} + 1`,
-      totalSpent: sql`${customers.totalSpent} + ${price}`,
-      updatedAt: now,
-    }).where(eq(customers.id, customerId));
+    if (!orderId) continue;
 
     // Mark subscription as generated
     const updateData: Record<string, unknown> = { lastOrderGeneratedAt: now, updatedAt: now };
