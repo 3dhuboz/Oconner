@@ -82,6 +82,37 @@ export default function OrderDetailPage() {
   // Seamus retroactively collect on those orders without writing one-off
   // scripts.
   const [sendingInvoice, setSendingInvoice] = useState(false);
+  const [cancellingInvoice, setCancellingInvoice] = useState(false);
+
+  // Cancel an already-sent Square invoice. Only works while Square considers
+  // the invoice UNPAID (DRAFT, SCHEDULED, UNPAID, PARTIALLY_PAID, or
+  // PARTIALLY_REFUNDED). If the customer's already paid, Seamus needs to
+  // refund manually in the Square Dashboard.
+  //
+  // Backend extracts the most recent Square invoice ID from internal_notes,
+  // calls POST /v2/invoices/{id}/cancel, and flips paymentStatus back to
+  // 'cancelled' if the order status is 'cancelled', else 'pending_payment'.
+  const handleCancelInvoice = async () => {
+    if (!orderId || !order) return;
+    const confirmed = window.confirm(
+      `Cancel the Square invoice sent to ${order.customerEmail}?\n\n`
+      + `This voids the invoice in Square so the customer can't pay it. `
+      + `It only works if they haven't paid yet — already-paid invoices `
+      + `need a manual refund in the Square Dashboard.`,
+    );
+    if (!confirmed) return;
+    setCancellingInvoice(true);
+    try {
+      const result = await api.orders.cancelInvoice(orderId) as { paymentStatus: string };
+      setOrder((prev) => prev ? ({ ...prev, paymentStatus: result.paymentStatus as Order['paymentStatus'] }) : prev);
+      toast('Square invoice cancelled');
+    } catch (e: any) {
+      toast(e?.message ?? 'Failed to cancel invoice', 'error');
+    } finally {
+      setCancellingInvoice(false);
+    }
+  };
+
   const handleSendInvoice = async () => {
     if (!orderId || !order) return;
     if (!order.customerEmail) {
@@ -233,11 +264,17 @@ export default function OrderDetailPage() {
                   {((order as any).paymentStatus ?? 'pending').replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
                 </span>
               </p>
-              {/* Show "Send Square Invoice" for any order that isn't already paid
-                  or refunded. Especially useful for subscription orders that
-                  shipped without being charged — and for re-sending if the
-                  customer claims they didn't get the first email. */}
-              {(order as any).paymentStatus !== 'paid' && (order as any).paymentStatus !== 'refunded' && (
+              {/* Show "Send Square Invoice" for any order that isn't already paid,
+                  refunded, OR cancelled. Especially useful for subscription
+                  orders that shipped without being charged — and for re-sending
+                  if the customer claims they didn't get the first email.
+                  Cancelled orders are excluded to prevent invoicing a customer
+                  for a box they never received (originally added after Andrea's
+                  cancelled 15-Apr duplicate was accidentally invoiced). */}
+              {(order as any).paymentStatus !== 'paid'
+                && (order as any).paymentStatus !== 'refunded'
+                && order.status !== 'cancelled'
+                && order.status !== 'refunded' && (
                 <button
                   onClick={handleSendInvoice}
                   disabled={sendingInvoice}
@@ -250,6 +287,22 @@ export default function OrderDetailPage() {
                     : (order as any).paymentStatus === 'invoice_sent'
                       ? 'Re-send Square Invoice'
                       : 'Send Square Invoice'}
+                </button>
+              )}
+
+              {/* Cancel-invoice escape hatch. If an invoice was sent in error
+                  (e.g. for a cancelled order), this voids it in Square so the
+                  customer doesn't pay for nothing. Square's API only allows
+                  cancelling UNPAID invoices — paid ones need a manual refund. */}
+              {(order as any).paymentStatus === 'invoice_sent' && (
+                <button
+                  onClick={handleCancelInvoice}
+                  disabled={cancellingInvoice}
+                  className="mt-2 ml-2 inline-flex items-center gap-1.5 bg-red-50 text-red-700 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-red-100 disabled:opacity-50"
+                  title="Cancel the Square invoice (only works if customer hasn't paid yet)"
+                >
+                  <X className="h-3.5 w-3.5" />
+                  {cancellingInvoice ? 'Cancelling…' : 'Cancel Square Invoice'}
                 </button>
               )}
             </div>
