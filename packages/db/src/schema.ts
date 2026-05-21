@@ -339,3 +339,51 @@ export const config = sqliteTable('config', {
   updatedAt: integer('updated_at').notNull(),
   updatedBy: text('updated_by').notNull().default('system'),
 });
+
+// ── Receipt-capture mini-app ─────────────────────────────────────────────────
+// Built so Seamus can snap receipts on his phone instead of being chased for
+// them by his bookkeeper. Multi-tenant from day one so this is reusable —
+// businesses + business_members let one user belong to one or more businesses;
+// receipts are scoped per business so a second tenant can be added without
+// migrating data. Today only O'Connor Agriculture exists (seeded by migration
+// 0003).
+export const businesses = sqliteTable('businesses', {
+  id: text('id').primaryKey(),                                        // UUID-ish
+  name: text('name').notNull(),                                       // e.g. "O'Connor Agriculture"
+  slug: text('slug').notNull().unique(),                              // url-safe identifier
+  hubdocEmail: text('hubdoc_email'),                                  // bookkeeper's upload inbox — receipts auto-forwarded here
+  active: integer('active', { mode: 'boolean' }).notNull().default(true),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});
+
+// Junction so one user can belong to multiple businesses (Steve helps Seamus
+// today, might help someone else tomorrow). UNIQUE on (business_id, user_id)
+// prevents duplicate memberships.
+export const businessMembers = sqliteTable('business_members', {
+  id: text('id').primaryKey(),
+  businessId: text('business_id').notNull().references(() => businesses.id),
+  userId: text('user_id').notNull().references(() => users.id),
+  role: text('role').notNull().default('owner'),  // 'owner' | 'member' | 'bookkeeper'
+  createdAt: integer('created_at').notNull(),
+});
+
+// One receipt = one photo. Optional manual fields (amount, merchant, notes)
+// the user or bookkeeper can fill in later. hubdocForwardedAt is set when the
+// auto-email to the business's Hubdoc inbox succeeds — failures stash a
+// short reason in hubdocForwardError so the admin UI can show "retry".
+export const receipts = sqliteTable('receipts', {
+  id: text('id').primaryKey(),
+  businessId: text('business_id').notNull().references(() => businesses.id),
+  capturedByUid: text('captured_by_uid').notNull().references(() => users.id),
+  photoKey: text('photo_key').notNull(),                 // R2 object key, lives under receipts/<uuid>.<ext>
+  contentType: text('content_type').notNull().default('image/jpeg'),
+  notes: text('notes'),                                  // optional user note ("fuel for truck", "feed pickup")
+  amountCents: integer('amount_cents'),                  // optional manual entry
+  merchant: text('merchant'),                            // optional manual entry
+  hubdocForwardedAt: integer('hubdoc_forwarded_at'),     // set when auto-email succeeds
+  hubdocForwardError: text('hubdoc_forward_error'),      // last failure reason if any
+  capturedAt: integer('captured_at').notNull(),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});
