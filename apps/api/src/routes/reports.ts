@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/d1';
-import { sql, and, gte, lt, lte, desc, inArray } from 'drizzle-orm';
+import { sql, and, gte, lt, lte, desc, inArray, eq, like, or } from 'drizzle-orm';
 import { orders, deliveryDays, stops } from '@butcher/db';
 import type { Env, AuthUser } from '../types';
 import { requireRole } from '../middleware/auth';
@@ -498,6 +498,285 @@ app.get('/sales-export', async (c) => {
       'Cache-Control': 'no-store',
     },
   });
+});
+
+// ── GET /api/reports/payouts ────────────────────────────────────────────────
+// Square payout reconciliation. Michelle (Seamus's bookkeeper) gets a single
+// deposit on the bank statement like "$537.42 from Square, 14 Apr" and has
+// to work out which website orders that deposit represents. This endpoint
+// pulls payouts straight from Square, fetches each payout's underlying
+// entries (charges, fees, refunds), and matches every charge entry back to
+// the originating O'Connor order using two strategies in order:
+//
+//   1. Direct: `orders.payment_intent_id = entry.payment_id`. Set by the
+//      subscription auto-charge path in apps/api/src/lib/subscriptions.ts.
+//
+//   2. Note-based: every storefront / admin Square payment link writes
+//      `O'Connor Agriculture — Order #ABCD1234` into `payment_note`. We
+//      fetch the payment, parse the 8-char prefix out of the note, and
+//      look up the order by `id LIKE '<prefix>%'`. Covers all the existing
+//      non-subscription Square orders where payment_intent_id was never
+//      stored back.
+//
+// Stripe support is intentionally out of scope here. The Stripe webhook
+// (apps/api/src/routes/stripe.ts) currently doesn't write payment_intent.id
+// onto the order row, so there's no reliable way to match Stripe charges
+// to orders. None of the 60 orders flagged provider='stripe' have a
+// payment_intent_id stored either — most predate the current payment flow.
+// We'll add Stripe once the webhook stamps the payment intent ID.
+app.get('/payouts', async (c) => {
+  const SQUARE_API = 'https://connect.squareup.com/v2';
+  const accessToken = c.env.SQUARE_ACCESS_TOKEN;
+  const locationId = c.env.SQUARE_LOCATION_ID;
+  if (!accessToken || !locationId) {
+    return c.json({ error: 'Square not configured' }, 503);
+  }
+
+  const db = drizzle(c.env.DB);
+  const now = Date.now();
+
+  let fromTs = Number(c.req.query('from') || 0);
+  const toTs = Number(c.req.query('to') || now);
+
+  // Default to last 90 days (one BAS quarter) — matches the sales-export.
+  if (!c.req.query('from')) {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - 90);
+    fromTs = d.getTime();
+  }
+
+  // Square expects ISO-8601 with millisecond precision and a Z suffix.
+  const beginTime = new Date(fromTs).toISOString();
+  const endTime = new Date(toTs).toISOString();
+
+  const squareGet = async (path: string) => {
+    const res = await fetch(`${SQUARE_API}${path}`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Square-Version': '2024-01-18',
+      },
+    });
+    return res.json() as Promise<any>;
+  };
+
+  try {
+    // List payouts — sort descending so the freshest payout is at the top of
+    // the response. limit=100 is the Square max; for a 90-day window that's
+    // plenty (~3 payouts/week worst case).
+    const payoutsResp = await squareGet(
+      `/payouts?location_id=${encodeURIComponent(locationId)}` +
+      `&begin_time=${encodeURIComponent(beginTime)}` +
+      `&end_time=${encodeURIComponent(endTime)}` +
+      `&sort_order=DESC&limit=100`,
+    );
+    if (payoutsResp.errors) {
+      return c.json({ error: 'Square API error', details: payoutsResp.errors }, 502);
+    }
+    const squarePayouts = (payoutsResp.payouts ?? []) as Array<{
+      id: string;
+      status: string;
+      arrival_date?: string;
+      created_at?: string;
+      amount_money?: { amount?: number; currency?: string };
+      destination?: { type?: string };
+      end_to_end_id?: string;
+    }>;
+
+    // Match payment_id → order. Two-pass: first try direct paymentIntentId
+    // matches in one batched query; then for anything still unmatched, fetch
+    // the Square payment and parse `Order #<prefix>` from the note.
+    interface Entry {
+      id: string;
+      type: string;
+      effectiveAt: string | undefined;
+      amountCents: number;
+      feeCents: number;
+      paymentId: string | null;
+      matchedOrder: null | {
+        id: string;
+        customerName: string;
+        customerEmail: string;
+        total: number;
+        createdAt: number;
+      };
+      matchStrategy: 'payment_intent_id' | 'note' | null;
+    }
+
+    interface EnrichedPayout {
+      id: string;
+      status: string;
+      arrivalDate: string | null;
+      createdAt: string | null;
+      amountCents: number;
+      currency: string;
+      destinationType: string | null;
+      endToEndId: string | null;
+      entries: Entry[];
+      matchedCount: number;
+      unmatchedCount: number;
+      chargeCount: number;
+    }
+
+    // 1) Fetch entries for every payout in parallel.
+    const entriesPerPayout = await Promise.all(
+      squarePayouts.map(async (p) => {
+        const r = await squareGet(`/payouts/${p.id}/payout-entries?limit=100`);
+        return (r.payout_entries ?? []) as any[];
+      }),
+    );
+
+    // 2) Collect every payment_id we see across all entries (CHARGE entries
+    //    carry the underlying payment under several possible field names; we
+    //    handle the documented ones).
+    const paymentIdsSeen = new Set<string>();
+    for (const entries of entriesPerPayout) {
+      for (const e of entries) {
+        const pid =
+          e.type_charge_details?.payment_id ??
+          e.type_refunded_charge_details?.payment_id ??
+          e.payment_id ??
+          null;
+        if (pid) paymentIdsSeen.add(pid);
+      }
+    }
+
+    // 3) Direct match: orders where payment_intent_id is in the seen set.
+    //    inArray on an empty list explodes in drizzle, so guard for it.
+    const directMatches = new Map<string, EnrichedPayout['entries'][number]['matchedOrder']>();
+    if (paymentIdsSeen.size > 0) {
+      const rows = await db.select({
+        id: orders.id,
+        customerName: orders.customerName,
+        customerEmail: orders.customerEmail,
+        total: orders.total,
+        createdAt: orders.createdAt,
+        paymentIntentId: orders.paymentIntentId,
+      }).from(orders).where(inArray(orders.paymentIntentId, [...paymentIdsSeen]));
+      for (const r of rows) {
+        directMatches.set(r.paymentIntentId, {
+          id: r.id,
+          customerName: r.customerName,
+          customerEmail: r.customerEmail,
+          total: r.total,
+          createdAt: r.createdAt,
+        });
+      }
+    }
+
+    // 4) For everything still unmatched, fetch the Square payment object and
+    //    parse the `Order #XXXXXXXX` prefix out of `note`. We do these in
+    //    parallel — Square's per-payment GET is fast and rate-limited per
+    //    minute, not per second.
+    const stillUnmatched = [...paymentIdsSeen].filter((pid) => !directMatches.has(pid));
+    const notePrefixByPaymentId = new Map<string, string>();
+    await Promise.all(
+      stillUnmatched.map(async (pid) => {
+        try {
+          const r = await squareGet(`/payments/${pid}`);
+          const note: string = r.payment?.note ?? '';
+          // Format is `O'Connor Agriculture — Order #ABCD1234`. Be loose on
+          // the prefix wording (em-dash variant, slight wording drift).
+          const m = note.match(/Order\s*#\s*([A-Z0-9]{6,12})/i);
+          if (m && m[1]) notePrefixByPaymentId.set(pid, m[1].toLowerCase());
+        } catch {
+          // Don't let a single payment fetch failure break the whole report.
+        }
+      }),
+    );
+
+    // 5) Resolve prefix → order. Build one OR query so we hit D1 once.
+    const noteOrders = new Map<string, EnrichedPayout['entries'][number]['matchedOrder']>();
+    const uniquePrefixes = [...new Set(notePrefixByPaymentId.values())];
+    if (uniquePrefixes.length > 0) {
+      const rows = await db.select({
+        id: orders.id,
+        customerName: orders.customerName,
+        customerEmail: orders.customerEmail,
+        total: orders.total,
+        createdAt: orders.createdAt,
+      }).from(orders).where(or(...uniquePrefixes.map((p) => like(orders.id, `${p}%`))));
+      const byPrefix = new Map<string, typeof rows[number]>();
+      for (const row of rows) {
+        byPrefix.set(row.id.slice(0, 8), row);
+      }
+      for (const [pid, prefix] of notePrefixByPaymentId.entries()) {
+        const r = byPrefix.get(prefix);
+        if (r) {
+          noteOrders.set(pid, {
+            id: r.id,
+            customerName: r.customerName,
+            customerEmail: r.customerEmail,
+            total: r.total,
+            createdAt: r.createdAt,
+          });
+        }
+      }
+    }
+
+    // 6) Stitch everything together.
+    const enriched: EnrichedPayout[] = squarePayouts.map((p, i) => {
+      const entries = entriesPerPayout[i].map((e: any): Entry => {
+        const pid =
+          e.type_charge_details?.payment_id ??
+          e.type_refunded_charge_details?.payment_id ??
+          e.payment_id ??
+          null;
+        let matched: Entry['matchedOrder'] = null;
+        let strategy: Entry['matchStrategy'] = null;
+        if (pid) {
+          if (directMatches.has(pid)) {
+            matched = directMatches.get(pid) ?? null;
+            strategy = 'payment_intent_id';
+          } else if (noteOrders.has(pid)) {
+            matched = noteOrders.get(pid) ?? null;
+            strategy = 'note';
+          }
+        }
+        return {
+          id: e.id,
+          type: e.type,
+          effectiveAt: e.effective_at,
+          amountCents: e.amount_money?.amount ?? 0,
+          feeCents: e.fee_amount_money?.amount ?? 0,
+          paymentId: pid,
+          matchedOrder: matched,
+          matchStrategy: strategy,
+        };
+      });
+
+      const chargeEntries = entries.filter((e) => e.paymentId);
+      const matchedCount = chargeEntries.filter((e) => e.matchedOrder).length;
+
+      return {
+        id: p.id,
+        status: p.status,
+        arrivalDate: p.arrival_date ?? null,
+        createdAt: p.created_at ?? null,
+        amountCents: p.amount_money?.amount ?? 0,
+        currency: p.amount_money?.currency ?? 'AUD',
+        destinationType: p.destination?.type ?? null,
+        endToEndId: p.end_to_end_id ?? null,
+        entries,
+        matchedCount,
+        unmatchedCount: chargeEntries.length - matchedCount,
+        chargeCount: chargeEntries.length,
+      };
+    });
+
+    return c.json({
+      provider: 'square',
+      from: fromTs,
+      to: toTs,
+      payouts: enriched,
+      stripe: {
+        skipped: true,
+        reason: 'Stripe webhook does not yet record payment_intent.id on orders — payout matching disabled until that is wired up.',
+      },
+    });
+  } catch (e: any) {
+    return c.json({ error: e?.message ?? 'Failed to load payouts' }, 500);
+  }
 });
 
 export default app;

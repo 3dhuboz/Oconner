@@ -1,4 +1,45 @@
 declare const process: { env: Record<string, string | undefined> } | undefined;
+
+// ── Shared response types ────────────────────────────────────────────────────
+export interface PayoutEntry {
+  id: string;
+  type: string;
+  effectiveAt?: string;
+  amountCents: number;
+  feeCents: number;
+  paymentId: string | null;
+  matchStrategy: 'payment_intent_id' | 'note' | null;
+  matchedOrder: null | {
+    id: string;
+    customerName: string;
+    customerEmail: string;
+    total: number;
+    createdAt: number;
+  };
+}
+
+export interface Payout {
+  id: string;
+  status: string;
+  arrivalDate: string | null;
+  createdAt: string | null;
+  amountCents: number;
+  currency: string;
+  destinationType: string | null;
+  endToEndId: string | null;
+  entries: PayoutEntry[];
+  matchedCount: number;
+  unmatchedCount: number;
+  chargeCount: number;
+}
+
+export interface PayoutsResponse {
+  provider: 'square';
+  from: number;
+  to: number;
+  payouts: Payout[];
+  stripe: { skipped: boolean; reason: string };
+}
 export const API_URL = typeof process !== 'undefined'
   ? (process.env.NEXT_PUBLIC_API_URL ?? process.env.VITE_API_URL ?? 'https://oconner-api.steve-700.workers.dev')
   : 'https://oconner-api.steve-700.workers.dev';
@@ -221,6 +262,20 @@ export const api = {
       if (to) params.set('to', String(to));
       const qs = params.toString();
       return api.get(`/api/reports/runs${qs ? `?${qs}` : ''}`);
+    },
+    /**
+     * Bank-deposit reconciliation: pulls Square payouts in the window and
+     * matches every charge entry back to its O'Connor order so the bookkeeper
+     * can see exactly which website orders made up each deposit. See the
+     * /payouts handler in apps/api/src/routes/reports.ts for the matching
+     * strategy.
+     */
+    payouts: (from?: number, to?: number) => {
+      const params = new URLSearchParams();
+      if (from) params.set('from', String(from));
+      if (to) params.set('to', String(to));
+      const qs = params.toString();
+      return api.get<PayoutsResponse>(`/api/reports/payouts${qs ? `?${qs}` : ''}`);
     },
   },
 
