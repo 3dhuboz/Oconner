@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, formatCurrency, ORDER_STATUS_LABELS } from '@butcher/shared';
+import { api, formatCurrency, ORDER_STATUS_LABELS, API_URL } from '@butcher/shared';
 import type { OrderStatus } from '@butcher/shared';
+import { useAuth as useClerkAuth } from '@clerk/clerk-react';
 import { DollarSign, ShoppingBag, TrendingUp, XCircle, Download, ChevronDown, ChevronRight, AlertTriangle, Package, CheckCircle2, Clock, Truck } from 'lucide-react';
 
 type Period = 'weekly' | 'fortnightly' | 'monthly' | 'yearly';
@@ -91,27 +92,44 @@ const fmtDateLong = (ts: number) => new Date(ts).toLocaleDateString('en-AU', { w
 
 export default function ReportsPage() {
   const [tab, setTab] = useState<Tab>('revenue');
+  const [showBookkeeperExport, setShowBookkeeperExport] = useState(false);
 
   return (
     <div>
-      <div className="flex items-center gap-1 mb-6 border-b">
+      <div className="flex items-end justify-between mb-6 border-b">
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setTab('revenue')}
+            className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              tab === 'revenue' ? 'border-brand text-brand' : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Revenue
+          </button>
+          <button
+            onClick={() => setTab('runs')}
+            className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              tab === 'runs' ? 'border-brand text-brand' : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            By Run
+          </button>
+        </div>
+        {/*
+          Bookkeeper export — surfaced near the tab bar so Michelle's quarterly
+          "what does this deposit relate to" question can be answered in one
+          click. Defaults to last 90 days (one BAS quarter).
+        */}
         <button
-          onClick={() => setTab('revenue')}
-          className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
-            tab === 'revenue' ? 'border-brand text-brand' : 'border-transparent text-gray-500 hover:text-gray-700'
-          }`}
+          onClick={() => setShowBookkeeperExport(true)}
+          className="mb-2 flex items-center gap-1.5 border px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-gray-50 transition-colors"
+          title="Download a CSV of paid orders for bank-deposit reconciliation"
         >
-          Revenue
-        </button>
-        <button
-          onClick={() => setTab('runs')}
-          className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
-            tab === 'runs' ? 'border-brand text-brand' : 'border-transparent text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          By Run
+          <Download className="h-3.5 w-3.5" /> Export for Bookkeeper
         </button>
       </div>
+
+      {showBookkeeperExport && <BookkeeperExportModal onClose={() => setShowBookkeeperExport(false)} />}
 
       {tab === 'revenue' ? <RevenueTab /> : <RunsTab />}
     </div>
@@ -592,5 +610,129 @@ function RunRow({ run, expanded, onToggle }: { run: Run; expanded: boolean; onTo
         </tr>
       )}
     </>
+  );
+}
+
+// ── Bookkeeper export modal ──────────────────────────────────────────────────
+// Built so the quarterly "what does this deposit relate to?" email from
+// Michelle (Seamus's bookkeeper) can be answered with one click. Hits
+// GET /api/reports/sales-export?from=...&to=... and triggers a CSV download
+// via a blob URL — the worker streams the CSV directly so no client-side
+// CSV-generation code is needed.
+function BookkeeperExportModal({ onClose }: { onClose: () => void }) {
+  // Default the date range to the last 90 days (one BAS quarter). Stored as
+  // yyyy-mm-dd strings so the <input type="date"> binds cleanly.
+  const toIso = (d: Date) => d.toISOString().slice(0, 10);
+  const now = new Date();
+  const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+  const [fromDate, setFromDate] = useState(toIso(ninetyDaysAgo));
+  const [toDate, setToDate] = useState(toIso(now));
+  const [downloading, setDownloading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // The shared api helper only handles JSON responses; CSV needs a raw fetch
+  // with the Clerk Bearer token attached manually. Pull the token getter
+  // directly from Clerk rather than reaching through window.Clerk.
+  const { getToken } = useClerkAuth();
+
+  const handleDownload = async () => {
+    setError(null);
+    setDownloading(true);
+    try {
+      // The yyyy-mm-dd from <input type="date"> is a calendar day in the
+      // user's tz. Convert to a Brisbane-local window in UTC ms so the
+      // server's createdAt filter (UTC ms) catches everything captured
+      // 00:00–23:59 Brisbane time on those dates.
+      const BRISBANE_OFFSET_MS = 10 * 60 * 60 * 1000;
+      const fromMs = new Date(`${fromDate}T00:00:00Z`).getTime() - BRISBANE_OFFSET_MS;
+      const toMs   = new Date(`${toDate}T23:59:59Z`).getTime()   - BRISBANE_OFFSET_MS;
+
+      const token = await getToken();
+      const url = `${API_URL}/api/reports/sales-export?from=${fromMs}&to=${toMs}`;
+      const res = await fetch(url, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) {
+        const t = await res.text().catch(() => '');
+        throw new Error(`Server returned ${res.status}: ${t.slice(0, 120)}`);
+      }
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = `sales-export_${fromDate}_to_${toDate}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(objectUrl);
+      onClose();
+    } catch (e: any) {
+      setError(e?.message ?? 'Download failed');
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="font-semibold text-lg flex items-center gap-2">
+            <Download className="h-5 w-5 text-brand" /> Export for Bookkeeper
+          </h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
+        </div>
+        <p className="text-sm text-gray-500 mb-5">
+          Downloads a CSV of every paid (and invoice-sent) order in the date range.
+          Use it to match bank deposit lines against customer orders.
+        </p>
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-gray-500 font-medium mb-1 block">From</label>
+              <input
+                type="date"
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+                max={toDate}
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 font-medium mb-1 block">To</label>
+              <input
+                type="date"
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+                min={fromDate}
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
+              />
+            </div>
+          </div>
+          <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-600">
+            <p className="font-semibold text-gray-700 mb-1">Includes payment statuses:</p>
+            <p>Paid · Invoice sent · Refunded · Partial refund</p>
+            <p className="text-gray-400 mt-1.5">Pending / cancelled / failed orders are excluded — they don't produce bank deposits.</p>
+          </div>
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-xs">
+              {error}
+            </div>
+          )}
+        </div>
+        <div className="flex gap-3 mt-6">
+          <button onClick={onClose} className="flex-1 border py-2 rounded-lg text-sm hover:bg-gray-50">
+            Cancel
+          </button>
+          <button
+            onClick={handleDownload}
+            disabled={downloading || !fromDate || !toDate}
+            className="flex-1 bg-brand text-white py-2 rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-brand-mid flex items-center justify-center gap-2"
+          >
+            <Download className="h-4 w-4" />
+            {downloading ? 'Generating…' : 'Download CSV'}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
