@@ -20,6 +20,7 @@ import StaffPage from './pages/Staff';
 import ReportsPage from './pages/Reports';
 import PromoCodesPage from './pages/PromoCodes';
 import ReelsPage from './pages/Reels';
+import ReceiptsPage from './pages/Receipts';
 
 function RequireAdmin({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -52,6 +53,7 @@ export default function App() {
         <Route path="reports" element={<ReportsPage />} />
         <Route path="promo-codes" element={<PromoCodesPage />} />
         <Route path="reels" element={<ReelsPage />} />
+        <Route path="receipts" element={<ReceiptsPage />} />
       </Route>
     </Routes>
   );

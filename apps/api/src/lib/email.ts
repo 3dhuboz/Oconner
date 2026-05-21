@@ -29,12 +29,26 @@ export interface OrderEmailData {
   proofUrl?: string;
 }
 
+/**
+ * Attachment for Resend's API. `content` must be base64-encoded bytes.
+ * Used by the receipt capture flow to forward snapped photos straight to a
+ * business's Hubdoc email-in address — Hubdoc treats any incoming email
+ * with image attachments as a new document.
+ */
+export interface EmailAttachment {
+  filename: string;
+  content: string;       // base64
+  contentType?: string;  // e.g. 'image/jpeg'
+}
+
 export async function sendEmail(opts: {
   apiKey: string;
   from: string;
   to: string;
   subject: string;
   html: string;
+  /** Optional file attachments. Each `content` must be base64-encoded bytes. */
+  attachments?: EmailAttachment[];
 }): Promise<{ id: string } | null> {
   // Without a key Resend would just 401 the request and we'd swallow the
   // failure into a generic "failed" notification — making config errors look
@@ -49,14 +63,23 @@ export async function sendEmail(opts: {
     return null;
   }
   try {
+    const body: Record<string, unknown> = {
+      from: opts.from,
+      to: opts.to,
+      subject: opts.subject,
+      html: opts.html,
+    };
+    if (opts.attachments?.length) {
+      body.attachments = opts.attachments;
+    }
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${opts.apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ from: opts.from, to: opts.to, subject: opts.subject, html: opts.html }),
+      body: JSON.stringify(body),
     });
     if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      console.warn('[email] Resend rejected request:', res.status, body.slice(0, 200));
+      const errBody = await res.text().catch(() => '');
+      console.warn('[email] Resend rejected request:', res.status, errBody.slice(0, 200));
       return null;
     }
     return res.json() as Promise<{ id: string }>;

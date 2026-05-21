@@ -130,6 +130,54 @@ export const api = {
     update: (id: string, data: unknown) => api.patch(`/api/subscriptions/${id}`, data),
   },
 
+  // Multi-tenant business memberships. Used by the Receipts admin page so
+  // it knows which business to scope captures to (currently only O'Connor
+  // exists; future tenants land here too).
+  businesses: {
+    mine: () => api.get('/api/businesses/mine'),
+    get: (id: string) => api.get(`/api/businesses/${id}`),
+    update: (id: string, data: { name?: string; hubdocEmail?: string | null }) =>
+      api.patch(`/api/businesses/${id}`, data),
+  },
+
+  // Receipt capture mini-app — snap a photo on phone, save to R2 + D1, and
+  // auto-forward to the business's Hubdoc inbox so the bookkeeper doesn't
+  // have to chase Seamus every quarter.
+  receipts: {
+    list: (businessId: string) => api.get(`/api/receipts?businessId=${encodeURIComponent(businessId)}`),
+    upload: async (
+      file: File,
+      businessId: string,
+      extras?: { notes?: string; merchant?: string; amount?: string },
+    ): Promise<unknown> => {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('businessId', businessId);
+      if (extras?.notes) fd.append('notes', extras.notes);
+      if (extras?.merchant) fd.append('merchant', extras.merchant);
+      if (extras?.amount) fd.append('amount', extras.amount);
+      const headers = await (async () => {
+        if (!_getToken) return {} as Record<string, string>;
+        const t = await _getToken();
+        return t ? { Authorization: `Bearer ${t}` } : {};
+      })();
+      const res = await fetch(`${API_URL}/api/receipts`, {
+        method: 'POST',
+        headers,
+        body: fd,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText })) as { error: string };
+        throw new Error(err.error ?? `HTTP ${res.status}`);
+      }
+      return res.json();
+    },
+    update: (id: string, data: { notes?: string; merchant?: string; amountCents?: number | null }) =>
+      api.patch(`/api/receipts/${id}`, data),
+    remove: (id: string) => api.delete(`/api/receipts/${id}`),
+    retryForward: (id: string) => api.post(`/api/receipts/${id}/retry-forward`, {}),
+  },
+
   users: {
     me: () => api.get('/api/users/me'),
     list: () => api.get('/api/users'),
