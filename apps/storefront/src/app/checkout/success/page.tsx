@@ -15,10 +15,34 @@ export default function CheckoutSuccessPage() {
   const orderId = searchParams.get('orderId');
   const [updated, setUpdated] = useState(false);
 
-  // Tell the API the customer completed Square payment
+  // Tell the API the customer completed Square payment. The API now verifies
+  // the payment with Square before flipping the row — so a `status: 'pending'`
+  // response means Square hasn't settled the order yet and we should retry.
+  // Most payments settle by the time the redirect lands, but it can take a
+  // beat. Give it ~10s of polling before letting the admin reconcile manually.
   useEffect(() => {
     if (!orderId || updated) return;
-    api.post(`/api/orders/${orderId}/mark-paid`, {}).then(() => setUpdated(true)).catch(() => {});
+    let cancelled = false;
+    (async () => {
+      for (let attempt = 0; attempt < 5 && !cancelled; attempt++) {
+        try {
+          const res = await api.post<{ ok: boolean; status?: string }>(`/api/orders/${orderId}/mark-paid`, {});
+          if (res?.status === 'paid' || res?.status === 'partial') {
+            if (!cancelled) setUpdated(true);
+            return;
+          }
+        } catch {
+          // 4xx/5xx — stop retrying; admin will reconcile from the order page.
+          if (!cancelled) setUpdated(true);
+          return;
+        }
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+      if (!cancelled) setUpdated(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [orderId, updated]);
 
   return (
