@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, formatCurrency, ORDER_STATUS_LABELS, API_URL } from '@butcher/shared';
-import type { OrderStatus } from '@butcher/shared';
+import type { OrderStatus, PayoutsResponse, Payout, PayoutEntry } from '@butcher/shared';
 import { useAuth as useClerkAuth } from '@clerk/clerk-react';
-import { DollarSign, ShoppingBag, TrendingUp, XCircle, Download, ChevronDown, ChevronRight, AlertTriangle, Package, CheckCircle2, Clock, Truck } from 'lucide-react';
+import { DollarSign, ShoppingBag, TrendingUp, XCircle, Download, ChevronDown, ChevronRight, AlertTriangle, Package, CheckCircle2, Clock, Truck, Landmark, Link2, HelpCircle } from 'lucide-react';
 
 type Period = 'weekly' | 'fortnightly' | 'monthly' | 'yearly';
-type Tab = 'revenue' | 'runs';
+type Tab = 'revenue' | 'runs' | 'payouts';
 type RangeWeeks = 4 | 8 | 12 | 0; // 0 = all time
 
 interface Bucket {
@@ -114,6 +114,14 @@ export default function ReportsPage() {
           >
             By Run
           </button>
+          <button
+            onClick={() => setTab('payouts')}
+            className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors flex items-center gap-1.5 ${
+              tab === 'payouts' ? 'border-brand text-brand' : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <Landmark className="h-4 w-4" /> Bank Payouts
+          </button>
         </div>
         {/*
           Bookkeeper export — surfaced near the tab bar so Michelle's quarterly
@@ -131,7 +139,9 @@ export default function ReportsPage() {
 
       {showBookkeeperExport && <BookkeeperExportModal onClose={() => setShowBookkeeperExport(false)} />}
 
-      {tab === 'revenue' ? <RevenueTab /> : <RunsTab />}
+      {tab === 'revenue' && <RevenueTab />}
+      {tab === 'runs' && <RunsTab />}
+      {tab === 'payouts' && <PayoutsTab />}
     </div>
   );
 }
@@ -619,6 +629,286 @@ function RunRow({ run, expanded, onToggle }: { run: Run; expanded: boolean; onTo
 // GET /api/reports/sales-export?from=...&to=... and triggers a CSV download
 // via a blob URL — the worker streams the CSV directly so no client-side
 // CSV-generation code is needed.
+// ─── Payouts Tab (bank-deposit reconciliation) ───────────────────────────────
+//
+// Each Square payout is one deposit line on Michelle's bank statement. The
+// API endpoint pulls payouts in the window, fetches their underlying entries,
+// and matches every charge entry back to its O'Connor order via payment-intent
+// ID or by parsing the `Order #ABCD1234` prefix out of the Square payment note.
+// This tab surfaces the reconciliation so she can answer "which orders made
+// up this $537.42 deposit?" in one click.
+
+function PayoutsTab() {
+  const toIso = (d: Date) => d.toISOString().slice(0, 10);
+  const now = new Date();
+  const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+  const [fromDate, setFromDate] = useState(toIso(ninetyDaysAgo));
+  const [toDate, setToDate] = useState(toIso(now));
+  const [data, setData] = useState<PayoutsResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  const load = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      // yyyy-mm-dd → Brisbane-local UTC ms (same offset trick as the CSV export).
+      const BRISBANE_OFFSET_MS = 10 * 60 * 60 * 1000;
+      const fromMs = new Date(`${fromDate}T00:00:00Z`).getTime() - BRISBANE_OFFSET_MS;
+      const toMs = new Date(`${toDate}T23:59:59Z`).getTime() - BRISBANE_OFFSET_MS;
+      const resp = await api.reports.payouts(fromMs, toMs);
+      setData(resp);
+    } catch (e: any) {
+      setError(e?.message ?? 'Failed to load payouts');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+    // load() captures fromDate/toDate from closure; re-run on change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const togglePayout = (id: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const totalDeposited = useMemo(() => {
+    if (!data) return 0;
+    return data.payouts.reduce((sum, p) => sum + p.amountCents, 0);
+  }, [data]);
+
+  const totalMatched = useMemo(() => {
+    if (!data) return 0;
+    return data.payouts.reduce((sum, p) => sum + p.matchedCount, 0);
+  }, [data]);
+
+  const totalUnmatched = useMemo(() => {
+    if (!data) return 0;
+    return data.payouts.reduce((sum, p) => sum + p.unmatchedCount, 0);
+  }, [data]);
+
+  return (
+    <div>
+      {/* Date range + summary header */}
+      <div className="bg-white border rounded-xl p-4 mb-4">
+        <div className="flex flex-wrap gap-3 items-end">
+          <div>
+            <label className="text-xs text-gray-500 font-medium mb-1 block">From</label>
+            <input
+              type="date"
+              value={fromDate}
+              onChange={(e) => setFromDate(e.target.value)}
+              max={toDate}
+              className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 font-medium mb-1 block">To</label>
+            <input
+              type="date"
+              value={toDate}
+              onChange={(e) => setToDate(e.target.value)}
+              min={fromDate}
+              className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
+            />
+          </div>
+          <button
+            onClick={load}
+            disabled={loading}
+            className="bg-brand text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-brand-mid"
+          >
+            {loading ? 'Loading…' : 'Reload'}
+          </button>
+          {data && data.payouts.length > 0 && (
+            <div className="ml-auto flex gap-6 text-sm">
+              <div>
+                <p className="text-xs text-gray-500">Deposited</p>
+                <p className="font-semibold text-gray-900">{formatCurrency(totalDeposited / 100)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Charges matched</p>
+                <p className="font-semibold text-green-700">{totalMatched}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">Unmatched</p>
+                <p className={`font-semibold ${totalUnmatched > 0 ? 'text-amber-700' : 'text-gray-400'}`}>{totalUnmatched}</p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Stripe note — currently disabled; explain why so it's not confusing */}
+      {data?.stripe?.skipped && (
+        <div className="bg-blue-50 border border-blue-200 text-blue-800 rounded-lg p-3 text-xs mb-4 flex items-start gap-2">
+          <HelpCircle className="h-4 w-4 mt-0.5 shrink-0" />
+          <div>
+            <p className="font-medium">Stripe payouts not shown</p>
+            <p className="opacity-80">{data.stripe.reason}</p>
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-sm mb-4">
+          {error}
+        </div>
+      )}
+
+      {loading && !data && (
+        <div className="text-center text-gray-500 py-12">Loading payouts…</div>
+      )}
+
+      {data && data.payouts.length === 0 && !loading && (
+        <div className="bg-white border rounded-xl p-12 text-center text-gray-500">
+          <Landmark className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+          <p className="font-medium text-gray-700 mb-1">No payouts in this window</p>
+          <p className="text-sm">Square hasn't deposited anything between {fromDate} and {toDate}.</p>
+        </div>
+      )}
+
+      {data && data.payouts.map((p) => (
+        <PayoutRow
+          key={p.id}
+          payout={p}
+          expanded={expanded.has(p.id)}
+          onToggle={() => togglePayout(p.id)}
+        />
+      ))}
+    </div>
+  );
+}
+
+function PayoutRow({ payout, expanded, onToggle }: { payout: Payout; expanded: boolean; onToggle: () => void }) {
+  // arrival_date is YYYY-MM-DD in Square's response; render Brisbane-friendly.
+  const arrival = payout.arrivalDate
+    ? new Date(`${payout.arrivalDate}T00:00:00`).toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
+    : '(no arrival date)';
+
+  const totalFeesCents = payout.entries.reduce((s, e) => s + e.feeCents, 0);
+
+  // Status colour cue. Square uses SENT/PAID/FAILED.
+  const statusBadge = (() => {
+    const base = 'inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide';
+    if (payout.status === 'PAID') return `${base} bg-green-50 text-green-700`;
+    if (payout.status === 'SENT') return `${base} bg-blue-50 text-blue-700`;
+    if (payout.status === 'FAILED') return `${base} bg-red-50 text-red-700`;
+    return `${base} bg-gray-100 text-gray-600`;
+  })();
+
+  return (
+    <div className="bg-white border rounded-xl mb-2 overflow-hidden">
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition-colors text-left"
+      >
+        <div className="flex items-center gap-3">
+          {expanded ? <ChevronDown className="h-4 w-4 text-gray-400" /> : <ChevronRight className="h-4 w-4 text-gray-400" />}
+          <div>
+            <div className="font-semibold text-gray-900">{formatCurrency(payout.amountCents / 100)}</div>
+            <div className="text-xs text-gray-500">{arrival}</div>
+          </div>
+        </div>
+        <div className="flex items-center gap-4 text-sm">
+          <div className="text-right hidden sm:block">
+            <div className="text-xs text-gray-500">Charges</div>
+            <div className="font-medium text-gray-700">{payout.chargeCount}</div>
+          </div>
+          <div className="text-right">
+            <div className="text-xs text-gray-500">Matched</div>
+            <div className={`font-medium ${payout.unmatchedCount > 0 ? 'text-amber-700' : 'text-green-700'}`}>
+              {payout.matchedCount}/{payout.chargeCount}
+            </div>
+          </div>
+          <span className={statusBadge}>{payout.status}</span>
+        </div>
+      </button>
+
+      {expanded && (
+        <div className="border-t bg-gray-50 px-4 py-3">
+          <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs mb-3 max-w-md">
+            <span className="text-gray-500">Payout ID</span>
+            <span className="font-mono text-gray-700 truncate" title={payout.id}>{payout.id}</span>
+            {payout.endToEndId && (
+              <>
+                <span className="text-gray-500">Bank reference</span>
+                <span className="font-mono text-gray-700">{payout.endToEndId}</span>
+              </>
+            )}
+            <span className="text-gray-500">Square fees</span>
+            <span className="text-gray-700">{formatCurrency(totalFeesCents / 100)}</span>
+          </div>
+
+          {payout.entries.length === 0 ? (
+            <p className="text-sm text-gray-500 italic py-2">No entries returned for this payout.</p>
+          ) : (
+            <div className="bg-white rounded-lg border overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-100 text-gray-600">
+                  <tr>
+                    <th className="text-left px-3 py-2 font-medium">Type</th>
+                    <th className="text-right px-3 py-2 font-medium">Amount</th>
+                    <th className="text-right px-3 py-2 font-medium">Fee</th>
+                    <th className="text-left px-3 py-2 font-medium">Order</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {payout.entries.map((e) => <PayoutEntryRow key={e.id} entry={e} />)}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PayoutEntryRow({ entry }: { entry: PayoutEntry }) {
+  const order = entry.matchedOrder;
+  return (
+    <tr className="border-t">
+      <td className="px-3 py-2 text-gray-700">
+        <span className="font-mono text-xs text-gray-500">{entry.type}</span>
+      </td>
+      <td className="px-3 py-2 text-right text-gray-900 font-medium">
+        {formatCurrency(entry.amountCents / 100)}
+      </td>
+      <td className="px-3 py-2 text-right text-gray-500">
+        {entry.feeCents > 0 ? `-${formatCurrency(entry.feeCents / 100)}` : '—'}
+      </td>
+      <td className="px-3 py-2">
+        {order ? (
+          <Link
+            to={`/orders/${order.id}`}
+            className="inline-flex items-center gap-1.5 text-brand hover:underline"
+            title={entry.matchStrategy === 'note' ? 'Matched via Square payment note' : 'Matched via payment-intent ID'}
+          >
+            <Link2 className="h-3.5 w-3.5" />
+            {order.customerName} <span className="text-gray-400 text-xs">#{order.id.slice(0, 8).toUpperCase()}</span>
+          </Link>
+        ) : entry.paymentId ? (
+          <span className="text-amber-700 text-xs inline-flex items-center gap-1">
+            <AlertTriangle className="h-3.5 w-3.5" /> Unmatched
+            <span className="font-mono text-gray-400">{entry.paymentId.slice(0, 12)}…</span>
+          </span>
+        ) : (
+          <span className="text-gray-400 text-xs">—</span>
+        )}
+      </td>
+    </tr>
+  );
+}
+
 function BookkeeperExportModal({ onClose }: { onClose: () => void }) {
   // Default the date range to the last 90 days (one BAS quarter). Stored as
   // yyyy-mm-dd strings so the <input type="date"> binds cleanly.
