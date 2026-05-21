@@ -250,13 +250,14 @@ export default function OrdersPage() {
 
   const handleStatusChange = async (orderId: string, status: OrderStatus) => {
     try {
-      await api.orders.updateStatus(orderId, status);
-      // When confirming an order, also mark as paid
+      // When advancing past pending_payment, also mark the order paid. This
+      // covers cash-on-delivery and any other manual confirmation by an
+      // admin — the public /mark-paid endpoint is reserved for Square-verified
+      // storefront redirects, so we send paymentStatus through the auth-
+      // protected status update in one round trip.
       const paymentUpdate = (status === 'confirmed' || status === 'preparing' || status === 'packed' || status === 'out_for_delivery' || status === 'delivered')
         ? 'paid' : undefined;
-      if (paymentUpdate) {
-        await api.post(`/api/orders/${orderId}/mark-paid`, {}).catch(() => {});
-      }
+      await api.orders.updateStatus(orderId, status, paymentUpdate ? { paymentStatus: paymentUpdate } : undefined);
       setOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, status, ...(paymentUpdate ? { paymentStatus: paymentUpdate } : {}) } as any : o));
       toast(`Order status updated to ${ORDER_STATUS_LABELS[status] ?? status}`);
     } catch {

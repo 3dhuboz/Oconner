@@ -391,16 +391,104 @@ app.post('/api/orders/:id/payment-link', async (c) => {
 });
 
 // ── Public: mark order as paid (called by success page after Square redirect) ──
+// This endpoint is unauthenticated by design — Square's redirect lands the
+// customer on /checkout/success which fires this from the browser. That means
+// we CANNOT trust the caller. Before April 2026 this just flipped the row to
+// 'paid' on any orderId, which let anyone with a guessable ID confirm orders
+// for free. We now verify the payment with Square first: find the payment-link
+// ID we stored at create-time, look up its Square order, and only mark paid if
+// Square says state=COMPLETED with tenders covering the total.
 app.post('/api/orders/:id/mark-paid', async (c) => {
+  const SQUARE_API = 'https://connect.squareup.com/v2';
+  const accessToken = c.env.SQUARE_ACCESS_TOKEN;
   const db = drizzle(c.env.DB);
   const orderId = c.req.param('id');
   const [order] = await db.select().from(ordersTable).where(eq(ordersTable.id, orderId)).limit(1);
   if (!order) return c.json({ error: 'Order not found' }, 404);
-  // Only update if currently pending — don't downgrade a confirmed order
-  if (order.paymentStatus === 'pending_payment' || order.paymentStatus === 'awaiting_payment') {
-    await db.update(ordersTable).set({ paymentStatus: 'paid', status: 'confirmed', updatedAt: Date.now() }).where(eq(ordersTable.id, orderId));
+
+  // Idempotent: if it's already paid (or anything other than pending/awaiting),
+  // don't re-verify and don't downgrade. The browser may fire this multiple
+  // times during the redirect dance.
+  if (order.paymentStatus !== 'pending_payment' && order.paymentStatus !== 'awaiting_payment') {
+    return c.json({ ok: true, status: order.paymentStatus });
   }
-  return c.json({ ok: true });
+
+  if (!accessToken) {
+    return c.json({ error: 'Square not configured' }, 503);
+  }
+
+  // The /payment-link handler appends `Square payment link: <id>` to
+  // internal_notes on every create. Take the LAST one — same convention as
+  // /invoice/cancel. We verify against that specific link's Square order.
+  const notes = order.internalNotes ?? '';
+  const matches = [...notes.matchAll(/Square payment link:\s*(\S+)/g)];
+  const paymentLinkId = matches.length ? matches[matches.length - 1][1] : null;
+  if (!paymentLinkId || paymentLinkId === 'unknown') {
+    return c.json({ error: 'No Square payment link associated with this order' }, 400);
+  }
+
+  const squareGet = async (path: string) => {
+    const res = await fetch(`${SQUARE_API}${path}`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Square-Version': '2024-01-18',
+      },
+    });
+    return res.json() as Promise<any>;
+  };
+
+  try {
+    // Payment link → Square order ID. The payment_link object carries the
+    // order_id of the Square order it created at checkout time.
+    const linkResp = await squareGet(`/online-checkout/payment-links/${paymentLinkId}`);
+    if (linkResp.errors) {
+      return c.json({ error: 'Could not load payment link from Square', details: linkResp.errors }, 502);
+    }
+    const squareOrderId = linkResp.payment_link?.order_id;
+    if (!squareOrderId) {
+      return c.json({ error: 'Square payment link has no associated order' }, 502);
+    }
+
+    // Square order → state + tenders. state=COMPLETED means the order is paid
+    // and finalised; OPEN means the link hasn't been paid yet; CANCELED means
+    // the customer abandoned it. We only flip our row on COMPLETED.
+    const orderResp = await squareGet(`/orders/${squareOrderId}`);
+    if (orderResp.errors) {
+      return c.json({ error: 'Could not load Square order', details: orderResp.errors }, 502);
+    }
+    const squareOrder = orderResp.order;
+    if (!squareOrder) {
+      return c.json({ error: 'Square returned no order' }, 502);
+    }
+
+    if (squareOrder.state !== 'COMPLETED') {
+      // Tell the storefront to retry — payment may still be settling.
+      return c.json({ ok: true, status: 'pending', squareState: squareOrder.state });
+    }
+
+    // Defence in depth: even if Square says COMPLETED, double-check the tender
+    // amounts cover the order total. A partial tender would still report
+    // COMPLETED in some configurations.
+    const tenderedCents = (squareOrder.tenders ?? []).reduce(
+      (sum: number, t: any) => sum + (t.amount_money?.amount ?? 0),
+      0,
+    );
+    const expectedCents = squareOrder.total_money?.amount ?? 0;
+    if (tenderedCents < expectedCents) {
+      return c.json({ ok: true, status: 'partial', tenderedCents, expectedCents });
+    }
+
+    await db.update(ordersTable).set({
+      paymentStatus: 'paid',
+      status: 'confirmed',
+      internalNotes: `${order.internalNotes ?? ''}\nSquare payment confirmed: order=${squareOrderId} amount=${tenderedCents}c`.trim(),
+      updatedAt: Date.now(),
+    }).where(eq(ordersTable.id, orderId));
+
+    return c.json({ ok: true, status: 'paid' });
+  } catch (e: any) {
+    return c.json({ error: e?.message ?? 'Failed to verify payment' }, 500);
+  }
 });
 
 // ── Public: read single config key (storefront/about page) ──

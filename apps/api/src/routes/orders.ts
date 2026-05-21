@@ -229,7 +229,17 @@ const VALID_ORDER_STATUSES = new Set([
 
 app.patch('/:id/status', async (c) => {
   const db = drizzle(c.env.DB);
-  const { status, packedBy, internalNotes } = await c.req.json<{ status: string; packedBy?: string; internalNotes?: string }>();
+  // `paymentStatus` is optional — admins frequently confirm an order AND mark
+  // it paid in one move (e.g. on cash-on-delivery). Folding both into this
+  // single auth-protected endpoint replaced an older pattern where the admin
+  // also POSTed to the public /mark-paid endpoint, which is now strictly
+  // gated to Square-verified storefront flows.
+  const { status, packedBy, internalNotes, paymentStatus } = await c.req.json<{
+    status: string;
+    packedBy?: string;
+    internalNotes?: string;
+    paymentStatus?: string;
+  }>();
   const user = c.get('user');
   const orderId = c.req.param('id');
   const now = Date.now();
@@ -244,6 +254,7 @@ app.patch('/:id/status', async (c) => {
   const patch: Partial<typeof orders.$inferInsert> = { status, updatedAt: now };
   if (packedBy) { patch.packedBy = packedBy; patch.packedAt = now; }
   if (internalNotes !== undefined) patch.internalNotes = internalNotes;
+  if (paymentStatus !== undefined) patch.paymentStatus = paymentStatus;
 
   await db.update(orders).set(patch).where(eq(orders.id, orderId));
 
@@ -252,8 +263,8 @@ app.patch('/:id/status', async (c) => {
     action: 'update_status',
     entity: 'orders',
     entityId: orderId,
-    before: JSON.stringify({ status: order.status }),
-    after: JSON.stringify({ status }),
+    before: JSON.stringify({ status: order.status, paymentStatus: order.paymentStatus }),
+    after: JSON.stringify({ status, ...(paymentStatus !== undefined ? { paymentStatus } : {}) }),
     adminUid: user.id,
     adminEmail: user.email,
     timestamp: now,

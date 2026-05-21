@@ -57,8 +57,11 @@ export const api = {
     /** Public tracking endpoint — returns redacted order fields safe to expose without auth. */
     tracking: (id: string) => api.get(`/api/orders/${id}/tracking`),
     create: (data: unknown) => api.post('/api/orders', data),
-    updateStatus: (id: string, status: string, extra?: { packedBy?: string; internalNotes?: string }) =>
-      api.patch(`/api/orders/${id}/status`, { status, ...extra }),
+    updateStatus: (
+      id: string,
+      status: string,
+      extra?: { packedBy?: string; internalNotes?: string; paymentStatus?: string },
+    ) => api.patch(`/api/orders/${id}/status`, { status, ...extra }),
     update: (id: string, data: unknown) => api.patch(`/api/orders/${id}`, data),
     remove: (id: string) => api.delete(`/api/orders/${id}`),
     /** Create a Square invoice for an unpaid order and email it to the customer. */
