@@ -235,7 +235,28 @@ app.post('/api/orders', async (c) => {
     return c.json({ error: reserveResult.error }, 400);
   }
 
-  await db.insert(ordersTable).values({ ...body, id: orderId, customerId, items: JSON.stringify(body.items), deliveryAddress: JSON.stringify(body.deliveryAddress), createdAt: now, updatedAt: now });
+  // Explicit paymentStatus floor — even though the column default is now
+  // 'pending_payment' (migration 0004), the storefront body spreads in below
+  // so we'd otherwise inherit whatever the client sent. A malicious client
+  // could send `paymentStatus: 'paid'` and skip Square entirely; honour the
+  // client value only if it's one of the safe non-paid states, otherwise
+  // force it to pending_payment and rely on Square webhook / mark-paid to
+  // flip it later.
+  const SAFE_INITIAL_STATUSES = new Set(['pending_payment', 'awaiting_payment']);
+  const initialPaymentStatus = SAFE_INITIAL_STATUSES.has(String((body as { paymentStatus?: string }).paymentStatus ?? ''))
+    ? (body as { paymentStatus: string }).paymentStatus
+    : 'pending_payment';
+
+  await db.insert(ordersTable).values({
+    ...body,
+    id: orderId,
+    customerId,
+    items: JSON.stringify(body.items),
+    deliveryAddress: JSON.stringify(body.deliveryAddress),
+    paymentStatus: initialPaymentStatus,
+    createdAt: now,
+    updatedAt: now,
+  });
   // Deduct global product stock (separate from per-day allocations above).
   await deductStock(db, body.items as any[], orderId, now);
 
