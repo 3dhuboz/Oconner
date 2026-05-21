@@ -131,7 +131,11 @@ export const orders = sqliteTable('orders', {
   postcodeZone: text('postcode_zone').notNull().default(''),
   paymentIntentId: text('payment_intent_id').notNull().default(''),
   paymentProvider: text('payment_provider').notNull().default('stripe'),
-  paymentStatus: text('payment_status').notNull().default('paid'),
+  // Default is 'pending_payment', not 'paid' — see migration 0004. The old
+  // 'paid' default was fail-OPEN: any code path that omitted paymentStatus
+  // would silently confirm the order, which is how we ended up shipping
+  // $2,210 of unpaid subscription boxes.
+  paymentStatus: text('payment_status').notNull().default('pending_payment'),
   notes: text('notes'),
   internalNotes: text('internal_notes'),
   proofUrl: text('proof_url'),
