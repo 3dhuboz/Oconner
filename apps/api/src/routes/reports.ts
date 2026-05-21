@@ -375,4 +375,129 @@ app.get('/runs', async (c) => {
   return c.json({ from: fromTs, to: toTs, runs, summary });
 });
 
+// ── Sales export for bank-deposit reconciliation ─────────────────────────────
+// GET /api/reports/sales-export?from=ms&to=ms
+//
+// Returns a CSV of every paid / invoiced / refunded order in the date range so
+// the bookkeeper (Michelle / Bronny) can match bank deposit lines against
+// the underlying customer payments. Michelle's exact ask: "we do not know
+// what these deposit transactions relate to — please reconcile". The CSV
+// gives her enough data to do that herself in a spreadsheet without bothering
+// Seamus.
+//
+// Defaults to a 90-day window (covers one BAS quarter). Includes orders with
+// any of the payment_statuses we'd expect to see in deposits:
+//   - 'paid'         (charge went through Square or Stripe)
+//   - 'invoice_sent' (Square invoice emailed; not yet paid)
+//   - 'refunded' / 'partial_refund' (helps explain negative bank lines)
+//
+// Excluded: 'pending_payment', 'awaiting_payment', 'cancelled', 'failed' —
+// none of these produce a bank deposit so they'd just be noise on Michelle's
+// import.
+//
+// CSV columns are Xero/Excel-friendly. Dates are dd/mm/yyyy (AU format).
+// Amounts are in dollars with 2dp. A UTF-8 BOM is prepended so Excel opens
+// AU symbols and dollar signs correctly.
+app.get('/sales-export', async (c) => {
+  const db = drizzle(c.env.DB);
+  const now = Date.now();
+
+  let fromTs = Number(c.req.query('from') || 0);
+  const toTs = Number(c.req.query('to') || now);
+
+  // Default to last 90 days (one BAS quarter).
+  if (!c.req.query('from')) {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - 90);
+    fromTs = d.getTime();
+  }
+
+  const INCLUDED_PAYMENT_STATUSES = ['paid', 'invoice_sent', 'refunded', 'partial_refund'];
+
+  const rows = await db.select({
+    id: orders.id,
+    customerName: orders.customerName,
+    customerEmail: orders.customerEmail,
+    total: orders.total,
+    gst: orders.gst,
+    paymentProvider: orders.paymentProvider,
+    paymentStatus: orders.paymentStatus,
+    paymentIntentId: orders.paymentIntentId,
+    notes: orders.notes,
+    status: orders.status,
+    createdAt: orders.createdAt,
+  }).from(orders)
+    .where(and(
+      gte(orders.createdAt, fromTs),
+      lte(orders.createdAt, toTs),
+      inArray(orders.paymentStatus, INCLUDED_PAYMENT_STATUSES),
+    ))
+    .orderBy(desc(orders.createdAt));
+
+  // Brisbane-local dd/mm/yyyy. Workers run in UTC; Australia/Brisbane is +10
+  // year-round (no DST), so add the offset and format from a UTC-shifted Date.
+  const BRISBANE_OFFSET_MS = 10 * 60 * 60 * 1000;
+  const formatDateAU = (ms: number) => {
+    const d = new Date(ms + BRISBANE_OFFSET_MS);
+    const dd = String(d.getUTCDate()).padStart(2, '0');
+    const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const yyyy = d.getUTCFullYear();
+    return `${dd}/${mm}/${yyyy}`;
+  };
+  const formatDollars = (cents: number) => (cents / 100).toFixed(2);
+
+  // RFC-4180 CSV: quote any field containing comma, double-quote, or newline,
+  // and double-up any embedded quote.
+  const csvField = (val: string | null | undefined) => {
+    const s = val ?? '';
+    if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+    return s;
+  };
+  const csvRow = (fields: (string | number | null | undefined)[]) =>
+    fields.map((f) => csvField(typeof f === 'number' ? String(f) : f as string | null)).join(',');
+
+  const header = csvRow([
+    'Date',
+    'Customer',
+    'Email',
+    'Amount (AUD)',
+    'GST included (AUD)',
+    'Provider',
+    'Payment status',
+    'Order status',
+    'Order ID',
+    'Payment intent / charge ID',
+    'Notes',
+  ]);
+
+  const body = rows.map((r) => csvRow([
+    formatDateAU(r.createdAt),
+    r.customerName,
+    r.customerEmail,
+    formatDollars(r.total),
+    formatDollars(r.gst),
+    r.paymentProvider,
+    r.paymentStatus,
+    r.status,
+    r.id.slice(-8).toUpperCase(),
+    r.paymentIntentId || '',
+    r.notes ?? '',
+  ]));
+
+  // UTF-8 BOM keeps Excel happy with non-ASCII characters and dollar signs.
+  const csv = '﻿' + [header, ...body].join('\r\n') + '\r\n';
+
+  const fromLabel = formatDateAU(fromTs).replace(/\//g, '-');
+  const toLabel = formatDateAU(toTs).replace(/\//g, '-');
+  return new Response(csv, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="sales-export_${fromLabel}_to_${toLabel}.csv"`,
+      'Cache-Control': 'no-store',
+    },
+  });
+});
+
 export default app;
