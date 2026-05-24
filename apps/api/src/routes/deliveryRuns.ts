@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/d1';
-import { eq, and, inArray } from 'drizzle-orm';
+import { eq, and, inArray, isNull } from 'drizzle-orm';
 import { deliveryRuns, stops, users } from '@butcher/db';
 import type { Env, AuthUser } from '../types';
 
@@ -113,7 +113,7 @@ app.post('/:id/auto-assign', async (c) => {
   if (!postcodes?.length) return c.json({ error: 'postcodes array required' }, 400);
 
   const dayStops = await db.select().from(stops)
-    .where(eq(stops.deliveryDayId, run.deliveryDayId));
+    .where(and(eq(stops.deliveryDayId, run.deliveryDayId), isNull(stops.runId)));
 
   let assigned = 0;
   for (const stop of dayStops) {

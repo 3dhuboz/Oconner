@@ -94,7 +94,7 @@ app.post('/invite', async (c) => {
 <body style="font-family:Arial,sans-serif;color:#333;max-width:600px;margin:0 auto;padding:20px">
   <div style="background:#1B3A2E;padding:20px;border-radius:8px 8px 0 0">
     <h1 style="color:white;margin:0;font-size:24px">O'Connor Agriculture</h1>
-    <p style="color:#a3c e8f;margin:4px 0 0;font-size:14px">Driver App Access</p>
+    <p style="color:#a3ce8f;margin:4px 0 0;font-size:14px">Driver App Access</p>
   </div>
   <div style="background:#f9f9f9;padding:24px;border:1px solid #eee;border-top:none;border-radius:0 0 8px 8px">
     <p>Hi ${name},</p>

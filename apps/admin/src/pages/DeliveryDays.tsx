@@ -40,6 +40,8 @@ export default function DeliveryDaysPage() {
         notes: form.notes,
         deliveryWindowStart: form.deliveryWindowStart,
         zones: form.zones,
+        type: form.type,
+        marketLocation: form.marketLocation,
       }) as { id: string };
       const newDay: DeliveryDay = {
         id: result.id,
@@ -50,6 +52,8 @@ export default function DeliveryDaysPage() {
         active: true,
         deliveryWindowStart: form.deliveryWindowStart,
         zones: form.zones,
+        type: form.type,
+        marketLocation: form.marketLocation,
       } as unknown as DeliveryDay;
       setDays((prev) => [...prev, newDay].sort((a, b) => a.date - b.date));
       setShowForm(false);
@@ -83,6 +87,8 @@ export default function DeliveryDaysPage() {
           date: ts, maxOrders: bulkForm.maxOrders,
           deliveryWindowStart: bulkForm.deliveryWindowStart,
           zones: bulkForm.zones,
+          type: bulkForm.type,
+          marketLocation: bulkForm.marketLocation,
         });
         created++;
       }

@@ -154,6 +154,7 @@ export default function SubscribePage() {
     } catch (err) {
       setPayError(err instanceof Error ? err.message : 'Payment failed. Please try again.');
       setSaving(false);
+      alert('Something went wrong — please try again or contact us.');
     }
   };
 

@@ -49,7 +49,7 @@ export default function StopDetailPage() {
   };
 
   const nextStop = getNextStop();
-  const deliveredCount = allStops.filter((s) => s.status === 'delivered' || s.id === stopId && (stop?.status === 'delivered' || proofUrl)).length;
+  const deliveredCount = allStops.filter((s) => s.status === 'delivered' || s.status === 'failed').length;
   const totalStops = allStops.length;
 
   const goToNextOrHome = () => {
@@ -206,7 +206,7 @@ export default function StopDetailPage() {
           </button>
           <div>
             <h1 className="font-bold">{stop.customerName}</h1>
-            <p className="text-white/70 text-sm">Stop #{stop.sequence}</p>
+            <p className="text-white/70 text-sm">Stop #{stop.sequence + 1}</p>
           </div>
         </div>
 

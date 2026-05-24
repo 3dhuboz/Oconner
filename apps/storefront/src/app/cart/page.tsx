@@ -12,12 +12,14 @@ import { formatCurrency } from '@butcher/shared';
 
 const GST_RATE = 0.1;
 const DELIVERY_FEE = 0; // was 1500 — re-enable when delivery fees return
+const FREE_DELIVERY_THRESHOLD = 0;
 
 export default function CartPage() {
   const { items, removeItem, updateQuantity, total } = useCart();
   const subtotal = total();
-  const gst = Math.round(subtotal * GST_RATE);
-  const grandTotal = subtotal + DELIVERY_FEE;
+  const deliveryFee = subtotal >= FREE_DELIVERY_THRESHOLD ? 0 : DELIVERY_FEE;
+  const grandTotal = subtotal + deliveryFee;
+  const gst = Math.round(grandTotal * GST_RATE / (1 + GST_RATE));
 
   if (items.length === 0) {
     return (
@@ -86,11 +88,16 @@ export default function CartPage() {
               </div>
               <div className="flex justify-between">
                 <span>Delivery</span>
-                <span className={DELIVERY_FEE === 0 ? 'text-green-600 font-medium' : ''}>{DELIVERY_FEE === 0 ? 'FREE' : formatCurrency(DELIVERY_FEE)}</span>
+                <span className={deliveryFee === 0 ? 'text-green-600 font-medium' : ''}>
+                  {deliveryFee === 0 ? 'FREE' : formatCurrency(deliveryFee)}
+                </span>
               </div>
               <div className="flex justify-between text-gray-500">
                 <span>GST (inc.)</span><span>{formatCurrency(gst)}</span>
               </div>
+              {subtotal < FREE_DELIVERY_THRESHOLD && (
+                <p className="text-xs text-green-600">Spend {formatCurrency(FREE_DELIVERY_THRESHOLD - subtotal)} more for free delivery!</p>
+              )}
               <hr className="my-3" />
               <div className="flex justify-between font-bold text-base">
                 <span>Total</span><span className="text-brand">{formatCurrency(grandTotal)}</span>

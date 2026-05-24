@@ -15,7 +15,7 @@ export default function LoginPage() {
         <p className="text-white/50 text-xs tracking-[0.25em] uppercase font-medium mb-6">
           O&apos;Connor Agriculture
         </p>
-        <SignIn routing="hash" forceRedirectUrl="/dashboard" />
+        <SignIn routing="virtual" forceRedirectUrl="/dashboard" />
       </div>
     </div>
   );

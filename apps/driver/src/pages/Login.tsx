@@ -20,7 +20,7 @@ export default function LoginPage() {
           <h1 className="text-2xl font-bold text-white">Driver Login</h1>
           <p className="text-white/50 text-sm mt-1">O&apos;Connor Agriculture</p>
         </div>
-        <SignIn routing="hash" forceRedirectUrl="/" />
+        <SignIn routing="virtual" forceRedirectUrl="/" />
       </div>
     </div>
   );

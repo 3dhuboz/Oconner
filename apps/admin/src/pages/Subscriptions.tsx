@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { api } from '@butcher/shared';
 import type { Product } from '@butcher/shared';
-import { RefreshCcw, Check, X, Phone, Mail, Plus, Upload, Image, Save, ArrowLeftRight, PackageCheck, ShoppingCart, Calendar, Package, User, Clock, Pencil, Trash2, MapPin } from 'lucide-react';
+import { RefreshCcw, Check, X, Phone, Mail, Plus, Upload, Image, Save, ArrowLeftRight, PackageCheck, ShoppingCart, Calendar, Package, User, Clock, Pencil, Trash2, MapPin, Pause, Play } from 'lucide-react';
 import { toast } from '../lib/toast';
 import DataLoadError, { toDataLoadError, type DataLoadErrorState } from '../components/DataLoadError';
 
@@ -18,7 +18,7 @@ interface Subscription {
   customerId?: string | null;
   email: string;
   notes?: string;
-  status: 'pending' | 'active' | 'cancelled';
+  status: 'pending' | 'active' | 'paused' | 'cancelled';
   createdAt?: number;
   lastOrderGeneratedAt?: number | null;
 }
@@ -26,6 +26,7 @@ interface Subscription {
 const STATUS_STYLE: Record<string, string> = {
   pending: 'bg-amber-100 text-amber-700',
   active: 'bg-green-100 text-green-700',
+  paused: 'bg-amber-100 text-amber-700',
   cancelled: 'bg-gray-100 text-gray-500',
 };
 
@@ -129,6 +130,7 @@ export default function SubscriptionsPage() {
     try {
       await api.patch(`/api/subscriptions/${id}`, { status });
       setSubs((prev) => prev.map((s) => s.id === id ? { ...s, status: status as Subscription['status'] } : s));
+      setViewingSub((prev) => prev?.id === id ? { ...prev, status: status as Subscription['status'] } : prev);
       toast(`Subscription ${status}`);
     } catch {
       toast('Failed to update subscription', 'error');
@@ -193,6 +195,7 @@ export default function SubscriptionsPage() {
       alternateBoxId: s.alternateBoxId ?? null,
       alternateBoxName: s.alternateBoxName ?? null,
       frequency: s.frequency,
+      status: s.status,
       customerName: s.customerName ?? '',
       email: s.email,
       customerPhone: s.customerPhone ?? '',
@@ -274,7 +277,7 @@ export default function SubscriptionsPage() {
                           if (s.customerId) {
                             try {
                               const cust = await api.get(`/api/customers/${s.customerId}`) as any;
-                              const addrs = JSON.parse(cust?.addresses ?? '[]');
+                              const addrs = Array.isArray(cust?.addresses) ? cust.addresses : [];
                               if (addrs.length > 0) {
                                 const a = addrs[0];
                                 setCustomerAddress(`${a.line1}${a.line2 ? ', ' + a.line2 : ''}, ${a.suburb} ${a.state} ${a.postcode}`);
@@ -352,6 +355,18 @@ export default function SubscriptionsPage() {
                       </button>
                     )}
                     {s.status === 'active' && (
+                      <button onClick={() => setStatus(s.id, 'paused')}
+                        className="flex items-center gap-1 bg-amber-100 text-amber-700 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-amber-200">
+                        <Pause className="h-3.5 w-3.5" /> Pause
+                      </button>
+                    )}
+                    {s.status === 'paused' && (
+                      <button onClick={() => setStatus(s.id, 'active')}
+                        className="flex items-center gap-1 bg-green-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-green-700">
+                        <Play className="h-3.5 w-3.5" /> Resume
+                      </button>
+                    )}
+                    {(s.status === 'active' || s.status === 'paused') && (
                       <button onClick={() => setStatus(s.id, 'cancelled')}
                         className="flex items-center gap-1 bg-gray-100 text-gray-500 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-gray-200">
                         <X className="h-3.5 w-3.5" /> Cancel
@@ -410,6 +425,7 @@ export default function SubscriptionsPage() {
             alternateBoxId: s.alternateBoxId ?? null,
             alternateBoxName: s.alternateBoxName ?? null,
             frequency: s.frequency,
+            status: s.status,
             customerName: s.customerName ?? '', email: s.email, customerPhone: s.customerPhone ?? '',
             createdAt: s.createdAt, lastOrderGeneratedAt: s.lastOrderGeneratedAt,
             _startDate: toDateStr(s.createdAt), _nextDate: toDateStr(s.lastOrderGeneratedAt),
@@ -497,6 +513,16 @@ export default function SubscriptionsPage() {
                     <select value={editForm.frequency ?? 'fortnightly'} onChange={(e) => setEditForm({ ...editForm, frequency: e.target.value })}
                       className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
                       {FREQUENCIES.map((f) => <option key={f} value={f}>{f.charAt(0).toUpperCase() + f.slice(1)}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 font-medium mb-1 block">Status</label>
+                    <select value={editForm.status ?? s.status} onChange={(e) => setEditForm({ ...editForm, status: e.target.value as Subscription['status'] })}
+                      className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
+                      <option value="active">Active</option>
+                      <option value="paused">Paused</option>
+                      <option value="pending">Pending</option>
+                      <option value="cancelled">Cancelled</option>
                     </select>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
@@ -598,6 +624,12 @@ export default function SubscriptionsPage() {
                         <p className="text-xs text-green-500 mt-1">Orders are automatically created each delivery cycle</p>
                       </div>
                     )}
+                    {s.status === 'paused' && (
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                        <p className="text-xs text-amber-600 mb-1 flex items-center gap-1"><Pause className="h-3 w-3" /> Paused</p>
+                        <p className="font-medium text-amber-700">No automatic orders will be created until this is resumed.</p>
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex gap-3 mt-6">
@@ -617,6 +649,18 @@ export default function SubscriptionsPage() {
                     </button>
                     <button onClick={() => { setViewingSub(null); setEditingSub(false); }}
                       className="flex-1 border py-2 rounded-lg text-sm font-medium hover:bg-gray-50">Close</button>
+                    {s.status === 'active' && (
+                      <button onClick={() => setStatus(s.id, 'paused')}
+                        className="flex-1 bg-amber-100 text-amber-700 py-2 rounded-lg text-sm font-medium hover:bg-amber-200 flex items-center justify-center gap-2">
+                        <Pause className="h-4 w-4" /> Pause
+                      </button>
+                    )}
+                    {s.status === 'paused' && (
+                      <button onClick={() => setStatus(s.id, 'active')}
+                        className="flex-1 bg-green-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-green-700 flex items-center justify-center gap-2">
+                        <Play className="h-4 w-4" /> Resume
+                      </button>
+                    )}
                     <button onClick={startEdit}
                       className="flex-1 bg-brand text-white py-2 rounded-lg text-sm font-medium hover:bg-brand-mid flex items-center justify-center gap-2">
                       <Pencil className="h-4 w-4" /> Edit
@@ -730,6 +774,7 @@ export default function SubscriptionsPage() {
                   onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as Subscription['status'] }))}
                   className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
                   <option value="active">Active</option>
+                  <option value="paused">Paused</option>
                   <option value="pending">Pending</option>
                 </select>
               </div>
