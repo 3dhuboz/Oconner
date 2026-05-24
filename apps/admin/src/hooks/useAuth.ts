@@ -1,12 +1,12 @@
 import { useUser, useAuth as useClerkAuth } from '@clerk/clerk-react';
 import { setTokenProvider } from '@butcher/shared';
-import { useEffect } from 'react';
+import { useLayoutEffect } from 'react';
 
 export function useAuth() {
   const { user, isLoaded } = useUser();
   const { getToken } = useClerkAuth();
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     setTokenProvider(() => getToken());
   }, [getToken]);
 
