@@ -4,10 +4,9 @@ import { AlertTriangle, LogOut, RefreshCw } from 'lucide-react';
 /**
  * Standard error banner for admin pages whose primary data fetch failed.
  *
- * Distinguishes auth-flavoured errors (which the user can fix with sign out +
- * sign back in) from generic network/server errors (which the user retries).
- * Replaces the silent `.catch(() => {})` pattern that turned an expired Clerk
- * token into a dashboard full of zeros (per Seamus's report on the dashboard).
+ * Distinguishes expired-session errors from forbidden admin-link errors and
+ * generic network/server errors. Replaces the silent `.catch(() => {})`
+ * pattern that turned an expired Clerk token into empty dashboard data.
  *
  * Usage:
  *   const [error, setError] = useState<DataLoadErrorState | null>(null);
@@ -17,12 +16,14 @@ import { AlertTriangle, LogOut, RefreshCw } from 'lucide-react';
 export interface DataLoadErrorState {
   message: string;
   isAuth: boolean;
+  isForbidden: boolean;
 }
 
 export function toDataLoadError(e: unknown, label = "Couldn't load this page"): DataLoadErrorState {
   const message = String((e as { message?: string })?.message ?? label);
-  const isAuth = /unauth|forbidden|401|403/i.test(message);
-  return { message, isAuth };
+  const isAuth = /unauth|401/i.test(message);
+  const isForbidden = /forbidden|403/i.test(message);
+  return { message, isAuth, isForbidden };
 }
 
 export default function DataLoadError({
@@ -40,17 +41,28 @@ export default function DataLoadError({
     window.location.href = '/';
   };
 
+  const needsAdminCheck = error.isForbidden;
+  const isAuthLike = error.isAuth || needsAdminCheck;
+  const heading = error.isAuth
+    ? 'Your sign-in looks stale'
+    : needsAdminCheck
+      ? 'Admin access needs checking'
+      : (title ?? "Couldn't load this page");
+  const body = error.isAuth
+    ? 'Sign out and sign back in to refresh - your data will reappear.'
+    : needsAdminCheck
+      ? "Your login worked, but the API couldn't match it to an active admin account. Contact support to relink this admin user."
+      : error.message;
+
   return (
-    <div className={`mb-4 rounded-xl border p-4 flex items-start gap-3 ${error.isAuth ? 'bg-amber-50 border-amber-200 text-amber-900' : 'bg-red-50 border-red-200 text-red-900'}`}>
+    <div className={`mb-4 rounded-xl border p-4 flex items-start gap-3 ${isAuthLike ? 'bg-amber-50 border-amber-200 text-amber-900' : 'bg-red-50 border-red-200 text-red-900'}`}>
       <AlertTriangle className="h-5 w-5 flex-shrink-0 mt-0.5" />
       <div className="flex-1 min-w-0">
         <p className="font-semibold">
-          {error.isAuth ? 'Your sign-in looks stale' : (title ?? "Couldn't load this page")}
+          {heading}
         </p>
         <p className="text-sm mt-0.5">
-          {error.isAuth
-            ? 'Sign out and sign back in to refresh — your data will reappear.'
-            : error.message}
+          {body}
         </p>
         <div className="flex flex-wrap gap-2 mt-3">
           <button

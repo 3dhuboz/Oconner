@@ -44,32 +44,45 @@ export const API_URL = typeof process !== 'undefined'
   ? (process.env.NEXT_PUBLIC_API_URL ?? process.env.VITE_API_URL ?? 'https://oconner-api.steve-700.workers.dev')
   : 'https://oconner-api.steve-700.workers.dev';
 
-let _getToken: (() => Promise<string | null>) | null = null;
+interface AuthTokenOptions {
+  skipCache?: boolean;
+}
 
-export function setTokenProvider(fn: () => Promise<string | null>) {
+let _getToken: ((options?: AuthTokenOptions) => Promise<string | null>) | null = null;
+
+export function setTokenProvider(fn: (options?: AuthTokenOptions) => Promise<string | null>) {
   _getToken = fn;
 }
 
-async function authHeaders(): Promise<Record<string, string>> {
+async function authHeaders(options?: AuthTokenOptions): Promise<Record<string, string>> {
   if (!_getToken) return {};
-  const token = await _getToken();
+  const token = await _getToken(options);
   if (!token) return {};
   return { Authorization: `Bearer ${token}` };
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(await authHeaders()),
+  const run = async (freshToken = false) => {
+    const auth = freshToken ? await authHeaders({ skipCache: true }) : await authHeaders();
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...auth,
+    };
+    return fetch(`${API_URL}${path}`, {
+      method,
+      headers,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
   };
-  const res = await fetch(`${API_URL}${path}`, {
-    method,
-    headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
+
+  let res = await run(false);
+  if (res.status === 401 && _getToken) {
+    res = await run(true);
+  }
+
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText })) as { error: string };
-    throw new Error(err.error ?? `HTTP ${res.status}`);
+    throw new Error(err.error ? `${err.error} (HTTP ${res.status})` : `HTTP ${res.status}`);
   }
   return res.json() as Promise<T>;
 }

@@ -7,7 +7,7 @@ export function useAuth() {
   const { getToken } = useClerkAuth();
 
   useLayoutEffect(() => {
-    setTokenProvider(() => getToken());
+    setTokenProvider((options) => getToken({ skipCache: options?.skipCache }));
   }, [getToken]);
 
   return { user, loading: !isLoaded };

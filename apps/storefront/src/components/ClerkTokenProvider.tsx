@@ -8,7 +8,7 @@ export default function ClerkTokenProvider() {
   const { getToken } = useAuth();
 
   useEffect(() => {
-    setTokenProvider(() => getToken());
+    setTokenProvider((options) => getToken({ skipCache: options?.skipCache }));
   }, [getToken]);
 
   return null;
