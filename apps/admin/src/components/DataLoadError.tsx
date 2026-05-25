@@ -51,7 +51,7 @@ export default function DataLoadError({
   const body = error.isAuth
     ? 'Sign out and sign back in to refresh - your data will reappear.'
     : needsAdminCheck
-      ? "Your login worked, but the API couldn't match it to an active admin account. Contact support to relink this admin user."
+      ? "Your login worked, but the API couldn't match this browser session to an active admin account. Reset sign-in and log back in."
       : error.message;
 
   return (
@@ -71,12 +71,12 @@ export default function DataLoadError({
           >
             <RefreshCw className="h-3.5 w-3.5" /> Try again
           </button>
-          {error.isAuth && (
+          {isAuthLike && (
             <button
               onClick={handleSignOut}
               className="inline-flex items-center gap-1.5 text-xs font-semibold bg-amber-600 text-white px-3 py-1.5 rounded-lg hover:bg-amber-700"
             >
-              <LogOut className="h-3.5 w-3.5" /> Sign out
+              <LogOut className="h-3.5 w-3.5" /> Reset sign-in
             </button>
           )}
         </div>

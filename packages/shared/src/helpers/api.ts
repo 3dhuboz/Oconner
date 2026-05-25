@@ -76,7 +76,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   };
 
   let res = await run(false);
-  if (res.status === 401 && _getToken) {
+  if ((res.status === 401 || res.status === 403) && _getToken) {
     res = await run(true);
   }
 

@@ -25,6 +25,21 @@ export const users = sqliteTable('users', {
 });
 
 // ── Customers ─────────────────────────────────────────────────────────────────
+// Explicit Clerk-to-staff links. A staff member can end up with more than one
+// Clerk id over time (test/live drift, recreated Clerk user, customer/admin
+// split identity). Keep the app's staff user stable and map auth ids here.
+export const staffAuthLinks = sqliteTable('staff_auth_links', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull().references(() => users.id),
+  clerkId: text('clerk_id').notNull().unique(),
+  email: text('email').notNull(),
+  source: text('source').notNull().default('manual'),
+  active: integer('active', { mode: 'boolean' }).notNull().default(true),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});
+
+// Customers
 export const customers = sqliteTable('customers', {
   id: text('id').primaryKey(),            // UUID
   email: text('email').notNull().unique(),
