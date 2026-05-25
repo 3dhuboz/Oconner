@@ -2,7 +2,7 @@ import type { Context, Next } from 'hono';
 import type { Env, AuthUser } from '../types';
 import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
-import { users } from '@butcher/db';
+import { customers, users } from '@butcher/db';
 
 // Simple in-memory JWKS cache (lives for the lifetime of the worker isolate)
 const jwksCache = new Map<string, { keys: ({ kid: string } & JsonWebKey)[]; ts: number }>();
@@ -80,6 +80,17 @@ export async function requireAuth(c: Context<{ Bindings: Env; Variables: { user:
     // If not found by Clerk ID, try matching by email
     if (!dbUser && clerk.email) {
       [dbUser] = await db.select().from(users).where(eq(users.email, clerk.email)).limit(1);
+    }
+
+    // Seamus can have both a storefront customer identity and a staff/admin
+    // identity. If Clerk returns the customer-side ID, resolve through the
+    // trusted customer row before denying staff access.
+    if (!dbUser) {
+      const [linkedCustomer] = await db.select().from(customers).where(eq(customers.clerkId, clerk.clerkId)).limit(1);
+      if (linkedCustomer?.email) {
+        [dbUser] = await db.select().from(users).where(eq(users.email, linkedCustomer.email)).limit(1);
+        if (dbUser) console.log('[auth] resolved customer-linked staff user:', linkedCustomer.email);
+      }
     }
 
     // If still not found, the Clerk ID may have changed and JWT has no email.
