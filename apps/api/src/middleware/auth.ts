@@ -16,6 +16,11 @@ type ClerkIdentity = {
 
 type StaffUser = typeof users.$inferSelect;
 
+type AuthFailureCode =
+  | 'AUTH_MISSING_TOKEN'
+  | 'AUTH_INVALID_TOKEN'
+  | 'ADMIN_AUTH_LINK_MISSING';
+
 function b64url(s: string): Uint8Array {
   return Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
 }
@@ -26,6 +31,26 @@ function normalizeEmail(email: string | null | undefined): string {
 
 function uniqueEmails(values: Array<string | null | undefined>): string[] {
   return [...new Set(values.map(normalizeEmail).filter(Boolean))];
+}
+
+function supportId(): string {
+  return crypto.randomUUID().slice(0, 8).toUpperCase();
+}
+
+function authFailure(
+  c: Context,
+  status: 401 | 403,
+  code: AuthFailureCode,
+  supportCode = supportId(),
+) {
+  const response = c.json({
+    error: status === 401 ? 'Unauthorized' : 'Forbidden',
+    code,
+    supportId: supportCode,
+    action: 'reset_sign_in',
+  }, status);
+  response.headers.set('Cache-Control', 'no-store');
+  return response;
 }
 
 function emailsFromTokenPayload(payload: Record<string, unknown>): string[] {
@@ -173,12 +198,12 @@ export async function verifyClerkToken(
 export async function requireAuth(c: Context<{ Bindings: Env; Variables: { user: AuthUser } }>, next: Next) {
   const authHeader = c.req.header('Authorization');
   if (!authHeader?.startsWith('Bearer ')) {
-    return c.json({ error: 'Unauthorized' }, 401);
+    return authFailure(c, 401, 'AUTH_MISSING_TOKEN');
   }
 
   try {
     const clerk = await verifyClerkToken(authHeader, c.env.CLERK_SECRET_KEY);
-    if (!clerk) return c.json({ error: 'Unauthorized' }, 401);
+    if (!clerk) return authFailure(c, 401, 'AUTH_INVALID_TOKEN');
 
     const db = drizzle(c.env.DB);
     const [directUser] = await db.select().from(users).where(eq(users.id, clerk.clerkId)).limit(1);
@@ -229,15 +254,17 @@ export async function requireAuth(c: Context<{ Bindings: Env; Variables: { user:
     }
 
     if (!dbUser || !dbUser.active) {
+      const code = supportId();
       const issuerHost = (() => {
         try { return new URL(clerk.issuer).host; } catch { return 'unknown'; }
       })();
       console.warn('[auth] staff access denied:', {
+        supportId: code,
         clerkId: clerk.clerkId,
         issuer: issuerHost,
         tokenEmails: clerk.emails,
       });
-      return c.json({ error: 'Forbidden' }, 403);
+      return authFailure(c, 403, 'ADMIN_AUTH_LINK_MISSING', code);
     }
 
     await rememberStaffAuthLink(db, dbUser, clerk.clerkId, authSource || 'resolved');
@@ -246,7 +273,7 @@ export async function requireAuth(c: Context<{ Bindings: Env; Variables: { user:
     await next();
   } catch (e) {
     console.error('[auth] requireAuth error:', e);
-    return c.json({ error: 'Unauthorized' }, 401);
+    return authFailure(c, 401, 'AUTH_INVALID_TOKEN');
   }
 }
 

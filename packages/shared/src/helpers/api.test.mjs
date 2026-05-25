@@ -10,3 +10,10 @@ test('shared api helper can request a fresh auth token on auth failures', () => 
   assert.match(source, /authHeaders\(\{ skipCache: true \}\)/);
   assert.match(source, /res\.status === 401 \|\| res\.status === 403/);
 });
+
+test('shared api helper preserves structured auth failure details', () => {
+  assert.match(source, /export class ApiError extends Error/);
+  assert.match(source, /supportId\?: string/);
+  assert.match(source, /action\?: string/);
+  assert.match(source, /cache:\s*'no-store'/);
+});

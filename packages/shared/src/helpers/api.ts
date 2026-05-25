@@ -48,6 +48,29 @@ interface AuthTokenOptions {
   skipCache?: boolean;
 }
 
+interface ApiErrorBody {
+  error?: string;
+  code?: string;
+  supportId?: string;
+  action?: string;
+}
+
+export class ApiError extends Error {
+  status: number;
+  code?: string;
+  supportId?: string;
+  action?: string;
+
+  constructor(message: string, status: number, body: ApiErrorBody) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = body.code;
+    this.supportId = body.supportId;
+    this.action = body.action;
+  }
+}
+
 let _getToken: ((options?: AuthTokenOptions) => Promise<string | null>) | null = null;
 
 export function setTokenProvider(fn: (options?: AuthTokenOptions) => Promise<string | null>) {
@@ -68,11 +91,13 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
       'Content-Type': 'application/json',
       ...auth,
     };
-    return fetch(`${API_URL}${path}`, {
+    const init = {
       method,
       headers,
       body: body !== undefined ? JSON.stringify(body) : undefined,
-    });
+      cache: 'no-store',
+    } as RequestInit;
+    return fetch(`${API_URL}${path}`, init);
   };
 
   let res = await run(false);
@@ -81,8 +106,9 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   }
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText })) as { error: string };
-    throw new Error(err.error ? `${err.error} (HTTP ${res.status})` : `HTTP ${res.status}`);
+    const err = await res.json().catch(() => ({ error: res.statusText })) as ApiErrorBody;
+    const message = err.error ? `${err.error} (HTTP ${res.status})` : `HTTP ${res.status}`;
+    throw new ApiError(message, res.status, err);
   }
   return res.json() as Promise<T>;
 }

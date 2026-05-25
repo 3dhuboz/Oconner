@@ -24,3 +24,10 @@ test('staff auth resolves email case-insensitively from JWT and Clerk Backend em
   assert.match(source, /lower\(\$\{users\.email\}\)/);
   assert.match(source, /clerkBackendEmails/);
 });
+
+test('staff auth failures return support codes and reset hints without caching', () => {
+  assert.match(source, /ADMIN_AUTH_LINK_MISSING/);
+  assert.match(source, /supportId/);
+  assert.match(source, /action:\s*'reset_sign_in'/);
+  assert.match(source, /Cache-Control',\s*'no-store'/);
+});
