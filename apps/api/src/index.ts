@@ -42,6 +42,10 @@ interface SquareInvoiceMatch {
   amountCents: number | null;
 }
 
+function resolvePaidOrderStatus(order: OrderRow): string {
+  return order.status === 'pending_payment' ? 'confirmed' : order.status;
+}
+
 async function findCompletedSquarePaymentByOrderReference(
   order: OrderRow,
   env: Env,
@@ -52,7 +56,8 @@ async function findCompletedSquarePaymentByOrderReference(
 
   const orderRef = order.id.slice(0, 8).toUpperCase();
   const beginTime = new Date(Math.max(0, order.createdAt - 60 * 60 * 1000)).toISOString();
-  const endTime = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+  const paymentSearchEnd = order.createdAt + 14 * 24 * 60 * 60 * 1000;
+  const endTime = new Date(Math.min(paymentSearchEnd, Date.now() + 10 * 60 * 1000)).toISOString();
   let cursor: string | undefined;
   let pages = 0;
 
@@ -114,7 +119,7 @@ async function confirmOrderFromSquarePaymentMatch(
 
   await db.update(ordersTable).set({
     paymentStatus: 'paid',
-    status: 'confirmed',
+    status: resolvePaidOrderStatus(order),
     paymentIntentId: match.paymentId,
     paymentProvider: 'square',
     internalNotes: `${order.internalNotes ?? ''}\nSquare payment confirmed: payment=${match.paymentId} amount=${match.amountCents}c matched_by=payment_note`.trim(),
@@ -162,7 +167,7 @@ async function confirmOrderFromSquareInvoiceIfPaid(
   const amountCents = invoice.total_money?.amount ?? null;
   await db.update(ordersTable).set({
     paymentStatus: 'paid',
-    status: 'confirmed',
+    status: resolvePaidOrderStatus(order),
     paymentIntentId: invoiceId,
     paymentProvider: 'square',
     internalNotes: `${order.internalNotes ?? ''}\nSquare invoice paid: invoice=${invoiceId} amount=${amountCents ?? 'unknown'}c matched_by=invoice_status`.trim(),
@@ -172,20 +177,18 @@ async function confirmOrderFromSquareInvoiceIfPaid(
   return { invoiceId, invoiceStatus: invoice.status, amountCents };
 }
 
-async function reconcileRecentSquarePayments(env: Env): Promise<number> {
+async function reconcileOutstandingSquarePayments(env: Env): Promise<number> {
   const db = drizzle(env.DB);
-  const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
   const pendingOrders = await db.select().from(ordersTable)
     .where(or(
       eq(ordersTable.paymentStatus, 'awaiting_payment'),
       eq(ordersTable.paymentStatus, 'invoice_sent'),
     ))
     .orderBy(desc(ordersTable.createdAt))
-    .limit(100);
+    .limit(200);
 
   let reconciled = 0;
   for (const order of pendingOrders) {
-    if (order.createdAt < cutoff) continue;
     const internalNotes = order.internalNotes ?? '';
     try {
       if (order.paymentStatus === 'awaiting_payment' && internalNotes.includes('Square payment link')) {
@@ -1069,7 +1072,7 @@ export const scheduled: ExportedHandlerScheduledHandler<Env> = async (event, env
 
     // ── 2. Send "delivery tomorrow" notifications ──
     try {
-      const reconciled = await reconcileRecentSquarePayments(env);
+      const reconciled = await reconcileOutstandingSquarePayments(env);
       if (reconciled > 0) console.log(`[square-reconcile] marked ${reconciled} orders paid`);
     } catch (e) {
       console.error('Square payment reconciliation failed:', e);
