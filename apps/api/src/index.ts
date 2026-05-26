@@ -3,7 +3,7 @@ import { cors } from 'hono/cors';
 import type { Env, AuthUser } from './types';
 import { requireAuth, requireRole, verifyClerkToken } from './middleware/auth';
 import { drizzle } from 'drizzle-orm/d1';
-import { eq, desc, asc, and, gte, sql } from 'drizzle-orm';
+import { eq, desc, asc, and, gte, sql, or } from 'drizzle-orm';
 import { orders as ordersTable, customers as customersTable, products as productsTable, deliveryDays as deliveryDaysTable, subscriptions as subscriptionsTable } from '@butcher/db';
 import { deductStock, getStockDayId, reserveDayStock } from './lib/stock';
 import ordersRouter from './routes/orders';
@@ -25,6 +25,183 @@ import businessesRouter from './routes/businesses';
 import receiptsRouter from './routes/receipts';
 
 const app = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
+
+const SQUARE_API = 'https://connect.squareup.com/v2';
+
+type OrderRow = typeof ordersTable.$inferSelect;
+
+interface SquarePaymentMatch {
+  paymentId: string;
+  amountCents: number;
+  note: string;
+}
+
+interface SquareInvoiceMatch {
+  invoiceId: string;
+  invoiceStatus: string;
+  amountCents: number | null;
+}
+
+async function findCompletedSquarePaymentByOrderReference(
+  order: OrderRow,
+  env: Env,
+): Promise<SquarePaymentMatch | null> {
+  const accessToken = env.SQUARE_ACCESS_TOKEN;
+  const locationId = env.SQUARE_LOCATION_ID;
+  if (!accessToken || !locationId) return null;
+
+  const orderRef = order.id.slice(0, 8).toUpperCase();
+  const beginTime = new Date(Math.max(0, order.createdAt - 60 * 60 * 1000)).toISOString();
+  const endTime = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+  let cursor: string | undefined;
+  let pages = 0;
+
+  do {
+    const params = new URLSearchParams({
+      begin_time: beginTime,
+      end_time: endTime,
+      location_id: locationId,
+      sort_order: 'DESC',
+      limit: '100',
+    });
+    if (cursor) params.set('cursor', cursor);
+
+    const res = await fetch(`${SQUARE_API}/payments?${params}`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Square-Version': '2024-01-18',
+      },
+    });
+    const data = await res.json() as {
+      payments?: Array<{
+        id?: string;
+        status?: string;
+        note?: string;
+        amount_money?: { amount?: number };
+      }>;
+      cursor?: string;
+      errors?: unknown;
+    };
+    if (data.errors) throw new Error(`Square payment lookup failed: ${JSON.stringify(data.errors).slice(0, 500)}`);
+
+    for (const payment of data.payments ?? []) {
+      const note = payment.note ?? '';
+      const amountCents = payment.amount_money?.amount ?? 0;
+      if (
+        payment.id &&
+        payment.status === 'COMPLETED' &&
+        note.toUpperCase().includes(`ORDER #${orderRef}`) &&
+        amountCents >= order.total
+      ) {
+        return { paymentId: payment.id, amountCents, note };
+      }
+    }
+
+    cursor = data.cursor;
+    pages++;
+  } while (cursor && pages < 5);
+
+  return null;
+}
+
+async function confirmOrderFromSquarePaymentMatch(
+  db: ReturnType<typeof drizzle>,
+  order: OrderRow,
+  env: Env,
+): Promise<SquarePaymentMatch | null> {
+  const match = await findCompletedSquarePaymentByOrderReference(order, env);
+  if (!match) return null;
+
+  await db.update(ordersTable).set({
+    paymentStatus: 'paid',
+    status: 'confirmed',
+    paymentIntentId: match.paymentId,
+    paymentProvider: 'square',
+    internalNotes: `${order.internalNotes ?? ''}\nSquare payment confirmed: payment=${match.paymentId} amount=${match.amountCents}c matched_by=payment_note`.trim(),
+    updatedAt: Date.now(),
+  }).where(eq(ordersTable.id, order.id));
+
+  return match;
+}
+
+function getLatestSquareInvoiceId(internalNotes: string | null): string | null {
+  const matches = [...(internalNotes ?? '').matchAll(/Square invoice sent:\s*(inv:[^\s\n]+)/g)];
+  return matches.length ? matches[matches.length - 1][1] : null;
+}
+
+async function confirmOrderFromSquareInvoiceIfPaid(
+  db: ReturnType<typeof drizzle>,
+  order: OrderRow,
+  env: Env,
+): Promise<SquareInvoiceMatch | null> {
+  const accessToken = env.SQUARE_ACCESS_TOKEN;
+  if (!accessToken) return null;
+
+  const invoiceId = getLatestSquareInvoiceId(order.internalNotes);
+  if (!invoiceId) return null;
+
+  const res = await fetch(`${SQUARE_API}/invoices/${invoiceId}`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Square-Version': '2024-01-18',
+    },
+  });
+  const data = await res.json() as {
+    invoice?: {
+      id?: string;
+      status?: string;
+      total_money?: { amount?: number };
+    };
+    errors?: unknown;
+  };
+  if (data.errors) throw new Error(`Square invoice lookup failed: ${JSON.stringify(data.errors).slice(0, 500)}`);
+
+  const invoice = data.invoice;
+  if (!invoice || invoice.status !== 'PAID') return null;
+
+  const amountCents = invoice.total_money?.amount ?? null;
+  await db.update(ordersTable).set({
+    paymentStatus: 'paid',
+    status: 'confirmed',
+    paymentIntentId: invoiceId,
+    paymentProvider: 'square',
+    internalNotes: `${order.internalNotes ?? ''}\nSquare invoice paid: invoice=${invoiceId} amount=${amountCents ?? 'unknown'}c matched_by=invoice_status`.trim(),
+    updatedAt: Date.now(),
+  }).where(eq(ordersTable.id, order.id));
+
+  return { invoiceId, invoiceStatus: invoice.status, amountCents };
+}
+
+async function reconcileRecentSquarePayments(env: Env): Promise<number> {
+  const db = drizzle(env.DB);
+  const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const pendingOrders = await db.select().from(ordersTable)
+    .where(or(
+      eq(ordersTable.paymentStatus, 'awaiting_payment'),
+      eq(ordersTable.paymentStatus, 'invoice_sent'),
+    ))
+    .orderBy(desc(ordersTable.createdAt))
+    .limit(100);
+
+  let reconciled = 0;
+  for (const order of pendingOrders) {
+    if (order.createdAt < cutoff) continue;
+    const internalNotes = order.internalNotes ?? '';
+    try {
+      if (order.paymentStatus === 'awaiting_payment' && internalNotes.includes('Square payment link')) {
+        const match = await confirmOrderFromSquarePaymentMatch(db, order, env);
+        if (match) reconciled++;
+      }
+      if (order.paymentStatus === 'invoice_sent' && internalNotes.includes('Square invoice sent')) {
+        const match = await confirmOrderFromSquareInvoiceIfPaid(db, order, env);
+        if (match) reconciled++;
+      }
+    } catch (e) {
+      console.error(`[square-reconcile] failed for order ${order.id}:`, e);
+    }
+  }
+  return reconciled;
+}
 
 app.use('*', cors({
   origin: [
@@ -354,7 +531,6 @@ app.get('/api/ticker', async (c) => {
 
 // ── Public: Square payment link for storefront checkout ──
 app.post('/api/orders/:id/payment-link', async (c) => {
-  const SQUARE_API = 'https://connect.squareup.com/v2';
   const accessToken = c.env.SQUARE_ACCESS_TOKEN;
   const locationId = c.env.SQUARE_LOCATION_ID;
   const storefrontUrl = c.env.STOREFRONT_URL ?? 'https://oconnoragriculture.com.au';
@@ -419,7 +595,6 @@ app.post('/api/orders/:id/payment-link', async (c) => {
 // ID we stored at create-time, look up its Square order, and only mark paid if
 // Square says state=COMPLETED with tenders covering the total.
 app.post('/api/orders/:id/mark-paid', async (c) => {
-  const SQUARE_API = 'https://connect.squareup.com/v2';
   const accessToken = c.env.SQUARE_ACCESS_TOKEN;
   const db = drizzle(c.env.DB);
   const orderId = c.req.param('id');
@@ -429,6 +604,14 @@ app.post('/api/orders/:id/mark-paid', async (c) => {
   // Idempotent: if it's already paid (or anything other than pending/awaiting),
   // don't re-verify and don't downgrade. The browser may fire this multiple
   // times during the redirect dance.
+  if (order.paymentStatus === 'invoice_sent') {
+    const match = await confirmOrderFromSquareInvoiceIfPaid(db, order, c.env);
+    if (match) {
+      return c.json({ ok: true, status: 'paid', matchStrategy: 'invoice_status', invoiceId: match.invoiceId });
+    }
+    return c.json({ ok: true, status: order.paymentStatus });
+  }
+
   if (order.paymentStatus !== 'pending_payment' && order.paymentStatus !== 'awaiting_payment') {
     return c.json({ ok: true, status: order.paymentStatus });
   }
@@ -482,7 +665,12 @@ app.post('/api/orders/:id/mark-paid', async (c) => {
     }
 
     if (squareOrder.state !== 'COMPLETED') {
-      // Tell the storefront to retry — payment may still be settling.
+      // Hosted Square links can leave the template order OPEN, so also check
+      // completed payments by the order reference before asking the client to retry.
+      const match = await confirmOrderFromSquarePaymentMatch(db, order, c.env);
+      if (match) {
+        return c.json({ ok: true, status: 'paid', matchStrategy: 'payment_note', paymentId: match.paymentId });
+      }
       return c.json({ ok: true, status: 'pending', squareState: squareOrder.state });
     }
 
@@ -501,6 +689,8 @@ app.post('/api/orders/:id/mark-paid', async (c) => {
     await db.update(ordersTable).set({
       paymentStatus: 'paid',
       status: 'confirmed',
+      paymentIntentId: squareOrder.tenders?.[0]?.id ?? squareOrderId,
+      paymentProvider: 'square',
       internalNotes: `${order.internalNotes ?? ''}\nSquare payment confirmed: order=${squareOrderId} amount=${tenderedCents}c`.trim(),
       updatedAt: Date.now(),
     }).where(eq(ordersTable.id, orderId));
@@ -878,6 +1068,13 @@ export const scheduled: ExportedHandlerScheduledHandler<Env> = async (event, env
     }
 
     // ── 2. Send "delivery tomorrow" notifications ──
+    try {
+      const reconciled = await reconcileRecentSquarePayments(env);
+      if (reconciled > 0) console.log(`[square-reconcile] marked ${reconciled} orders paid`);
+    } catch (e) {
+      console.error('Square payment reconciliation failed:', e);
+    }
+
     const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1); tomorrow.setHours(0, 0, 0, 0);
     const dayAfter = new Date(tomorrow); dayAfter.setDate(dayAfter.getDate() + 1);
 

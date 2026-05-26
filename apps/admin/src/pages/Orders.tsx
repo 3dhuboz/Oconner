@@ -235,7 +235,7 @@ export default function OrdersPage() {
 
   const filtered = orders.filter((o) => {
     // Hide orders that were never paid (abandoned checkouts) — keep invoiced, paid, and manually confirmed
-    if (statusFilter === 'all' || !statusFilter) {
+    if (!search && (statusFilter === 'all' || !statusFilter)) {
       const ps = (o as any).paymentStatus ?? '';
       const isUnpaid = ps === 'pending_payment' || ps === 'awaiting_payment';
       const isManuallyConfirmed = o.status === 'confirmed' || o.status === 'preparing' || o.status === 'packed' || o.status === 'out_for_delivery' || o.status === 'delivered';
@@ -473,6 +473,7 @@ export default function OrdersPage() {
                   : 'bg-blue-100 text-blue-700'
               }`}>{ORDER_STATUS_LABELS[order.status] ?? order.status}</span>
             </div>
+            <p className="font-mono text-[11px] text-gray-400 mb-2">Square #{(order.id ?? '').slice(0, 8).toUpperCase()}</p>
             <p className="font-medium text-sm">
               {order.customerName}
               {((order as any).internalNotes ?? '').includes('[Subscription]') && (
@@ -523,6 +524,7 @@ export default function OrdersPage() {
                   <Link to={`/orders/${order.id}`} className="font-mono font-medium text-brand hover:underline">
                     #{(order.id ?? '').slice(-8).toUpperCase()}
                   </Link>
+                  <p className="font-mono text-[11px] text-gray-400 mt-0.5">Square #{(order.id ?? '').slice(0, 8).toUpperCase()}</p>
                   {(order as any).fulfillmentType === 'pickup' && (
                     <span className="ml-1.5 text-[10px] font-medium bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full">Pickup</span>
                   )}
