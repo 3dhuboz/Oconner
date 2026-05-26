@@ -56,15 +56,19 @@ app.post('/', requireAuth, async (c) => {
 // Admin: update reel
 app.patch('/:id', requireAuth, async (c) => {
   const db = drizzle(c.env.DB);
+  const id = c.req.param('id');
+  if (!id) return c.json({ error: 'Missing reel id' }, 400);
   const body = await c.req.json<Partial<typeof reelsTable.$inferInsert>>();
-  await db.update(reelsTable).set({ ...body, updatedAt: Date.now() }).where(eq(reelsTable.id, c.req.param('id')));
+  await db.update(reelsTable).set({ ...body, updatedAt: Date.now() }).where(eq(reelsTable.id, id));
   return c.json({ ok: true });
 });
 
 // Admin: delete reel
 app.delete('/:id', requireAuth, async (c) => {
   const db = drizzle(c.env.DB);
-  await db.delete(reelsTable).where(eq(reelsTable.id, c.req.param('id')));
+  const id = c.req.param('id');
+  if (!id) return c.json({ error: 'Missing reel id' }, 400);
+  await db.delete(reelsTable).where(eq(reelsTable.id, id));
   return c.json({ ok: true });
 });
 

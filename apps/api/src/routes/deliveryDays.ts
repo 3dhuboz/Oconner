@@ -765,7 +765,7 @@ Do NOT use hashtags. Just the post text.`;
 
   try {
     const ai = c.env.AI;
-    const response = await ai.run('@cf/meta/llama-3.1-8b-instruct', {
+    const response = await ai.run('@cf/meta/llama-3.1-8b-instruct' as keyof AiModels, {
       messages: [{ role: 'user', content: prompt }],
       max_tokens: 300,
     });

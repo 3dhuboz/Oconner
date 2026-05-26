@@ -192,14 +192,16 @@ app.patch('/:id/status', async (c) => {
       const trackingUrl = nextStop.orderId ? `${storefrontUrl}/track/${nextStop.orderId}` : storefrontUrl;
 
       // Send push notification to the next customer (best-effort; silently no-ops if not subscribed)
-      try {
-        await notifyCustomer(db, nextStop.customerId, {
-          title: "O'Connor Agriculture — Driver On The Way",
-          body: 'Your delivery is next! Track your driver live.',
-          url: trackingUrl,
-        }, c.env);
-      } catch {
-        // best-effort — don't fail the stop update
+      if (nextStop.customerId) {
+        try {
+          await notifyCustomer(db, nextStop.customerId, {
+            title: "O'Connor Agriculture — Driver On The Way",
+            body: 'Your delivery is next! Track your driver live.',
+            url: trackingUrl,
+          }, c.env);
+        } catch {
+          // best-effort — don't fail the stop update
+        }
       }
 
       // SMS the next customer (ClickSend). Dedup'd via notifications table so undo+redo can't double-send.

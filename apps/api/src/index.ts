@@ -204,7 +204,7 @@ app.post('/api/orders', async (c) => {
     customerId = inserted[0]?.id ?? newId;
   }
   // ── Server-side price verification: recalculate from product DB ──
-  const verifiedItems = [];
+  const verifiedItems: any[] = [];
   for (const item of (body.items as any[])) {
     const [prod] = await db.select().from(productsTable).where(eq(productsTable.id, item.productId)).limit(1);
     if (prod) {
@@ -217,7 +217,6 @@ app.post('/api/orders', async (c) => {
       verifiedItems.push(item); // keep as-is if product not found
     }
   }
-  body.items = verifiedItems;
   const verifiedSubtotal = verifiedItems.reduce((s: number, i: any) => s + (i.lineTotal ?? 0), 0);
   body.subtotal = verifiedSubtotal;
   body.total = verifiedSubtotal + (body.deliveryFee ?? 0);
@@ -230,7 +229,7 @@ app.post('/api/orders', async (c) => {
   const stockDayId = await getStockDayId(db, body.deliveryDayId);
   const dayAllocations = await db.select().from(deliveryDayStock).where(eq(deliveryDayStock.deliveryDayId, stockDayId));
 
-  const reserveResult = await reserveDayStock(db, dayAllocations, body.items as any[]);
+  const reserveResult = await reserveDayStock(db, dayAllocations, verifiedItems);
   if (!reserveResult.ok) {
     return c.json({ error: reserveResult.error }, 400);
   }
@@ -251,14 +250,14 @@ app.post('/api/orders', async (c) => {
     ...body,
     id: orderId,
     customerId,
-    items: JSON.stringify(body.items),
+    items: JSON.stringify(verifiedItems),
     deliveryAddress: JSON.stringify(body.deliveryAddress),
     paymentStatus: initialPaymentStatus,
     createdAt: now,
     updatedAt: now,
   });
   // Deduct global product stock (separate from per-day allocations above).
-  await deductStock(db, body.items as any[], orderId, now);
+  await deductStock(db, verifiedItems, orderId, now);
 
   const [day] = await db.select().from(deliveryDaysTable).where(eq(deliveryDaysTable.id, body.deliveryDayId)).limit(1);
   // Atomic counter increments — read-then-write would let two concurrent
@@ -720,7 +719,7 @@ ${extraContext ? `- Extra context: ${extraContext}` : ''}
 Output ONLY the post text, nothing else. No commentary, no "Here is your post:", just the post itself.`;
 
   try {
-    const result = await c.env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+    const result = await c.env.AI.run('@cf/meta/llama-3.1-8b-instruct' as keyof AiModels, {
       messages: [
         { role: 'system', content: `You are a social media copywriter for ${brandName}, an Australian farm and butcher. Write authentic, on-brand posts.` },
         { role: 'user', content: prompt },

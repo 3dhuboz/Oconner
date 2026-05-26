@@ -1,11 +1,25 @@
 import type { Context, Next } from 'hono';
 import type { Env, AuthUser } from '../types';
+import { verifyToken as verifyClerkJwt } from '@clerk/backend';
 import { eq, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
-import { customers, staffAuthLinks, users } from '@butcher/db';
+import { authFailures, customers, staffAuthLinks, users } from '@butcher/db';
 
-// Simple in-memory JWKS cache (lives for the lifetime of the worker isolate)
-const jwksCache = new Map<string, { keys: ({ kid: string } & JsonWebKey)[]; ts: number }>();
+const clerkAuthorizedParties = [
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://localhost:3002',
+  'https://oconner.pages.dev',
+  'https://butcher-storefront.pages.dev',
+  'https://butcher-admin.pages.dev',
+  'https://butcher-driver.pages.dev',
+  'https://admin.oconner.com.au',
+  'https://driver.oconner.com.au',
+  'https://oconnoragriculture.com.au',
+  'https://www.oconnoragriculture.com.au',
+  'https://admin.oconnoragriculture.com.au',
+  'https://driver.oconnoragriculture.com.au',
+];
 
 type ClerkIdentity = {
   clerkId: string;
@@ -20,6 +34,12 @@ type AuthFailureCode =
   | 'AUTH_MISSING_TOKEN'
   | 'AUTH_INVALID_TOKEN'
   | 'ADMIN_AUTH_LINK_MISSING';
+
+type TokenHint = {
+  clerkId?: string;
+  issuer?: string;
+  tokenEmails: string[];
+};
 
 function b64url(s: string): Uint8Array {
   return Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
@@ -53,6 +73,10 @@ function authFailure(
   return response;
 }
 
+function truncate(value: string | undefined, max = 500): string {
+  return (value ?? '').slice(0, max);
+}
+
 function emailsFromTokenPayload(payload: Record<string, unknown>): string[] {
   const candidates: Array<string | null | undefined> = [];
   for (const key of ['email', 'email_address', 'primary_email_address']) {
@@ -60,6 +84,51 @@ function emailsFromTokenPayload(payload: Record<string, unknown>): string[] {
     if (typeof value === 'string') candidates.push(value);
   }
   return uniqueEmails(candidates);
+}
+
+function tokenHintFromAuthHeader(authHeader: string | null): TokenHint {
+  if (!authHeader?.startsWith('Bearer ')) return { tokenEmails: [] };
+  try {
+    const [, payloadPart] = authHeader.slice(7).split('.');
+    if (!payloadPart) return { tokenEmails: [] };
+    const payload = JSON.parse(new TextDecoder().decode(b64url(payloadPart))) as Record<string, unknown>;
+    return {
+      clerkId: typeof payload.sub === 'string' ? payload.sub : undefined,
+      issuer: typeof payload.iss === 'string' ? payload.iss : undefined,
+      tokenEmails: emailsFromTokenPayload(payload),
+    };
+  } catch {
+    return { tokenEmails: [] };
+  }
+}
+
+async function recordAuthFailure(
+  db: ReturnType<typeof drizzle>,
+  failure: {
+    supportId: string;
+    code: AuthFailureCode;
+    clerkId?: string;
+    issuer?: string;
+    tokenEmails?: string[];
+    path?: string;
+    userAgent?: string;
+  },
+) {
+  try {
+    await db.insert(authFailures).values({
+      id: crypto.randomUUID(),
+      supportId: failure.supportId,
+      code: failure.code,
+      clerkId: failure.clerkId ?? null,
+      issuer: truncate(failure.issuer, 250),
+      tokenEmails: JSON.stringify(uniqueEmails(failure.tokenEmails ?? [])),
+      path: truncate(failure.path, 250),
+      userAgent: truncate(failure.userAgent, 500),
+      createdAt: Date.now(),
+    }).onConflictDoNothing({ target: authFailures.supportId });
+  } catch (e) {
+    console.warn('[auth] auth_failures record skipped:', String(e));
+  }
 }
 
 async function findActiveStaffByEmail(
@@ -143,54 +212,25 @@ async function clerkBackendEmails(secretKey: string | undefined, clerkId: string
 
 export async function verifyClerkToken(
   authHeader: string | null,
-  _secretKey: string,
+  secretKey: string,
 ): Promise<ClerkIdentity | null> {
   if (!authHeader?.startsWith('Bearer ')) return null;
   const token = authHeader.slice(7);
   try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return null;
-
-    const header = JSON.parse(new TextDecoder().decode(b64url(parts[0]))) as { kid: string; alg: string };
-    const payload = JSON.parse(new TextDecoder().decode(b64url(parts[1]))) as Record<string, unknown> & {
-      sub: string; iss: string; exp: number; nbf?: number;
-    };
-
-    const now = Math.floor(Date.now() / 1000);
-    if (payload.exp && payload.exp < now) { console.log('[auth] token expired'); return null; }
-    if (payload.nbf && payload.nbf > now + 5) { console.log('[auth] token not yet valid'); return null; }
-
-    // Validate issuer is a Clerk domain
-    const iss = payload.iss ?? '';
-    if (!iss.includes('clerk')) { console.log('[auth] invalid iss:', iss); return null; }
-
-    // Get JWKS (with 5-min cache)
-    const cached = jwksCache.get(iss);
-    let keys = cached && (Date.now() - cached.ts < 300_000) ? cached.keys : null;
-    if (!keys) {
-      const res = await fetch(`${iss}/.well-known/jwks.json`);
-      if (!res.ok) { console.log('[auth] JWKS fetch failed:', res.status); return null; }
-      const jwks = await res.json() as { keys: ({ kid: string } & JsonWebKey)[] };
-      keys = jwks.keys;
-      jwksCache.set(iss, { keys, ts: Date.now() });
-    }
-
-    const jwk = keys.find((k) => k.kid === header.kid);
-    if (!jwk) { console.log('[auth] no matching key for kid:', header.kid); return null; }
-
-    const cryptoKey = await crypto.subtle.importKey(
-      'jwk', jwk, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['verify'],
-    );
-    const sig = b64url(parts[2]);
-    const data = new TextEncoder().encode(`${parts[0]}.${parts[1]}`);
-    const valid = await crypto.subtle.verify('RSASSA-PKCS1-v1_5', cryptoKey, sig, data);
-
-    if (!valid) { console.log('[auth] signature invalid'); return null; }
-    console.log('[auth] token valid, sub:', payload.sub);
+    const payload = await verifyClerkJwt(token, {
+      secretKey,
+      authorizedParties: clerkAuthorizedParties,
+    }) as Record<string, unknown> & { sub?: string; iss?: string };
+    if (!payload.sub) return null;
     const emails = emailsFromTokenPayload(payload);
-    return { clerkId: payload.sub, email: emails[0] ?? '', emails, issuer: iss };
+    return {
+      clerkId: payload.sub,
+      email: emails[0] ?? '',
+      emails,
+      issuer: typeof payload.iss === 'string' ? payload.iss : '',
+    };
   } catch (e) {
-    console.error('[auth] verifyClerkToken error:', String(e));
+    console.warn('[auth] Clerk token verification failed:', String(e));
     return null;
   }
 }
@@ -202,10 +242,23 @@ export async function requireAuth(c: Context<{ Bindings: Env; Variables: { user:
   }
 
   try {
-    const clerk = await verifyClerkToken(authHeader, c.env.CLERK_SECRET_KEY);
-    if (!clerk) return authFailure(c, 401, 'AUTH_INVALID_TOKEN');
-
     const db = drizzle(c.env.DB);
+    const clerk = await verifyClerkToken(authHeader, c.env.CLERK_SECRET_KEY);
+    if (!clerk) {
+      const code = supportId();
+      const hint = tokenHintFromAuthHeader(authHeader);
+      await recordAuthFailure(db, {
+        supportId: code,
+        code: 'AUTH_INVALID_TOKEN',
+        clerkId: hint.clerkId,
+        issuer: hint.issuer,
+        tokenEmails: hint.tokenEmails,
+        path: new URL(c.req.url).pathname,
+        userAgent: c.req.header('User-Agent') ?? '',
+      });
+      return authFailure(c, 401, 'AUTH_INVALID_TOKEN', code);
+    }
+
     const [directUser] = await db.select().from(users).where(eq(users.id, clerk.clerkId)).limit(1);
     let dbUser: StaffUser | undefined = directUser;
     let authSource = dbUser ? 'users.id' : '';
@@ -263,6 +316,15 @@ export async function requireAuth(c: Context<{ Bindings: Env; Variables: { user:
         clerkId: clerk.clerkId,
         issuer: issuerHost,
         tokenEmails: clerk.emails,
+      });
+      await recordAuthFailure(db, {
+        supportId: code,
+        code: 'ADMIN_AUTH_LINK_MISSING',
+        clerkId: clerk.clerkId,
+        issuer: clerk.issuer,
+        tokenEmails: clerk.emails,
+        path: new URL(c.req.url).pathname,
+        userAgent: c.req.header('User-Agent') ?? '',
       });
       return authFailure(c, 403, 'ADMIN_AUTH_LINK_MISSING', code);
     }

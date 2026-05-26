@@ -5,7 +5,7 @@ import { test } from 'node:test';
 const source = readFileSync(new URL('./auth.ts', import.meta.url), 'utf8');
 
 test('staff auth falls back through a linked customer Clerk ID before denying access', () => {
-  assert.match(source, /import\s+\{\s*customers,\s*staffAuthLinks,\s*users\s*\}\s+from\s+'@butcher\/db'/);
+  assert.match(source, /import\s+\{\s*authFailures,\s*customers,\s*staffAuthLinks,\s*users\s*\}\s+from\s+'@butcher\/db'/);
   assert.match(source, /where\(eq\(customers\.clerkId,\s*clerk\.clerkId\)\)/);
   assert.match(source, /findActiveStaffByEmail\(db,\s*linkedCustomer\.email\)/);
   assert.match(source, /customer-linked staff user/);
@@ -30,4 +30,17 @@ test('staff auth failures return support codes and reset hints without caching',
   assert.match(source, /supportId/);
   assert.match(source, /action:\s*'reset_sign_in'/);
   assert.match(source, /Cache-Control',\s*'no-store'/);
+});
+
+test('Clerk tokens are verified against the configured Clerk instance', () => {
+  assert.match(source, /verifyToken\s+as\s+verifyClerkJwt/);
+  assert.match(source, /secretKey,\s*\n\s*authorizedParties:\s*clerkAuthorizedParties/);
+  assert.doesNotMatch(source, /fetch\(`\$\{iss\}\/\.well-known\/jwks\.json`\)/);
+});
+
+test('auth support codes are persisted without storing bearer tokens', () => {
+  assert.match(source, /recordAuthFailure/);
+  assert.match(source, /authFailures\.supportId/);
+  assert.match(source, /tokenHintFromAuthHeader/);
+  assert.match(source, /tokenEmails:\s*JSON\.stringify\(uniqueEmails\(failure\.tokenEmails \?\? \[\]\)\)/);
 });

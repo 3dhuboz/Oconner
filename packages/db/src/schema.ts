@@ -39,6 +39,21 @@ export const staffAuthLinks = sqliteTable('staff_auth_links', {
   updatedAt: integer('updated_at').notNull(),
 });
 
+// Support-code trace for auth failures. These rows are diagnostic only: they
+// help support match a user-facing code to the rejected Clerk session without
+// exposing tokens or secrets.
+export const authFailures = sqliteTable('auth_failures', {
+  id: text('id').primaryKey(),
+  supportId: text('support_id').notNull().unique(),
+  code: text('code').notNull(),
+  clerkId: text('clerk_id'),
+  issuer: text('issuer'),
+  tokenEmails: text('token_emails').notNull().default('[]'),
+  path: text('path').notNull().default(''),
+  userAgent: text('user_agent').notNull().default(''),
+  createdAt: integer('created_at').notNull(),
+});
+
 // Customers
 export const customers = sqliteTable('customers', {
   id: text('id').primaryKey(),            // UUID
