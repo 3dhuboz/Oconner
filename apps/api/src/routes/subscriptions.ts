@@ -335,27 +335,42 @@ app.get('/', async (c) => {
 app.post('/', async (c) => {
   const db = drizzle(c.env.DB);
   const body = await c.req.json<{
-    email: string; name?: string; phone?: string; address?: string;
+    email: string; name?: string; customerName?: string; phone?: string; customerPhone?: string; address?: string;
     suburb?: string; postcode?: string; notes?: string;
     boxId: string; boxName: string;
     alternateBoxId?: string; alternateBoxName?: string;
     frequency: string; status?: string;
+    skipInitialOrder?: boolean;
+    firstOrderDeliveryDayId?: string;
   }>();
   const now = Date.now();
   const id = crypto.randomUUID();
+  const customerName = body.name ?? body.customerName;
+  const customerPhone = body.phone ?? body.customerPhone ?? '';
+  let manualFirstOrderGeneratedAt: number | null = null;
+  if (body.skipInitialOrder) {
+    manualFirstOrderGeneratedAt = now;
+    if (body.firstOrderDeliveryDayId) {
+      const [manualFirstDay] = await db.select({ date: deliveryDays.date })
+        .from(deliveryDays)
+        .where(eq(deliveryDays.id, body.firstOrderDeliveryDayId))
+        .limit(1);
+      manualFirstOrderGeneratedAt = manualFirstDay?.date ?? now;
+    }
+  }
 
   // Find or create customer for admin-created subscriptions
   let customerId: string | null = null;
   const [existing] = await db.select().from(customers).where(eq(customers.email, body.email)).limit(1);
   if (existing) {
     customerId = existing.id;
-  } else if (body.name) {
+  } else if (customerName) {
     customerId = crypto.randomUUID();
     await db.insert(customers).values({
       id: customerId,
       email: body.email,
-      name: body.name,
-      phone: body.phone ?? '',
+      name: customerName,
+      phone: customerPhone,
       accountType: 'registered',
       orderCount: 0,
       totalSpent: 0,
@@ -377,6 +392,7 @@ app.post('/', async (c) => {
     nextIsAlternate: false,
     frequency: body.frequency,
     status: body.status ?? 'pending',
+    lastOrderGeneratedAt: manualFirstOrderGeneratedAt,
     createdAt: now,
     updatedAt: now,
   });
@@ -387,7 +403,7 @@ app.post('/', async (c) => {
     const [prod] = await db.select().from(products).where(eq(products.id, body.boxId)).limit(1);
     orderPrice = prod?.fixedPrice ?? 0;
   }
-  if (customerId && body.address && orderPrice) {
+  if (!body.skipInitialOrder && customerId && body.address && orderPrice) {
     // Admin-created sub via POST /. Force the order to 'confirmed' so it
     // ships on the manifest — admin creates these for customers they intend
     // to deliver to, and we don't want the cron-sweep to cancel it after 12h
@@ -396,8 +412,8 @@ app.post('/', async (c) => {
     await createSubscriptionOrder(db, {
       customerId,
       email: body.email,
-      name: body.name ?? body.email,
-      phone: body.phone ?? '',
+      name: customerName ?? body.email,
+      phone: customerPhone,
       address: { line1: body.address, suburb: body.suburb ?? '', state: 'QLD', postcode: body.postcode ?? '' },
       boxId: body.boxId,
       boxName: body.boxName,

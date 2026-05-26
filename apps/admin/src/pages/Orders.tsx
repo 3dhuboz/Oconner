@@ -200,11 +200,13 @@ export default function OrdersPage() {
               boxId: boxItem.productId,
               boxName: boxItem.productName,
               frequency: freq,
-              customerName: form.customerName,
-              customerPhone: form.customerPhone,
+              name: form.customerName,
+              phone: form.customerPhone,
               address: form.address.line1,
               suburb: form.address.suburb,
               postcode: form.address.postcode,
+              skipInitialOrder: true,
+              firstOrderDeliveryDayId: form.deliveryDayId,
             });
           } catch {}
         }
