@@ -11,7 +11,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
 import { api, formatCurrency, dayServesPostcode } from '@butcher/shared';
-import type { DeliveryDay } from '@butcher/shared';
+import type { DeliveryDay, Product } from '@butcher/shared';
 import { useCart } from '@/lib/cart';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
@@ -23,7 +23,7 @@ const DELIVERY_FEE_AMOUNT = 0;         // was 1000 ($10) — re-enable when deli
 export default function CheckoutPage() {
   const router = useRouter();
   const { user } = useUser();
-  const { items, total, clearCart } = useCart();
+  const { items, total, clearCart, syncPrices } = useCart();
   const [deliveryDays, setDeliveryDays] = useState<DeliveryDay[]>([]);
   const [selectedDayId, setSelectedDayId] = useState('');
   const [form, setForm] = useState({
@@ -39,6 +39,7 @@ export default function CheckoutPage() {
   const [promoLoading, setPromoLoading] = useState(false);
   const [wantSoupBones, setWantSoupBones] = useState(false);
   const [wantOffal, setWantOffal] = useState(false);
+  const [priceSyncing, setPriceSyncing] = useState(false);
 
   const BULK_IDS = ['prod-quarter-share', 'prod-half-share'];
   const hasBulkItem = items.some((i) => BULK_IDS.includes(i.productId));
@@ -75,6 +76,22 @@ export default function CheckoutPage() {
   const deliveryFee = isPickup ? 0 : (discountedSubtotal >= FREE_DELIVERY_THRESHOLD ? 0 : DELIVERY_FEE_AMOUNT);
   const gst = 0;
   const grandTotal = discountedSubtotal + deliveryFee;
+  const hasInvalidPricing = items.some((item) => item.lineTotal <= 0);
+
+  useEffect(() => {
+    if (items.length === 0) return;
+    let cancelled = false;
+    setPriceSyncing(true);
+    api.products.list(true)
+      .then((products) => {
+        if (!cancelled) syncPrices(products as Product[]);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setPriceSyncing(false);
+      });
+    return () => { cancelled = true; };
+  }, [items.length, syncPrices]);
 
   useEffect(() => {
     api.get<any[]>('/api/delivery-days?upcoming=true&withStock=true')
@@ -114,6 +131,7 @@ export default function CheckoutPage() {
     e.preventDefault();
     if (!selectedDayId) { setError('Please select a delivery day.'); return; }
     if (items.length === 0) { setError('Your cart is empty.'); return; }
+    if (hasInvalidPricing || priceSyncing) { setError('Cart prices are still refreshing. Please try again in a moment.'); return; }
     if (!isPickup && form.line1 && !/^\d/.test(form.line1.trim())) {
       setError('Please include a street number in your address (e.g. 12 Katrina Boulevard).');
       return;
@@ -356,10 +374,10 @@ export default function CheckoutPage() {
 
               <button
                 type="submit"
-                disabled={submitting || deliveryDays.length === 0 || (!isPickup && noDayServesPostcode) || !selectedDayId}
+                disabled={submitting || priceSyncing || hasInvalidPricing || deliveryDays.length === 0 || (!isPickup && noDayServesPostcode) || !selectedDayId}
                 className="w-full mt-6 bg-brand text-white py-3 rounded-lg font-medium hover:bg-brand-mid transition-colors disabled:opacity-50"
               >
-                {submitting ? 'Placing Order…' : `Place Order — ${formatCurrency(grandTotal)}`}
+                {submitting ? 'Placing Order…' : priceSyncing || hasInvalidPricing ? 'Refreshing prices…' : `Place Order — ${formatCurrency(grandTotal)}`}
               </button>
               <p className="text-xs text-center text-gray-400 mt-3">You'll be redirected to Square to complete payment securely.</p>
             </div>

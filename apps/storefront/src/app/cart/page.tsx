@@ -2,24 +2,42 @@
 
 export const runtime = 'edge';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Trash2, ShoppingBag } from 'lucide-react';
 import { useCart } from '@/lib/cart';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
-import { formatCurrency } from '@butcher/shared';
+import { api, formatCurrency } from '@butcher/shared';
+import type { Product } from '@butcher/shared';
 
 const GST_RATE = 0.1;
 const DELIVERY_FEE = 0; // was 1500 — re-enable when delivery fees return
 const FREE_DELIVERY_THRESHOLD = 0;
 
 export default function CartPage() {
-  const { items, removeItem, updateQuantity, total } = useCart();
+  const { items, removeItem, updateQuantity, syncPrices, total } = useCart();
+  const [priceSyncing, setPriceSyncing] = useState(false);
   const subtotal = total();
   const deliveryFee = subtotal >= FREE_DELIVERY_THRESHOLD ? 0 : DELIVERY_FEE;
   const grandTotal = subtotal + deliveryFee;
   const gst = Math.round(grandTotal * GST_RATE / (1 + GST_RATE));
+  const hasInvalidPricing = items.some((item) => item.lineTotal <= 0);
+
+  useEffect(() => {
+    if (items.length === 0) return;
+    let cancelled = false;
+    setPriceSyncing(true);
+    api.products.list(true)
+      .then((products) => {
+        if (!cancelled) syncPrices(products as Product[]);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setPriceSyncing(false);
+      });
+    return () => { cancelled = true; };
+  }, [items.length, syncPrices]);
 
   if (items.length === 0) {
     return (
@@ -103,12 +121,22 @@ export default function CartPage() {
                 <span>Total</span><span className="text-brand">{formatCurrency(grandTotal)}</span>
               </div>
             </div>
-            <Link
-              href="/checkout"
-              className="w-full bg-brand text-white py-3 rounded-lg font-medium hover:bg-brand-mid transition-colors text-center block"
-            >
-              Proceed to Checkout
-            </Link>
+            {hasInvalidPricing || priceSyncing ? (
+              <button
+                type="button"
+                disabled
+                className="w-full bg-gray-300 text-white py-3 rounded-lg font-medium text-center block cursor-not-allowed"
+              >
+                Refreshing prices...
+              </button>
+            ) : (
+              <Link
+                href="/checkout"
+                className="w-full bg-brand text-white py-3 rounded-lg font-medium hover:bg-brand-mid transition-colors text-center block"
+              >
+                Proceed to Checkout
+              </Link>
+            )}
             <Link href="/shop" className="w-full text-center text-sm text-gray-500 hover:text-brand mt-3 block transition-colors">
               Continue Shopping
             </Link>
