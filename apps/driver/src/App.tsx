@@ -6,9 +6,12 @@ import StopsPage from './pages/Stops';
 import StopDetailPage from './pages/StopDetail';
 import ProfilePage from './pages/Profile';
 import GPSPermissionBanner from './components/GPSPermissionBanner';
+import { hasRescueAccess } from './lib/rescue';
 
 function RequireDriver({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
+  const rescueAccess = hasRescueAccess();
+  if (rescueAccess) return <>{children}</>;
   if (loading) return (
     <div className="flex h-full items-center justify-center bg-brand">
       <div className="animate-spin rounded-full h-10 w-10 border-4 border-white border-t-transparent" />

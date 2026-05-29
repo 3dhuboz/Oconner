@@ -5,10 +5,12 @@ import type { Stop, StopStatus } from '@butcher/shared';
 import { ArrowLeft, MapPin, Phone, Navigation, CheckCircle, Camera, AlertTriangle, ChevronRight, Undo2, PackagePlus, Coffee } from 'lucide-react';
 import { formatWeight } from '@butcher/shared';
 import { detectAddOns } from '../lib/addOns';
+import { hasRescueAccess, rescueApi } from '../lib/rescue';
 
 export default function StopDetailPage() {
   const { stopId } = useParams<{ stopId: string }>();
   const navigate = useNavigate();
+  const isRescueMode = hasRescueAccess();
   const [stop, setStop] = useState<Stop | null>(null);
   const [allStops, setAllStops] = useState<Stop[]>([]);
   const [updating, setUpdating] = useState(false);
@@ -26,6 +28,19 @@ export default function StopDetailPage() {
 
   useEffect(() => {
     if (!stopId) return;
+    if (isRescueMode) {
+      rescueApi.stop(stopId)
+        .then((data) => {
+          setStop(data);
+          if (data.deliveryDayId) {
+            rescueApi.today()
+              .then(({ stops }) => setAllStops(stops))
+              .catch(() => {});
+          }
+        })
+        .catch(() => {});
+      return;
+    }
     api.get<Stop>(`/api/stops/${stopId}`)
       .then((data) => {
         setStop(data);
@@ -37,7 +52,7 @@ export default function StopDetailPage() {
         }
       })
       .catch(() => {});
-  }, [stopId]);
+  }, [stopId, isRescueMode]);
 
   // Find next undelivered stop in sequence
   const getNextStop = (): Stop | null => {
@@ -127,7 +142,9 @@ export default function StopDetailPage() {
     setUpdating(true);
     setActionError(null);
     try {
-      await api.stops.updateStatus(stopId, { status, proofUrl: proofUrl ?? undefined, ...extra });
+      const payload = { status, proofUrl: proofUrl ?? undefined, ...extra };
+      if (isRescueMode) await rescueApi.updateStatus(stopId, payload);
+      else await api.stops.updateStatus(stopId, payload);
       setStop((s) => s ? { ...s, status: status } : s);
       setAllStops((prev) => prev.map((s) => s.id === stopId ? { ...s, status } : s));
       // Don't auto-advance to the next stop — Seamus asked to control that
@@ -151,7 +168,8 @@ export default function StopDetailPage() {
     setUpdating(true);
     setActionError(null);
     try {
-      await api.stops.updateStatus(stopId, { status: 'en_route' });
+      if (isRescueMode) await rescueApi.updateStatus(stopId, { status: 'en_route' });
+      else await api.stops.updateStatus(stopId, { status: 'en_route' });
       setProofUrl(null);
       setStop((s) => s ? { ...s, status: 'en_route' as StopStatus, proofUrl: undefined } : s);
       setAllStops((prev) => prev.map((s) => s.id === stopId ? { ...s, status: 'en_route' as StopStatus, proofUrl: undefined } : s));
@@ -321,7 +339,11 @@ export default function StopDetailPage() {
             onChange={handlePhotoCapture}
             className="hidden"
           />
-          {proofUrl || stop.proofUrl ? (
+          {isRescueMode ? (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
+              Photo upload is unavailable in emergency mode. Use "Mark as Delivered" to keep the run moving.
+            </div>
+          ) : proofUrl || stop.proofUrl ? (
             <div className="space-y-2">
               <img
                 src={proofUrl ?? stop.proofUrl ?? ''}
@@ -393,7 +415,7 @@ export default function StopDetailPage() {
                   {proofUrl || stop.proofUrl ? 'Mark as Delivered (with photo)' : 'Mark as Delivered'}
                 </button>
                 {/* Secondary: capture photo + deliver + SMS the customer the photo link. */}
-                {!proofUrl && !stop.proofUrl && (
+                {!isRescueMode && !proofUrl && !stop.proofUrl && (
                   <button
                     onClick={deliverWithPhoto}
                     disabled={updating || uploadingPhoto}

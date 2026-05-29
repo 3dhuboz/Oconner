@@ -21,6 +21,7 @@ export interface Env {
   CLICKSEND_USERNAME: string;
   CLICKSEND_API_KEY: string;
   CLICKSEND_FROM: string;
+  DRIVER_RESCUE_PIN?: string;
 }
 
 export type UserRole = 'admin' | 'staff' | 'driver';

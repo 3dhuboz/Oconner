@@ -6,10 +6,13 @@ import type { Stop, DeliveryDay, DeliveryRun } from '@butcher/shared';
 import { useGPS, type GPSStatus } from '../hooks/useGPS';
 import { MapPin, Navigation, User, CheckCircle, Clock, Truck, PackagePlus } from 'lucide-react';
 import { hasAddOns } from '../lib/addOns';
+import { getRescuePin, hasRescueAccess, rescueApi } from '../lib/rescue';
 
 export default function StopsPage() {
   const navigate = useNavigate();
   const { user } = useUser();
+  const rescuePin = getRescuePin();
+  const isRescueMode = !user && hasRescueAccess();
   const { dayId: paramDayId } = useParams<{ dayId?: string }>();
   const [deliveryDay, setDeliveryDay] = useState<DeliveryDay | null>(null);
   const [stops, setStops] = useState<Stop[]>([]);
@@ -21,6 +24,15 @@ export default function StopsPage() {
   });
 
   useEffect(() => {
+    if (isRescueMode) {
+      rescueApi.today(rescuePin)
+        .then(({ deliveryDay, stops }) => {
+          if (deliveryDay) setDeliveryDay(deliveryDay);
+          setStops(stops);
+        })
+        .catch(() => {});
+      return;
+    }
     if (!user) return;
     if (paramDayId) {
       api.deliveryDays.get(paramDayId)
@@ -31,11 +43,12 @@ export default function StopsPage() {
         .then((day) => { if (day) setDeliveryDay(day as DeliveryDay); })
         .catch(() => {});
     }
-  }, [user, paramDayId]);
+  }, [user, paramDayId, isRescueMode, rescuePin]);
 
   const [myRun, setMyRun] = useState<DeliveryRun | null>(null);
 
   useEffect(() => {
+    if (isRescueMode) return;
     if (!deliveryDay?.id) return;
     // Try to find a run assigned to this driver for the day
     api.deliveryRuns.myRun(deliveryDay.id)
@@ -52,7 +65,7 @@ export default function StopsPage() {
           .then((data) => setStops(data as Stop[]))
           .catch(() => {});
       });
-  }, [deliveryDay?.id]);
+  }, [deliveryDay?.id, isRescueMode]);
 
   // Restore an in-flight session on page load (so a refresh doesn't orphan it)
   // and auto-create one if none exists yet. Previously the driver had to tap
@@ -70,6 +83,7 @@ export default function StopsPage() {
   // sessionId-set check at the top. The startSession endpoint is also
   // idempotent on the server side, so a double-fire is a non-issue.
   useEffect(() => {
+    if (isRescueMode) return;
     if (!deliveryDay?.id || !user || sessionId) return;
     if (stops.length === 0) return; // no point creating a session if there's nothing to deliver
     let cancelled = false;
@@ -114,9 +128,15 @@ export default function StopsPage() {
       }
     })();
     return () => { cancelled = true; };
-  }, [deliveryDay?.id, sessionId, stops.length, user]);
+  }, [deliveryDay?.id, sessionId, stops.length, user, isRescueMode]);
 
   const handleBeginRoute = async () => {
+    if (isRescueMode) {
+      const sorted = [...stops].sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
+      const firstPending = sorted.find((s) => s.status !== 'delivered' && s.status !== 'failed');
+      if (firstPending) navigate(`/stop/${firstPending.id}`);
+      return;
+    }
     if (!deliveryDay?.id || !user) return;
     const session = await api.drivers.startSession({
       deliveryDayId: deliveryDay.id,
@@ -173,9 +193,11 @@ export default function StopsPage() {
               )}
             </div>
           </div>
-          <button onClick={() => navigate('/profile')} className="w-9 h-9 bg-white/10 rounded-full flex items-center justify-center">
-            <User className="h-5 w-5" />
-          </button>
+          {!isRescueMode && (
+            <button onClick={() => navigate('/profile')} className="w-9 h-9 bg-white/10 rounded-full flex items-center justify-center">
+              <User className="h-5 w-5" />
+            </button>
+          )}
         </div>
 
         {deliveryDay && (
@@ -190,7 +212,12 @@ export default function StopsPage() {
               </div>
             </div>
 
-            {!trackingEnabled ? (
+            {isRescueMode ? (
+              <button onClick={handleBeginRoute} disabled={stops.length === 0} className="w-full bg-white text-brand font-bold py-3 rounded-xl flex items-center justify-center gap-2 text-lg disabled:opacity-50">
+                <Navigation className="h-5 w-5" />
+                Open Current Stop
+              </button>
+            ) : !trackingEnabled ? (
               <button onClick={handleBeginRoute} disabled={stops.length === 0} className="w-full bg-white text-brand font-bold py-3 rounded-xl flex items-center justify-center gap-2 text-lg disabled:opacity-50">
                 <Navigation className="h-5 w-5" />
                 Begin Route
@@ -240,7 +267,7 @@ export default function StopsPage() {
                 </div>
                 <p className="text-white/70 text-sm font-medium uppercase tracking-widest mb-1">Welcome back</p>
                 <h2 className="text-3xl font-black mb-1">
-                  {user?.firstName ?? user?.primaryEmailAddress?.emailAddress?.split('@')[0] ?? 'Driver'}
+                  {isRescueMode ? 'Driver' : user?.firstName ?? user?.primaryEmailAddress?.emailAddress?.split('@')[0] ?? 'Driver'}
                 </h2>
                 <p className="text-white/60 text-sm">
                   {new Date().toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
