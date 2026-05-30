@@ -3,6 +3,13 @@ import { Truck } from 'lucide-react';
 import { useState } from 'react';
 import { rescueApi, saveRescuePin } from '../lib/rescue';
 
+const socialLoginHidden = {
+  elements: {
+    socialButtonsBlockButton: 'hidden',
+    dividerRow: 'hidden',
+  },
+};
+
 export default function LoginPage() {
   const [pin, setPin] = useState('');
   const [rescueLoading, setRescueLoading] = useState(false);
@@ -43,7 +50,7 @@ export default function LoginPage() {
           <h1 className="text-2xl font-bold text-white">Driver Login</h1>
           <p className="text-white/50 text-sm mt-1">O&apos;Connor Agriculture</p>
         </div>
-        <SignIn routing="virtual" forceRedirectUrl="/" />
+        <SignIn routing="virtual" forceRedirectUrl="/" appearance={socialLoginHidden} />
         <form onSubmit={submitRescue} className="mt-4 w-full max-w-sm bg-white/10 backdrop-blur border border-white/20 rounded-2xl p-4">
           <p className="text-white font-bold text-sm">Emergency driver access</p>
           <p className="text-white/65 text-xs mt-1">Use this if Google login is down while deliveries are underway.</p>

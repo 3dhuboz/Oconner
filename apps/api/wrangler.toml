@@ -16,6 +16,7 @@ bucket_name = "oconner-images"
 ENVIRONMENT = "production"
 STOREFRONT_URL = "https://oconnoragriculture.com.au"
 DRIVER_APP_URL = "https://driver.oconnoragriculture.com.au"
+ADMIN_APP_URL = "https://admin.oconnoragriculture.com.au"
 FROM_EMAIL = "O'Connor Agriculture <orders@oconnoragriculture.com.au>"
 
 # Secrets — set via: npx wrangler secret put KEY_NAME
@@ -26,6 +27,7 @@ FROM_EMAIL = "O'Connor Agriculture <orders@oconnoragriculture.com.au>"
 # GOOGLE_MAPS_API_KEY
 # OPENROUTER_API_KEY
 # ZERNIO_API_KEY
+# STAFF_RESCUE_PIN
 
 [ai]
 binding = "AI"

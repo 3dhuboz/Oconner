@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './hooks/useAuth';
 import Layout from './components/Layout';
 import LoginPage from './pages/Login';
+import TicketSignInPage from './pages/TicketSignIn';
 import DashboardPage from './pages/Dashboard';
 import OrdersPage from './pages/Orders';
 import OrderDetailPage from './pages/OrderDetail';
@@ -33,6 +34,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/ticket" element={<TicketSignInPage />} />
       <Route path="/" element={<RequireAdmin><Layout /></RequireAdmin>}>
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />

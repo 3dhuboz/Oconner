@@ -14,6 +14,7 @@ test('driver app has a Clerk-independent rescue access path', () => {
   assert.match(appSource, /hasRescueAccess\(\)/);
   assert.match(loginSource, /Emergency driver access/);
   assert.match(loginSource, /rescueApi\.today\(cleaned\)/);
+  assert.match(loginSource, /socialButtonsBlockButton:\s*'hidden'/);
 });
 
 test('rescue mode can load and update live stops without Clerk', () => {

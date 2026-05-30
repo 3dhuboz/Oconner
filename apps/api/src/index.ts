@@ -14,6 +14,7 @@ import customersRouter from './routes/customers';
 import usersRouter from './routes/users';
 import driversRouter from './routes/drivers';
 import driverRescueRouter from './routes/driverRescue';
+import adminRescueRouter from './routes/adminRescue';
 import deliveryRunsRouter from './routes/deliveryRuns';
 import stripeRouter from './routes/stripe';
 import stockRouter from './routes/stock';
@@ -221,7 +222,7 @@ app.use('*', cors({
     'https://driver.oconnoragriculture.com.au',
   ],
   allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowHeaders: ['Content-Type', 'Authorization', 'X-Driver-Rescue-Pin'],
+  allowHeaders: ['Content-Type', 'Authorization', 'X-Driver-Rescue-Pin', 'X-Staff-Rescue-Pin'],
   credentials: true,
 }));
 
@@ -717,6 +718,7 @@ app.get('/api/config/:key', async (c) => {
 });
 
 app.route('/api/driver-rescue', driverRescueRouter);
+app.route('/api/admin-rescue', adminRescueRouter);
 app.use('/api/*', requireAuth);
 
 app.route('/api/orders', ordersRouter);

@@ -9,6 +9,7 @@ export interface Env {
   GOOGLE_MAPS_API_KEY: string;
   STOREFRONT_URL: string;
   DRIVER_APP_URL: string;
+  ADMIN_APP_URL?: string;
   FROM_EMAIL: string;
   ENVIRONMENT: string;
   VAPID_PUBLIC_KEY: string;
@@ -22,6 +23,7 @@ export interface Env {
   CLICKSEND_API_KEY: string;
   CLICKSEND_FROM: string;
   DRIVER_RESCUE_PIN?: string;
+  STAFF_RESCUE_PIN?: string;
 }
 
 export type UserRole = 'admin' | 'staff' | 'driver';
