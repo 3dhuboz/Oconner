@@ -1,5 +1,6 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useClerk } from '@clerk/clerk-react';
+import { clearStaffRescuePin } from '@butcher/shared';
 import {
   LayoutDashboard, ShoppingBag, Package, CalendarDays,
   BarChart2, Users, FileText, LogOut, Menu, Settings, Sparkles,
@@ -61,7 +62,8 @@ export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const handleSignOut = async () => {
-    await signOut();
+    clearStaffRescuePin();
+    try { await signOut(); } catch { /* rescue mode may not have a Clerk session */ }
     navigate('/login');
   };
 

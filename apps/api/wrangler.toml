@@ -27,6 +27,7 @@ FROM_EMAIL = "O'Connor Agriculture <orders@oconnoragriculture.com.au>"
 # GOOGLE_MAPS_API_KEY
 # OPENROUTER_API_KEY
 # ZERNIO_API_KEY
+# DRIVER_RESCUE_PIN
 # STAFF_RESCUE_PIN
 
 [ai]

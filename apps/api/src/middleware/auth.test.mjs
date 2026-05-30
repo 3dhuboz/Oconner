@@ -18,6 +18,14 @@ test('staff auth can use durable Clerk id links and remember new verified ids', 
   assert.match(source, /onConflictDoUpdate/);
 });
 
+test('staff auth can bypass Clerk with the emergency staff PIN', () => {
+  assert.match(source, /X-Staff-Rescue-Pin/);
+  assert.match(source, /STAFF_RESCUE_PIN/);
+  assert.match(source, /rescueStaffUser/);
+  assert.match(source, /findFallbackAdmin/);
+  assert.match(source, /c\.set\('user', rescueUser\)/);
+});
+
 test('staff auth resolves email case-insensitively from JWT and Clerk Backend emails', () => {
   assert.match(source, /emailsFromTokenPayload/);
   assert.match(source, /email_address/);

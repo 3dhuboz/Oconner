@@ -17,3 +17,10 @@ test('shared api helper preserves structured auth failure details', () => {
   assert.match(source, /action\?: string/);
   assert.match(source, /cache:\s*'no-store'/);
 });
+
+test('shared api helper can attach the emergency staff PIN', () => {
+  assert.match(source, /ocn-admin-rescue-pin/);
+  assert.match(source, /getStaffRescuePin/);
+  assert.match(source, /saveStaffRescuePin/);
+  assert.match(source, /X-Staff-Rescue-Pin/);
+});

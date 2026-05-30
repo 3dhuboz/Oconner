@@ -1,6 +1,7 @@
 import { useClerk } from '@clerk/clerk-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import { clearRescuePin } from '../lib/rescue';
 import { ArrowLeft, LogOut, User, Truck } from 'lucide-react';
 
 export default function ProfilePage() {
@@ -10,7 +11,8 @@ export default function ProfilePage() {
   const { signOut } = useClerk();
 
   const handleSignOut = async () => {
-    await signOut();
+    clearRescuePin();
+    try { await signOut(); } catch { /* rescue mode may not have a Clerk session */ }
     navigate('/login');
   };
 

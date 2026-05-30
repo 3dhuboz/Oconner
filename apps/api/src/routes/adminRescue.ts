@@ -84,4 +84,25 @@ app.post('/sign-in-link', async (c) => {
   return res;
 });
 
+app.post('/session', async (c) => {
+  if (!requireStaffRescuePin(c)) return unauthorized(c);
+
+  const db = drizzle(c.env.DB);
+  const [staff] = await db.select().from(users)
+    .where(sql`lower(${users.email}) = 'oconnoragriculture@gmail.com'`)
+    .limit(1);
+  if (!staff?.active) return c.json({ error: 'Active staff user not found' }, 404);
+
+  const res = c.json({
+    ok: true,
+    user: {
+      email: staff.email,
+      name: staff.name,
+      role: staff.role,
+    },
+  });
+  res.headers.set('Cache-Control', 'no-store');
+  return res;
+});
+
 export default app;

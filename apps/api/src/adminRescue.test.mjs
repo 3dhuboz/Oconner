@@ -16,3 +16,9 @@ test('admin rescue creates protected one-time Clerk sign-in links', () => {
   assert.match(indexSource, /app\.route\('\/api\/admin-rescue'[\s\S]+app\.use\('\/api\/\*', requireAuth\)/);
 });
 
+test('admin rescue exposes a Clerk-independent staff session check', () => {
+  assert.match(routeSource, /app\.post\('\/session'/);
+  assert.match(routeSource, /requireStaffRescuePin/);
+  assert.match(routeSource, /oconnoragriculture@gmail\.com/);
+  assert.match(routeSource, /Cache-Control',\s*'no-store'/);
+});

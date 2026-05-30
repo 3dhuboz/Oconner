@@ -44,6 +44,38 @@ export const API_URL = typeof process !== 'undefined'
   ? (process.env.NEXT_PUBLIC_API_URL ?? process.env.VITE_API_URL ?? 'https://oconner-api.steve-700.workers.dev')
   : 'https://oconner-api.steve-700.workers.dev';
 
+const STAFF_RESCUE_STORAGE_KEY = 'ocn-admin-rescue-pin';
+
+type StorageLike = {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+  removeItem(key: string): void;
+};
+
+function browserStorage(): StorageLike | null {
+  try {
+    return (globalThis as unknown as { localStorage?: StorageLike }).localStorage ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export function getStaffRescuePin(): string {
+  return browserStorage()?.getItem(STAFF_RESCUE_STORAGE_KEY) ?? '';
+}
+
+export function hasStaffRescueAccess(): boolean {
+  return getStaffRescuePin().length > 0;
+}
+
+export function saveStaffRescuePin(pin: string): void {
+  browserStorage()?.setItem(STAFF_RESCUE_STORAGE_KEY, pin.trim());
+}
+
+export function clearStaffRescuePin(): void {
+  browserStorage()?.removeItem(STAFF_RESCUE_STORAGE_KEY);
+}
+
 interface AuthTokenOptions {
   skipCache?: boolean;
 }
@@ -78,10 +110,14 @@ export function setTokenProvider(fn: (options?: AuthTokenOptions) => Promise<str
 }
 
 async function authHeaders(options?: AuthTokenOptions): Promise<Record<string, string>> {
-  if (!_getToken) return {};
-  const token = await _getToken(options);
-  if (!token) return {};
-  return { Authorization: `Bearer ${token}` };
+  const headers: Record<string, string> = {};
+  if (_getToken) {
+    const token = await _getToken(options);
+    if (token) headers.Authorization = `Bearer ${token}`;
+  }
+  const staffRescuePin = getStaffRescuePin();
+  if (staffRescuePin) headers['X-Staff-Rescue-Pin'] = staffRescuePin;
+  return headers;
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {

@@ -1,4 +1,5 @@
 import { useClerk } from '@clerk/clerk-react';
+import { clearStaffRescuePin } from '@butcher/shared';
 import { AlertTriangle, LogOut, RefreshCw } from 'lucide-react';
 
 /**
@@ -46,6 +47,7 @@ export default function DataLoadError({
 }) {
   const { signOut } = useClerk();
   const handleSignOut = async () => {
+    clearStaffRescuePin();
     try { await signOut(); } catch { /* best-effort */ }
     window.location.href = '/';
   };

@@ -17,3 +17,10 @@ test('admin login hides broken social OAuth buttons while provider config is rep
   assert.match(loginSource, /socialButtonsBlockButton:\s*'hidden'/);
   assert.match(loginSource, /dividerRow:\s*'hidden'/);
 });
+
+test('admin login offers emergency staff PIN access', () => {
+  assert.match(appSource, /hasStaffRescueAccess/);
+  assert.match(loginSource, /saveStaffRescuePin/);
+  assert.match(loginSource, /\/api\/admin-rescue\/session/);
+  assert.match(loginSource, /X-Staff-Rescue-Pin/);
+});

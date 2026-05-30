@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, formatCurrency, ORDER_STATUS_LABELS, API_URL } from '@butcher/shared';
+import { api, formatCurrency, ORDER_STATUS_LABELS, API_URL, getStaffRescuePin } from '@butcher/shared';
 import type { OrderStatus, PayoutsResponse, Payout, PayoutEntry } from '@butcher/shared';
 import { useAuth as useClerkAuth } from '@clerk/clerk-react';
 import { DollarSign, ShoppingBag, TrendingUp, XCircle, Download, ChevronDown, ChevronRight, AlertTriangle, Package, CheckCircle2, Clock, Truck, Landmark, Link2, HelpCircle } from 'lucide-react';
@@ -937,9 +937,13 @@ function BookkeeperExportModal({ onClose }: { onClose: () => void }) {
       const toMs   = new Date(`${toDate}T23:59:59Z`).getTime()   - BRISBANE_OFFSET_MS;
 
       const token = await getToken();
+      const staffRescuePin = getStaffRescuePin();
       const url = `${API_URL}/api/reports/sales-export?from=${fromMs}&to=${toMs}`;
       const res = await fetch(url, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(staffRescuePin ? { 'X-Staff-Rescue-Pin': staffRescuePin } : {}),
+        },
       });
       if (!res.ok) {
         const t = await res.text().catch(() => '');
