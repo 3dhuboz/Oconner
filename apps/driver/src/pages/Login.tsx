@@ -14,6 +14,7 @@ export default function LoginPage() {
   const [pin, setPin] = useState('');
   const [rescueLoading, setRescueLoading] = useState(false);
   const [rescueError, setRescueError] = useState('');
+  const [showNormalSignIn, setShowNormalSignIn] = useState(false);
 
   const submitRescue = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,7 +51,6 @@ export default function LoginPage() {
           <h1 className="text-2xl font-bold text-white">Driver Login</h1>
           <p className="text-white/50 text-sm mt-1">O&apos;Connor Agriculture</p>
         </div>
-        <SignIn routing="virtual" forceRedirectUrl="/" appearance={socialLoginHidden} />
         <form onSubmit={submitRescue} className="mt-4 w-full max-w-sm bg-white/10 backdrop-blur border border-white/20 rounded-2xl p-4">
           <p className="text-white font-bold text-sm">Emergency driver access</p>
           <p className="text-white/65 text-xs mt-1">Use this if Google login is down while deliveries are underway.</p>
@@ -72,6 +72,20 @@ export default function LoginPage() {
           </div>
           {rescueError && <p className="text-red-200 text-xs mt-2">{rescueError}</p>}
         </form>
+        <div className="mt-4 w-full max-w-sm text-center text-white/75">
+          <button
+            type="button"
+            onClick={() => setShowNormalSignIn((value) => !value)}
+            className="text-xs font-semibold underline decoration-white/30 underline-offset-4"
+          >
+            Normal sign-in
+          </button>
+          {showNormalSignIn && (
+            <div className="mt-3 flex justify-center">
+              <SignIn routing="virtual" forceRedirectUrl="/" appearance={socialLoginHidden} />
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

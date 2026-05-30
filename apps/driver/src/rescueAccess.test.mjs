@@ -14,6 +14,8 @@ test('driver app has a Clerk-independent rescue access path', () => {
   assert.match(appSource, /hasRescueAccess\(\)/);
   assert.match(loginSource, /Emergency driver access/);
   assert.match(loginSource, /rescueApi\.today\(cleaned\)/);
+  assert.match(loginSource, /showNormalSignIn/);
+  assert.match(loginSource, /Normal sign-in/);
   assert.match(loginSource, /socialButtonsBlockButton:\s*'hidden'/);
 });
 

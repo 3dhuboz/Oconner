@@ -61,6 +61,13 @@ const FREQ_LABELS: Record<string, string> = {
   monthly: 'Every month',
 };
 
+const socialLoginHidden = {
+  elements: {
+    socialButtonsBlockButton: 'hidden',
+    dividerRow: 'hidden',
+  },
+};
+
 export default function AccountPage() {
   const { user, isLoaded } = useUser();
   const { getToken } = useAuth();
@@ -151,7 +158,7 @@ export default function AccountPage() {
       <>
         <Navbar />
         <main className="flex-1 flex items-center justify-center px-4 py-16">
-          <SignIn routing="hash" />
+          <SignIn routing="hash" appearance={socialLoginHidden} />
         </main>
         <Footer />
       </>
