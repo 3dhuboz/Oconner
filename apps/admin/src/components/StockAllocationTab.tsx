@@ -23,6 +23,10 @@ interface DayInfo {
   active?: boolean;
 }
 
+function readableError(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
 export default function StockAllocationTab({ dayId, dayDate }: { dayId: string; dayDate?: number }) {
   const [allocations, setAllocations] = useState<Allocation[]>([]);
   const [products, setProducts] = useState<ProductInfo[]>([]);
@@ -84,8 +88,8 @@ export default function StockAllocationTab({ dayId, dayDate }: { dayId: string; 
       const toSave = allocations.filter((a) => a.allocated > 0);
       await api.deliveryDays.setStock(dayId, toSave);
       toast('Stock allocations saved');
-    } catch {
-      toast('Failed to save allocations', 'error');
+    } catch (error) {
+      toast(readableError(error, 'Failed to save allocations'), 'error');
     } finally {
       setSaving(false);
     }
@@ -127,8 +131,8 @@ export default function StockAllocationTab({ dayId, dayDate }: { dayId: string; 
           <h3 className="font-semibold">Stock Allocation{poolDays.length > 1 ? ' (Shared Pool)' : ''}</h3>
           <p className="text-xs text-gray-400 mt-0.5">
             {poolDays.length > 1
-              ? 'Shared across linked delivery days — orders from any day draw from this pool'
-              : 'Set how much of each product is available for this delivery day'}
+              ? 'Shared across linked delivery days; orders from any day draw from this pool. Delivery spots are controlled separately.'
+              : 'Set how much of each product is available for this delivery day. Delivery spots are controlled separately.'}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -335,8 +339,8 @@ function CopyModal({
       await onCopied();
       toast('Copied allocations from selected day');
       onClose();
-    } catch {
-      toast('Failed to copy allocations', 'error');
+    } catch (error) {
+      toast(readableError(error, 'Failed to copy allocations'), 'error');
     } finally {
       setCopying(false);
     }
@@ -494,8 +498,8 @@ function LinkDaysModal({
       await onUpdated();
       toast(selected.size > 0 ? `Stock pool updated — ${selected.size + 1} days linked` : 'Stock pool removed');
       onClose();
-    } catch {
-      toast('Failed to update pool', 'error');
+    } catch (error) {
+      toast(readableError(error, 'Failed to update pool'), 'error');
     } finally {
       setSaving(false);
     }

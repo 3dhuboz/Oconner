@@ -551,30 +551,100 @@ app.get('/:id/stock', async (c) => {
 app.put('/:id/stock', async (c) => {
   const db = drizzle(c.env.DB);
   const dayId = c.req.param('id');
-  const stockDayId = await getStockDayId(db, dayId);
-  const body = await c.req.json<{ allocations: { productId: string; productName: string; allocated: number }[] }>();
+  const [day] = await db.select().from(deliveryDays).where(eq(deliveryDays.id, dayId)).limit(1);
+  if (!day) return c.json({ error: 'Delivery day not found' }, 404);
+
+  const stockDayId = day.stockPoolId ?? day.id;
+  if (day.stockPoolId) {
+    const [stockSource] = await db.select().from(deliveryDays).where(eq(deliveryDays.id, stockDayId)).limit(1);
+    if (!stockSource) {
+      return c.json({ error: 'This delivery day is linked to a missing stock pool. Unlink and relink the delivery days, then save again.' }, 400);
+    }
+  }
+
+  let body: { allocations?: Array<{ productId?: unknown; productName?: unknown; allocated?: unknown }> };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'Stock allocation request was not valid JSON' }, 400);
+  }
+  if (!Array.isArray(body.allocations)) {
+    return c.json({ error: 'Stock allocation request is missing allocations' }, 400);
+  }
   const now = Date.now();
 
   // Preserve existing sold counts when updating allocations
   const existing = await db.select().from(deliveryDayStock).where(eq(deliveryDayStock.deliveryDayId, stockDayId));
   const soldMap = new Map(existing.map((e) => [e.productId, e.sold]));
+  const productRows = await db.select({ id: products.id, name: products.name }).from(products);
+  const productsById = new Map(productRows.map((p) => [p.id, p]));
 
-  await db.delete(deliveryDayStock).where(eq(deliveryDayStock.deliveryDayId, stockDayId));
+  const seenProductIds = new Set<string>();
+  const values: Array<{
+    id: string;
+    deliveryDayId: string;
+    productId: string;
+    productName: string;
+    allocated: number;
+    sold: number;
+    createdAt: number;
+  }> = [];
 
-  if (body.allocations.length > 0) {
-    const values = body.allocations.map((a) => ({
-      id: crypto.randomUUID(),
-      deliveryDayId: stockDayId,
-      productId: a.productId,
-      productName: a.productName,
-      allocated: a.allocated,
-      sold: soldMap.get(a.productId) ?? 0,
-      createdAt: now,
-    }));
-    await db.insert(deliveryDayStock).values(values);
+  for (const raw of body.allocations) {
+    const productId = typeof raw.productId === 'string' ? raw.productId.trim() : '';
+    const allocated = Number(raw.allocated);
+    if (!productId) return c.json({ error: 'Each stock allocation needs a product' }, 400);
+    if (seenProductIds.has(productId)) return c.json({ error: `Duplicate product allocation for ${productId}` }, 400);
+    seenProductIds.add(productId);
+    if (!Number.isFinite(allocated) || allocated < 0) {
+      return c.json({ error: 'Stock allocations must be zero or above' }, 400);
+    }
+
+    const product = productsById.get(productId);
+    if (!product) return c.json({ error: `Product ${productId} no longer exists. Refresh products and try again.` }, 400);
+
+    const sold = soldMap.get(productId) ?? 0;
+    if (allocated < sold) {
+      return c.json({ error: `Allocation for ${product.name} cannot be below ${sold} already sold.` }, 400);
+    }
+
+    if (allocated > 0) {
+      const providedName = typeof raw.productName === 'string' ? raw.productName.trim() : '';
+      values.push({
+        id: crypto.randomUUID(),
+        deliveryDayId: stockDayId,
+        productId,
+        productName: providedName || product.name,
+        allocated,
+        sold,
+        createdAt: now,
+      });
+    }
   }
 
-  return c.json({ ok: true });
+  for (const existingRow of existing) {
+    if (existingRow.sold > 0 && !seenProductIds.has(existingRow.productId)) {
+      return c.json({
+        error: `Cannot remove ${existingRow.productName} because ${existingRow.sold} has already sold. Leave its allocation at ${existingRow.sold} or higher.`,
+      }, 400);
+    }
+  }
+
+  const statements = [
+    c.env.DB.prepare('DELETE FROM delivery_day_stock WHERE delivery_day_id = ?').bind(stockDayId),
+    ...values.map((v) => c.env.DB.prepare(
+      'INSERT INTO delivery_day_stock (id, delivery_day_id, product_id, product_name, allocated, sold, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    ).bind(v.id, v.deliveryDayId, v.productId, v.productName, v.allocated, v.sold, v.createdAt)),
+  ];
+
+  try {
+    await c.env.DB.batch(statements);
+  } catch (error) {
+    console.error('Failed to save stock allocations', { dayId, stockDayId, error });
+    return c.json({ error: 'Could not save stock allocations. Please try again.' }, 500);
+  }
+
+  return c.json({ ok: true, saved: values.length, stockDayId });
 });
 
 // ── Stock Pool Management ───────────────────────────────────────────────────
