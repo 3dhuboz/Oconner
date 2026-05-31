@@ -2,7 +2,6 @@
   "name": "the-butcher-online",
   "version": "0.0.1",
   "private": true,
-  "packageManager": "npm@11.9.0",
   "workspaces": [
     "apps/*",
     "packages/*",
