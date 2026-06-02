@@ -3,9 +3,15 @@ import Footer from '@/components/Footer';
 import type { DeliveryDay } from '@butcher/shared';
 import { api } from '@butcher/shared';
 import DeliveryCalendar from './DeliveryCalendar';
+import { pageMetadata } from '@/lib/siteMetadata';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
+export const metadata = pageMetadata({
+  title: 'Delivery Days',
+  description: "See upcoming O'Connor Agriculture delivery days and choose when your grass fed beef box arrives.",
+  path: '/delivery-days',
+});
 
 async function getDeliveryDays(): Promise<DeliveryDay[]> {
   try {

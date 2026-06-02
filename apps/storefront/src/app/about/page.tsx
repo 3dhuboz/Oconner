@@ -3,11 +3,13 @@ import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import Link from 'next/link';
 import { api } from '@butcher/shared';
+import { pageMetadata } from '@/lib/siteMetadata';
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: 'About Us',
   description: "Meet the O'Connor family — first generation farmers from the Boyne Valley, QLD, raising grass fed beef that's good for the land, the community, and you.",
-};
+  path: '/about',
+});
 
 export const runtime = 'edge';
 export const dynamic = 'force-dynamic';

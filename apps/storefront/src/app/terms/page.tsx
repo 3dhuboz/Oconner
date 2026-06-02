@@ -1,11 +1,13 @@
 import type { Metadata } from 'next';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
+import { pageMetadata } from '@/lib/siteMetadata';
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMetadata({
   title: 'Terms & Conditions',
   description: "Terms and conditions of sale for O'Connor Agriculture. Read before placing your order.",
-};
+  path: '/terms',
+});
 
 export const runtime = 'edge';
 
