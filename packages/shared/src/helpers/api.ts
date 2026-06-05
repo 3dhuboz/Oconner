@@ -184,6 +184,10 @@ export const api = {
     sendInvoice: (id: string) => api.post(`/api/orders/${id}/invoice`, {}),
     /** Cancel the most recent Square invoice for an order (only works if unpaid). */
     cancelInvoice: (id: string) => api.post(`/api/orders/${id}/invoice/cancel`, {}),
+    /** Create a Square payment link for an unpaid order. */
+    createPaymentLink: (id: string) => api.post<{ ok: boolean; paymentUrl: string; paymentLinkId?: string }>(`/api/orders/${id}/payment-link`, {}),
+    /** Ask the API to verify the latest Square payment/invoice and mark paid if settled. */
+    markPaid: (id: string) => api.post<{ ok: boolean; status?: string; matchStrategy?: string }>(`/api/orders/${id}/mark-paid`, {}),
   },
 
   deliveryDays: {

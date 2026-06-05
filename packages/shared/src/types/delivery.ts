@@ -1,4 +1,4 @@
-import type { Address, OrderItem } from './order';
+import type { Address, OrderItem, PaymentProvider, PaymentStatus } from './order';
 
 export type StopStatus = 'pending' | 'en_route' | 'arrived' | 'delivered' | 'failed' | 'skipped';
 export type RunStatus = 'pending' | 'in_progress' | 'completed';
@@ -63,4 +63,9 @@ export interface Stop {
   driverNote?: string;
   flagReason?: FlagReason;
   createdAt: number;
+  /** Populated by API from the linked order, when this stop has one. */
+  orderTotal?: number;
+  orderPaymentStatus?: PaymentStatus;
+  orderPaymentProvider?: PaymentProvider;
+  orderPaymentIntentId?: string | null;
 }

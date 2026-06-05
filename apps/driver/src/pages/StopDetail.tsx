@@ -2,8 +2,8 @@ import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '@butcher/shared';
 import type { Stop, StopStatus } from '@butcher/shared';
-import { ArrowLeft, MapPin, Phone, Navigation, CheckCircle, Camera, AlertTriangle, ChevronRight, Undo2, PackagePlus, Coffee } from 'lucide-react';
-import { formatWeight } from '@butcher/shared';
+import { ArrowLeft, MapPin, Phone, Navigation, CheckCircle, Camera, AlertTriangle, ChevronRight, Undo2, PackagePlus, Coffee, CreditCard, RefreshCw, ExternalLink } from 'lucide-react';
+import { formatCurrency, formatWeight } from '@butcher/shared';
 import { detectAddOns } from '../lib/addOns';
 import { hasRescueAccess, rescueApi } from '../lib/rescue';
 
@@ -17,6 +17,8 @@ export default function StopDetailPage() {
   const [note, setNote] = useState('');
   const [proofUrl, setProofUrl] = useState<string | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [paymentBusy, setPaymentBusy] = useState(false);
+  const [paymentMessage, setPaymentMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Surfaces transient errors from the network calls below. Without this, a
   // failed updateStatus / photo upload would silently optimistic-update the
@@ -66,6 +68,9 @@ export default function StopDetailPage() {
   const nextStop = getNextStop();
   const deliveredCount = allStops.filter((s) => s.status === 'delivered' || s.status === 'failed').length;
   const totalStops = allStops.length;
+  const paymentStatus = stop?.orderPaymentStatus;
+  const isPaid = paymentStatus === 'paid';
+  const canCollectPayment = Boolean(stop?.orderId && stop.orderTotal && !isPaid && !isRescueMode);
 
   const goToNextOrHome = () => {
     const next = getNextStop();
@@ -207,6 +212,45 @@ export default function StopDetailPage() {
     window.location.href = `tel:${stop.customerPhone}`;
   };
 
+  const refreshPaymentStatus = async () => {
+    if (!stop?.orderId) return;
+    setPaymentBusy(true);
+    setPaymentMessage(null);
+    try {
+      const result = await api.orders.markPaid(stop.orderId);
+      const freshStop = await api.get<Stop>(`/api/stops/${stop.id}`);
+      setStop(freshStop);
+      setAllStops((prev) => prev.map((s) => s.id === freshStop.id ? freshStop : s));
+      if (result.status === 'paid' || freshStop.orderPaymentStatus === 'paid') {
+        setPaymentMessage('Payment confirmed in Square and admin.');
+      } else {
+        setPaymentMessage('Square has not confirmed this payment yet.');
+      }
+    } catch (e) {
+      setPaymentMessage(errMsg(e));
+    } finally {
+      setPaymentBusy(false);
+    }
+  };
+
+  const collectPayment = async () => {
+    if (!stop?.orderId) return;
+    setPaymentBusy(true);
+    setPaymentMessage(null);
+    try {
+      const result = await api.orders.createPaymentLink(stop.orderId);
+      const freshStop = await api.get<Stop>(`/api/stops/${stop.id}`);
+      setStop(freshStop);
+      setAllStops((prev) => prev.map((s) => s.id === freshStop.id ? freshStop : s));
+      setPaymentMessage('Square opened. Come back here and tap Refresh payment once it is paid.');
+      window.open(result.paymentUrl, '_blank', 'noopener,noreferrer');
+    } catch (e) {
+      setPaymentMessage(errMsg(e));
+    } finally {
+      setPaymentBusy(false);
+    }
+  };
+
   if (!stop) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -328,6 +372,57 @@ export default function StopDetailPage() {
             ))}
           </div>
         </div>
+
+        {(stop.orderId || stop.orderTotal) && (
+          <div className={`rounded-xl border p-4 ${isPaid ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'}`}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 className={`font-semibold text-sm uppercase tracking-wide mb-1 ${isPaid ? 'text-green-700' : 'text-amber-800'}`}>Payment</h2>
+                <p className={`text-2xl font-bold ${isPaid ? 'text-green-900' : 'text-amber-950'}`}>
+                  {stop.orderTotal ? formatCurrency(stop.orderTotal) : 'Linked order'}
+                </p>
+                <p className={`text-sm mt-1 ${isPaid ? 'text-green-700' : 'text-amber-800'}`}>
+                  {isPaid ? 'Paid in Square/admin' : paymentStatus === 'awaiting_payment' ? 'Payment link sent - waiting for Square' : 'Unpaid - collect before leaving if needed'}
+                </p>
+                <p className="font-mono text-xs text-gray-500 mt-1">Order #{stop.orderId.slice(0, 8).toUpperCase()}</p>
+              </div>
+              <div className={`rounded-full p-2 ${isPaid ? 'bg-green-600 text-white' : 'bg-amber-100 text-amber-700'}`}>
+                {isPaid ? <CheckCircle className="h-5 w-5" /> : <CreditCard className="h-5 w-5" />}
+              </div>
+            </div>
+
+            {!isRescueMode && !isPaid && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-4">
+                <button
+                  onClick={collectPayment}
+                  disabled={paymentBusy || !canCollectPayment}
+                  className="w-full bg-brand text-white py-3 rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  Take payment
+                </button>
+                <button
+                  onClick={refreshPaymentStatus}
+                  disabled={paymentBusy}
+                  className="w-full bg-white border border-amber-300 text-amber-900 py-3 rounded-xl font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  <RefreshCw className={`h-4 w-4 ${paymentBusy ? 'animate-spin' : ''}`} />
+                  Refresh payment
+                </button>
+              </div>
+            )}
+
+            {isRescueMode && !isPaid && (
+              <p className="text-sm text-amber-800 mt-3">Payments are disabled in emergency mode. Use the normal driver login to collect through Square.</p>
+            )}
+
+            {paymentMessage && (
+              <p className={`text-sm mt-3 ${isPaid || paymentMessage.includes('confirmed') ? 'text-green-700' : 'text-amber-800'}`}>
+                {paymentMessage}
+              </p>
+            )}
+          </div>
+        )}
 
         <div className="bg-white rounded-xl border p-4 space-y-3">
           <h2 className="font-semibold text-sm text-gray-500 uppercase tracking-wide">Proof of Delivery</h2>

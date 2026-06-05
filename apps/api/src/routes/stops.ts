@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/d1';
-import { eq, asc, and, isNull, gt } from 'drizzle-orm';
+import { eq, asc, and, isNull, gt, inArray } from 'drizzle-orm';
 import { stops, orders, driverSessions, notifications } from '@butcher/db';
 import { notifyCustomer } from './push';
 import { sendSms } from '../lib/sms';
@@ -16,6 +16,33 @@ async function alreadySent(db: ReturnType<typeof drizzle>, orderId: string, type
 }
 
 const app = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
+
+function serializeStop(
+  stop: typeof stops.$inferSelect,
+  order?: typeof orders.$inferSelect | null,
+) {
+  return {
+    ...stop,
+    address: parseJson<Record<string, string>>(stop.address, {}),
+    items: parseJson<unknown[]>(stop.items, []),
+    orderTotal: order?.total,
+    orderPaymentStatus: order?.paymentStatus,
+    orderPaymentProvider: order?.paymentProvider,
+    orderPaymentIntentId: order?.paymentIntentId,
+  };
+}
+
+async function attachOrderPaymentDetails(
+  db: ReturnType<typeof drizzle>,
+  rows: Array<typeof stops.$inferSelect>,
+) {
+  const orderIds = [...new Set(rows.map((s) => s.orderId).filter((id): id is string => Boolean(id)))];
+  if (orderIds.length === 0) return rows.map((s) => serializeStop(s));
+
+  const orderRows = await db.select().from(orders).where(inArray(orders.id, orderIds));
+  const byId = new Map(orderRows.map((order) => [order.id, order]));
+  return rows.map((s) => serializeStop(s, s.orderId ? byId.get(s.orderId) : null));
+}
 
 app.get('/', async (c) => {
   const db = drizzle(c.env.DB);
@@ -34,14 +61,15 @@ app.get('/', async (c) => {
   const rows = await db.select().from(stops)
     .where(condition)
     .orderBy(asc(stops.sequence));
-  return c.json(rows.map((s) => ({ ...s, address: parseJson<Record<string, string>>(s.address, {}), items: parseJson<unknown[]>(s.items, []) })));
+  return c.json(await attachOrderPaymentDetails(db, rows));
 });
 
 app.get('/:id', async (c) => {
   const db = drizzle(c.env.DB);
   const [stop] = await db.select().from(stops).where(eq(stops.id, c.req.param('id'))).limit(1);
   if (!stop) return c.json({ error: 'Not found' }, 404);
-  return c.json({ ...stop, address: parseJson<Record<string, string>>(stop.address, {}), items: parseJson<unknown[]>(stop.items, []) });
+  const [serialized] = await attachOrderPaymentDetails(db, [stop]);
+  return c.json(serialized);
 });
 
 app.post('/', async (c) => {
