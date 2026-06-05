@@ -15,11 +15,14 @@ interface Stats {
   todayRevenue: number;
   thisWeekOrders: number;
   thisWeekRevenue: number;
+  awaitingPayment: number;
+  awaitingPaymentRevenue: number;
 }
 
 export default function DashboardPage() {
-  const [stats, setStats] = useState<Stats>({ totalOrders: 0, totalRevenue: 0, pendingOrders: 0, outForDelivery: 0, todayOrders: 0, todayRevenue: 0, thisWeekOrders: 0, thisWeekRevenue: 0 });
+  const [stats, setStats] = useState<Stats>({ totalOrders: 0, totalRevenue: 0, pendingOrders: 0, outForDelivery: 0, todayOrders: 0, todayRevenue: 0, thisWeekOrders: 0, thisWeekRevenue: 0, awaitingPayment: 0, awaitingPaymentRevenue: 0 });
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
+  const [awaitingOrders, setAwaitingOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<DataLoadErrorState | null>(null);
 
@@ -40,6 +43,7 @@ export default function DashboardPage() {
       const weekFiltered = paidOrders.filter((o) => o.createdAt >= weekMs);
       const pending = paidOrders.filter((o) => ['confirmed', 'preparing', 'packed'].includes(o.status));
       const outForDelivery = paidOrders.filter((o) => o.status === 'out_for_delivery');
+      const awaitingPayment = allOrders.filter((o) => ['pending_payment', 'awaiting_payment', 'invoice_sent'].includes((o as any).paymentStatus ?? '') && (o as any).paymentStatus !== 'paid');
 
       setStats({
         totalOrders: paidOrders.length,
@@ -50,8 +54,11 @@ export default function DashboardPage() {
         todayRevenue: todayFiltered.reduce((s, o) => s + (o.total ?? 0), 0),
         thisWeekOrders: weekFiltered.length,
         thisWeekRevenue: weekFiltered.reduce((s, o) => s + (o.total ?? 0), 0),
+        awaitingPayment: awaitingPayment.length,
+        awaitingPaymentRevenue: awaitingPayment.reduce((s, o) => s + (o.total ?? 0), 0),
       });
       setRecentOrders(paidOrders.slice(0, 10));
+      setAwaitingOrders(awaitingPayment.slice(0, 5));
     } catch (e) {
       setError(toDataLoadError(e, "Couldn't load dashboard data"));
     } finally {
@@ -66,6 +73,7 @@ export default function DashboardPage() {
     { label: 'Total Revenue', value: formatCurrency(stats.totalRevenue), icon: DollarSign, color: 'bg-green-50 text-green-600' },
     { label: 'Pending Orders', value: stats.pendingOrders, icon: Package, color: 'bg-yellow-50 text-yellow-600' },
     { label: 'Out for Delivery', value: stats.outForDelivery, icon: Truck, color: 'bg-brand-light text-brand' },
+    { label: 'Awaiting Payment', value: stats.awaitingPayment, icon: Clock, color: 'bg-amber-50 text-amber-600' },
   ];
 
   const STATUS_COLORS: Record<string, string> = {
@@ -130,6 +138,29 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {awaitingOrders.length > 0 && !loading && !error && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl mb-6">
+          <div className="p-5 border-b border-amber-200 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="font-semibold text-amber-950">Awaiting Square Payment</h2>
+              <p className="text-xs text-amber-700 mt-1">{formatCurrency(stats.awaitingPaymentRevenue)} in checkout attempts not yet confirmed by Square</p>
+            </div>
+            <Link to="/orders" className="text-sm text-amber-800 hover:underline flex-shrink-0">View all</Link>
+          </div>
+          <div className="divide-y divide-amber-200">
+            {awaitingOrders.map((order) => (
+              <Link key={order.id} to={`/orders/${order.id}`} className="px-5 py-3 flex items-center justify-between hover:bg-amber-100/50 block">
+                <div>
+                  <p className="font-medium text-sm text-amber-950">#{(order.id ?? '').slice(-8).toUpperCase()}</p>
+                  <p className="text-xs text-amber-800">{order.customerName} · {((order as any).paymentStatus ?? 'awaiting payment').replace(/_/g, ' ')}</p>
+                </div>
+                <p className="font-medium text-sm text-amber-950">{formatCurrency(order.total)}</p>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-xl border">
         <div className="p-5 border-b flex items-center justify-between">

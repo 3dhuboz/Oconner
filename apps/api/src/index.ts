@@ -594,6 +594,7 @@ app.post('/api/orders/:id/payment-link', async (c) => {
 
     await db.update(ordersTable).set({
       paymentStatus: 'awaiting_payment',
+      paymentProvider: 'square',
       internalNotes: `${order.internalNotes ?? ''}\nSquare payment link: ${data.payment_link?.id ?? 'unknown'}`.trim(),
       updatedAt: Date.now(),
     }).where(eq(ordersTable.id, orderId));

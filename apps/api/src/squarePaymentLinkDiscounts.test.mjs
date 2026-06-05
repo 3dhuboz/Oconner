@@ -10,6 +10,7 @@ test('public storefront Square payment links carry stored promo discounts into S
   assert.match(indexSource, /discounts:\s*promoDiscount > 0 \? \[/);
   assert.match(indexSource, /type:\s*'FIXED_AMOUNT'/);
   assert.match(indexSource, /amount_money:\s*\{ amount: promoDiscount, currency: 'AUD' \}/);
+  assert.match(indexSource, /paymentProvider:\s*'square'/);
 });
 
 test('authenticated Square payment links also carry stored promo discounts into Square', () => {
@@ -17,4 +18,5 @@ test('authenticated Square payment links also carry stored promo discounts into 
   assert.match(ordersRouteSource, /discounts:\s*promoDiscount > 0 \? \[/);
   assert.match(ordersRouteSource, /type:\s*'FIXED_AMOUNT'/);
   assert.match(ordersRouteSource, /amount_money:\s*\{ amount: promoDiscount, currency: 'AUD' \}/);
+  assert.match(ordersRouteSource, /paymentProvider:\s*'square'/);
 });
