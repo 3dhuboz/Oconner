@@ -547,6 +547,8 @@ app.post('/api/orders/:id/payment-link', async (c) => {
   if (!order) return c.json({ error: 'Order not found' }, 404);
 
   const items = JSON.parse(order.items) as Array<{ productName: string; quantity?: number; lineTotal: number }>;
+  const promoDiscount = Math.max(0, order.promoDiscount ?? 0);
+  const promoCode = (order.promoCode ?? '').trim();
 
   try {
     const squareLineItems = items.map((i: any) => ({
@@ -564,7 +566,18 @@ app.post('/api/orders/:id/payment-link', async (c) => {
       headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json', 'Square-Version': '2024-01-18' },
       body: JSON.stringify({
         idempotency_key: crypto.randomUUID(),
-        order: { location_id: locationId, line_items: squareLineItems, metadata: { orderId } },
+        order: {
+          location_id: locationId,
+          line_items: squareLineItems,
+          discounts: promoDiscount > 0 ? [{
+            uid: 'promo_discount',
+            name: promoCode ? `Promo ${promoCode}` : 'Promo discount',
+            type: 'FIXED_AMOUNT',
+            scope: 'ORDER',
+            amount_money: { amount: promoDiscount, currency: 'AUD' },
+          }] : undefined,
+          metadata: { orderId, promoCode },
+        },
         checkout_options: {
           redirect_url: `${storefrontUrl}/checkout/success?orderId=${orderId}`,
           merchant_support_email: 'orders@oconnoragriculture.com.au',
