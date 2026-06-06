@@ -29,6 +29,8 @@ FROM_EMAIL = "O'Connor Agriculture <orders@oconnoragriculture.com.au>"
 # ZERNIO_API_KEY
 # DRIVER_RESCUE_PIN
 # STAFF_RESCUE_PIN
+# SQUARE_WEBHOOK_SIGNATURE_KEY
+# SQUARE_WEBHOOK_NOTIFICATION_URL
 
 [ai]
 binding = "AI"

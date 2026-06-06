@@ -19,6 +19,8 @@ export interface Env {
   FB_PAGE_ACCESS_TOKEN: string;
   SQUARE_ACCESS_TOKEN: string;
   SQUARE_LOCATION_ID: string;
+  SQUARE_WEBHOOK_SIGNATURE_KEY?: string;
+  SQUARE_WEBHOOK_NOTIFICATION_URL?: string;
   CLICKSEND_USERNAME: string;
   CLICKSEND_API_KEY: string;
   CLICKSEND_FROM: string;

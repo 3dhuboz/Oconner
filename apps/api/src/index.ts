@@ -4,7 +4,7 @@ import type { Env, AuthUser } from './types';
 import { requireAuth, requireRole, verifyClerkToken } from './middleware/auth';
 import { drizzle } from 'drizzle-orm/d1';
 import { eq, desc, asc, and, gte, sql, or } from 'drizzle-orm';
-import { orders as ordersTable, customers as customersTable, products as productsTable, deliveryDays as deliveryDaysTable, subscriptions as subscriptionsTable } from '@butcher/db';
+import { orders as ordersTable, customers as customersTable, products as productsTable, deliveryDays as deliveryDaysTable, subscriptions as subscriptionsTable, processedWebhooks } from '@butcher/db';
 import { deductStock, getStockDayId, reserveDayStock } from './lib/stock';
 import ordersRouter from './routes/orders';
 import productsRouter from './routes/products';
@@ -36,6 +36,8 @@ interface SquarePaymentMatch {
   paymentId: string;
   amountCents: number;
   note: string;
+  matchStrategy: 'payment_note' | 'square_order_metadata';
+  squareOrderId?: string;
 }
 
 interface SquareInvoiceMatch {
@@ -46,6 +48,25 @@ interface SquareInvoiceMatch {
 
 function resolvePaidOrderStatus(order: OrderRow): string {
   return order.status === 'pending_payment' ? 'confirmed' : order.status;
+}
+
+async function squareGet(env: Env, path: string): Promise<any> {
+  if (!env.SQUARE_ACCESS_TOKEN) throw new Error('Square not configured');
+  const res = await fetch(`${SQUARE_API}${path}`, {
+    headers: {
+      Authorization: `Bearer ${env.SQUARE_ACCESS_TOKEN}`,
+      'Square-Version': '2024-01-18',
+    },
+  });
+  const data = await res.json() as any;
+  if (data.errors) throw new Error(`Square lookup failed: ${JSON.stringify(data.errors).slice(0, 500)}`);
+  return data;
+}
+
+async function squareOrderMetadataMatchesOrder(squareOrderId: string | undefined, orderId: string, env: Env): Promise<boolean> {
+  if (!squareOrderId) return false;
+  const data = await squareGet(env, `/orders/${squareOrderId}`);
+  return data.order?.metadata?.orderId === orderId;
 }
 
 async function findCompletedSquarePaymentByOrderReference(
@@ -84,6 +105,7 @@ async function findCompletedSquarePaymentByOrderReference(
         id?: string;
         status?: string;
         note?: string;
+        order_id?: string;
         amount_money?: { amount?: number };
       }>;
       cursor?: string;
@@ -94,13 +116,14 @@ async function findCompletedSquarePaymentByOrderReference(
     for (const payment of data.payments ?? []) {
       const note = payment.note ?? '';
       const amountCents = payment.amount_money?.amount ?? 0;
-      if (
-        payment.id &&
-        payment.status === 'COMPLETED' &&
-        note.toUpperCase().includes(`ORDER #${orderRef}`) &&
-        amountCents >= order.total
-      ) {
-        return { paymentId: payment.id, amountCents, note };
+      if (!payment.id || payment.status !== 'COMPLETED' || amountCents < order.total) continue;
+
+      if (note.toUpperCase().includes(`ORDER #${orderRef}`)) {
+        return { paymentId: payment.id, amountCents, note, matchStrategy: 'payment_note', squareOrderId: payment.order_id };
+      }
+
+      if (await squareOrderMetadataMatchesOrder(payment.order_id, order.id, env)) {
+        return { paymentId: payment.id, amountCents, note, matchStrategy: 'square_order_metadata', squareOrderId: payment.order_id };
       }
     }
 
@@ -124,11 +147,66 @@ async function confirmOrderFromSquarePaymentMatch(
     status: resolvePaidOrderStatus(order),
     paymentIntentId: match.paymentId,
     paymentProvider: 'square',
-    internalNotes: `${order.internalNotes ?? ''}\nSquare payment confirmed: payment=${match.paymentId} amount=${match.amountCents}c matched_by=payment_note`.trim(),
+    internalNotes: `${order.internalNotes ?? ''}\nSquare payment confirmed: payment=${match.paymentId} amount=${match.amountCents}c matched_by=${match.matchStrategy}`.trim(),
     updatedAt: Date.now(),
   }).where(eq(ordersTable.id, order.id));
 
   return match;
+}
+
+async function confirmOrderFromSquarePayment(
+  db: ReturnType<typeof drizzle>,
+  payment: {
+    id?: string;
+    status?: string;
+    note?: string;
+    order_id?: string;
+    amount_money?: { amount?: number };
+  },
+  env: Env,
+): Promise<{ orderId: string; paymentId: string; matchStrategy: string } | null> {
+  if (!payment.id || payment.status !== 'COMPLETED') return null;
+  const amountCents = payment.amount_money?.amount ?? 0;
+  let order: OrderRow | null = null;
+  let matchStrategy = '';
+
+  if (payment.order_id) {
+    const squareOrder = await squareGet(env, `/orders/${payment.order_id}`);
+    const orderId = squareOrder.order?.metadata?.orderId;
+    if (orderId) {
+      const [row] = await db.select().from(ordersTable).where(eq(ordersTable.id, orderId)).limit(1);
+      if (row) {
+        order = row;
+        matchStrategy = 'square_order_metadata';
+      }
+    }
+  }
+
+  if (!order) {
+    const ref = payment.note?.toUpperCase().match(/ORDER #([A-Z0-9]{8})/)?.[1];
+    if (ref) {
+      const [row] = await db.select().from(ordersTable)
+        .where(sql`upper(substr(${ordersTable.id}, 1, 8)) = ${ref}`)
+        .limit(1);
+      if (row) {
+        order = row;
+        matchStrategy = 'payment_note';
+      }
+    }
+  }
+
+  if (!order || order.paymentStatus === 'paid' || amountCents < order.total) return null;
+
+  await db.update(ordersTable).set({
+    paymentStatus: 'paid',
+    status: resolvePaidOrderStatus(order),
+    paymentIntentId: payment.id,
+    paymentProvider: 'square',
+    internalNotes: `${order.internalNotes ?? ''}\nSquare webhook confirmed: payment=${payment.id} amount=${amountCents}c matched_by=${matchStrategy}`.trim(),
+    updatedAt: Date.now(),
+  }).where(eq(ordersTable.id, order.id));
+
+  return { orderId: order.id, paymentId: payment.id, matchStrategy };
 }
 
 function getLatestSquareInvoiceId(internalNotes: string | null): string | null {
@@ -688,7 +766,7 @@ app.post('/api/orders/:id/mark-paid', async (c) => {
       // completed payments by the order reference before asking the client to retry.
       const match = await confirmOrderFromSquarePaymentMatch(db, order, c.env);
       if (match) {
-        return c.json({ ok: true, status: 'paid', matchStrategy: 'payment_note', paymentId: match.paymentId });
+        return c.json({ ok: true, status: 'paid', matchStrategy: match.matchStrategy, paymentId: match.paymentId });
       }
       return c.json({ ok: true, status: 'pending', squareState: squareOrder.state });
     }
@@ -720,6 +798,74 @@ app.post('/api/orders/:id/mark-paid', async (c) => {
   }
 });
 
+async function base64HmacSha256(key: string, data: string): Promise<string> {
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(key),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const signature = await crypto.subtle.sign('HMAC', cryptoKey, new TextEncoder().encode(data));
+  const bytes = new Uint8Array(signature);
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+function timingSafeEqual(a: string, b: string): boolean {
+  const left = new TextEncoder().encode(a);
+  const right = new TextEncoder().encode(b);
+  let diff = left.length ^ right.length;
+  const max = Math.max(left.length, right.length);
+  for (let i = 0; i < max; i++) diff |= (left[i] ?? 0) ^ (right[i] ?? 0);
+  return diff === 0;
+}
+
+async function verifySquareWebhookSignature(c: any, rawBody: string): Promise<boolean> {
+  const signatureKey = c.env.SQUARE_WEBHOOK_SIGNATURE_KEY;
+  if (!signatureKey) return false;
+  const signature = c.req.header('x-square-hmacsha256-signature') ?? '';
+  const notificationUrl = c.env.SQUARE_WEBHOOK_NOTIFICATION_URL ?? new URL(c.req.url).toString();
+  const expected = await base64HmacSha256(signatureKey, `${notificationUrl}${rawBody}`);
+  return timingSafeEqual(expected, signature);
+}
+
+// Square webhooks are the reliable source of truth for hosted checkout links.
+// The browser redirect can be skipped by Facebook/in-app browsers, so payment
+// updates must also advance the local order server-to-server.
+app.post('/api/square/webhook', async (c) => {
+  const rawBody = await c.req.text();
+  if (!await verifySquareWebhookSignature(c, rawBody)) {
+    return c.json({ error: 'Invalid Square signature' }, 403);
+  }
+
+  const event = JSON.parse(rawBody) as {
+    event_id?: string;
+    type?: string;
+    data?: { object?: { payment?: any } };
+  };
+  const eventId = event.event_id;
+  if (!eventId) return c.json({ error: 'Missing event id' }, 400);
+
+  const db = drizzle(c.env.DB);
+  try {
+    await db.insert(processedWebhooks).values({ id: eventId, source: 'square', receivedAt: Date.now() });
+  } catch {
+    return c.json({ ok: true, duplicate: true });
+  }
+
+  if (event.type !== 'payment.created' && event.type !== 'payment.updated') {
+    return c.json({ ok: true, ignored: event.type });
+  }
+
+  const payment = event.data?.object?.payment;
+  if (!payment) return c.json({ ok: true, ignored: 'missing_payment' });
+
+  const match = await confirmOrderFromSquarePayment(db, payment, c.env);
+  return c.json({ ok: true, matched: Boolean(match), ...match });
+});
+
 // ── Public: read single config key (storefront/about page) ──
 app.get('/api/config/:key', async (c) => {
   const { drizzle } = await import('drizzle-orm/d1');
@@ -734,6 +880,11 @@ app.get('/api/config/:key', async (c) => {
 app.route('/api/driver-rescue', driverRescueRouter);
 app.route('/api/admin-rescue', adminRescueRouter);
 app.use('/api/*', requireAuth);
+
+app.post('/api/square/reconcile', requireRole('admin'), async (c) => {
+  const reconciled = await reconcileOutstandingSquarePayments(c.env);
+  return c.json({ ok: true, reconciled });
+});
 
 app.route('/api/orders', ordersRouter);
 app.route('/api/products', productsRouter);

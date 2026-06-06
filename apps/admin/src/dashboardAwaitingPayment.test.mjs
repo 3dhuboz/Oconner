@@ -10,4 +10,7 @@ test('dashboard separates awaiting Square payment attempts from paid order stats
   assert.match(source, /Awaiting Square Payment/);
   assert.match(source, /not yet confirmed by Square/);
   assert.match(source, /paymentStatus/);
+  assert.match(source, /Sync Square/);
+  assert.match(source, /api\.post\('\/api\/square\/reconcile'/);
+  assert.match(source, /setSyncingSquare/);
 });

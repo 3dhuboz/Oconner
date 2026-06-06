@@ -20,7 +20,7 @@ test('payment lookup searches near the order date instead of paging through ever
 test('Square payment reconciliation records the Square payment id on the local order', () => {
   assert.match(source, /paymentIntentId:\s*match\.paymentId/);
   assert.match(source, /paymentProvider:\s*'square'/);
-  assert.match(source, /matched_by=payment_note/);
+  assert.match(source, /matched_by=\$\{match\.matchStrategy\}/);
 });
 
 test('payment reconciliation preserves existing delivery workflow status', () => {
@@ -44,4 +44,27 @@ test('Square invoice payments can be reconciled from the recorded invoice id', (
   assert.match(source, /invoice\.status !== 'PAID'/);
   assert.match(source, /\/invoices\/\$\{invoiceId\}/);
   assert.match(source, /matched_by=invoice_status/);
+});
+
+test('Square payment links can reconcile through Square order metadata when payment notes are missing', () => {
+  assert.match(source, /metadata:\s*\{\s*orderId,\s*promoCode\s*\}/);
+  assert.match(source, /squareOrderMetadataMatchesOrder/);
+  assert.match(source, /data\.order\?\.metadata\?\.orderId === orderId/);
+  assert.match(source, /matchStrategy:\s*'square_order_metadata'/);
+});
+
+test('Square webhooks can mark paid orders without relying on browser redirects', () => {
+  assert.match(source, /app\.post\('\/api\/square\/webhook'/);
+  assert.match(source, /verifySquareWebhookSignature/);
+  assert.match(source, /x-square-hmacsha256-signature/);
+  assert.match(source, /processedWebhooks/);
+  assert.match(source, /payment\.created/);
+  assert.match(source, /payment\.updated/);
+  assert.match(source, /confirmOrderFromSquarePayment\(db,\s*payment,\s*c\.env\)/);
+});
+
+test('admins can trigger a Square reconciliation without waiting for the daily cron', () => {
+  assert.match(source, /app\.post\('\/api\/square\/reconcile'/);
+  assert.match(source, /requireRole\('admin'\)/);
+  assert.match(source, /reconcileOutstandingSquarePayments\(c\.env\)/);
 });

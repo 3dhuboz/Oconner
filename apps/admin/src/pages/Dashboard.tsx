@@ -24,6 +24,7 @@ export default function DashboardPage() {
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
   const [awaitingOrders, setAwaitingOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncingSquare, setSyncingSquare] = useState(false);
   const [error, setError] = useState<DataLoadErrorState | null>(null);
 
   const load = async () => {
@@ -67,6 +68,16 @@ export default function DashboardPage() {
   };
 
   useEffect(() => { load(); }, []);
+
+  const syncSquare = async () => {
+    setSyncingSquare(true);
+    try {
+      await api.post('/api/square/reconcile', {});
+      await load();
+    } finally {
+      setSyncingSquare(false);
+    }
+  };
 
   const cards = [
     { label: 'Total Orders', value: stats.totalOrders, icon: ShoppingBag, color: 'bg-blue-50 text-blue-600' },
@@ -146,7 +157,17 @@ export default function DashboardPage() {
               <h2 className="font-semibold text-amber-950">Awaiting Square Payment</h2>
               <p className="text-xs text-amber-700 mt-1">{formatCurrency(stats.awaitingPaymentRevenue)} in checkout attempts not yet confirmed by Square</p>
             </div>
-            <Link to="/orders" className="text-sm text-amber-800 hover:underline flex-shrink-0">View all</Link>
+            <div className="flex items-center gap-3 flex-shrink-0">
+              <button
+                type="button"
+                onClick={syncSquare}
+                disabled={syncingSquare}
+                className="text-sm font-medium text-amber-900 hover:underline disabled:opacity-60"
+              >
+                {syncingSquare ? 'Syncing...' : 'Sync Square'}
+              </button>
+              <Link to="/orders" className="text-sm text-amber-800 hover:underline">View all</Link>
+            </div>
           </div>
           <div className="divide-y divide-amber-200">
             {awaitingOrders.map((order) => (
