@@ -15,4 +15,9 @@ test('admin settings can edit the global site promo banner', () => {
   assert.match(source, /textColor/);
   assert.match(source, /type="color"/);
   assert.match(source, /colorPickerValue/);
+  assert.match(source, /scheduleEnabled/);
+  assert.match(source, /startsAt/);
+  assert.match(source, /endsAt/);
+  assert.match(source, /type="datetime-local"/);
+  assert.match(source, /Schedule banner/);
 });

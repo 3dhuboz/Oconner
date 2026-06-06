@@ -11,6 +11,9 @@ interface AnnouncementBannerConfig {
   linkLabel?: string;
   backgroundColor?: string;
   textColor?: string;
+  scheduleEnabled?: boolean;
+  startsAt?: string;
+  endsAt?: string;
 }
 
 const DEFAULT_BANNER: AnnouncementBannerConfig = {
@@ -20,10 +23,30 @@ const DEFAULT_BANNER: AnnouncementBannerConfig = {
   linkLabel: '',
   backgroundColor: '#4f7f35',
   textColor: '#ffffff',
+  scheduleEnabled: false,
+  startsAt: '',
+  endsAt: '',
 };
 
 function isExternalUrl(url: string) {
   return /^https?:\/\//i.test(url);
+}
+
+function parseScheduleDate(value?: string) {
+  if (!value?.trim()) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function isWithinSchedule(banner: AnnouncementBannerConfig) {
+  if (!banner.scheduleEnabled) return true;
+  const now = new Date();
+  const startsAt = parseScheduleDate(banner.startsAt);
+  const endsAt = parseScheduleDate(banner.endsAt);
+
+  if (startsAt && now < startsAt) return false;
+  if (endsAt && now > endsAt) return false;
+  return true;
 }
 
 export default function AnnouncementBanner() {
@@ -40,7 +63,7 @@ export default function AnnouncementBanner() {
     return () => { cancelled = true; };
   }, []);
 
-  if (!banner.enabled || !banner.text.trim()) return null;
+  if (!banner.enabled || !banner.text.trim() || !isWithinSchedule(banner)) return null;
 
   const content = (
     <span className="inline-flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5">

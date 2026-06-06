@@ -46,6 +46,9 @@ interface AnnouncementBannerConfig {
   linkLabel: string;
   backgroundColor: string;
   textColor: string;
+  scheduleEnabled: boolean;
+  startsAt: string;
+  endsAt: string;
 }
 
 interface StorefrontConfig {
@@ -107,6 +110,9 @@ const ANNOUNCEMENT_DEFAULTS: AnnouncementBannerConfig = {
   linkLabel: 'Shop now',
   backgroundColor: '#4f7f35',
   textColor: '#ffffff',
+  scheduleEnabled: false,
+  startsAt: '',
+  endsAt: '',
 };
 
 const colorPickerValue = (value: string, fallback: string) =>
@@ -502,6 +508,37 @@ export default function SettingsPage() {
             </div>
           </Field>
         </div>
+        <Field label="Schedule banner" hint="Optional. Leave this off for an always-on banner.">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={announcementBanner.scheduleEnabled}
+              onChange={(e) => setAnnouncement('scheduleEnabled', e.target.checked)}
+              className="accent-brand w-4 h-4"
+            />
+            <span className="text-sm text-gray-700">Only show this banner between selected dates and times</span>
+          </label>
+        </Field>
+        {announcementBanner.scheduleEnabled && (
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Starts showing" hint="The banner will stay hidden until this date and time.">
+              <input
+                type="datetime-local"
+                className={inputCls}
+                value={announcementBanner.startsAt}
+                onChange={(e) => setAnnouncement('startsAt', e.target.value)}
+              />
+            </Field>
+            <Field label="Stops showing" hint="Optional. Leave blank if it should stay on after it starts.">
+              <input
+                type="datetime-local"
+                className={inputCls}
+                value={announcementBanner.endsAt}
+                onChange={(e) => setAnnouncement('endsAt', e.target.value)}
+              />
+            </Field>
+          </div>
+        )}
         <div
           className="rounded-lg text-center text-sm font-bold px-4 py-2"
           style={{ backgroundColor: announcementBanner.backgroundColor, color: announcementBanner.textColor }}
@@ -509,6 +546,11 @@ export default function SettingsPage() {
           {announcementBanner.text || 'Banner preview'}
           {announcementBanner.linkLabel && <span className="ml-2 underline underline-offset-2">{announcementBanner.linkLabel}</span>}
         </div>
+        {announcementBanner.scheduleEnabled && (
+          <p className="text-xs text-gray-500">
+            Schedule: {announcementBanner.startsAt || 'now'} to {announcementBanner.endsAt || 'no end date'}
+          </p>
+        )}
       </Section>
 
       <Section title="Hero Section" icon={Type}>

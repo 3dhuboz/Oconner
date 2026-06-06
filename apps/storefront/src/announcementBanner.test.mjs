@@ -14,4 +14,9 @@ test('storefront renders editable announcement banner globally', () => {
   assert.match(bannerSource, /backgroundColor/);
   assert.match(bannerSource, /textColor/);
   assert.match(bannerSource, /style=\{style\}/);
+  assert.match(bannerSource, /scheduleEnabled/);
+  assert.match(bannerSource, /startsAt/);
+  assert.match(bannerSource, /endsAt/);
+  assert.match(bannerSource, /isWithinSchedule/);
+  assert.match(bannerSource, /parseScheduleDate/);
 });
