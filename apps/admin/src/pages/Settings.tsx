@@ -39,6 +39,13 @@ interface TickerConfig {
   facebookPageUrl?: string;
 }
 
+interface AnnouncementBannerConfig {
+  enabled: boolean;
+  text: string;
+  linkUrl: string;
+  linkLabel: string;
+}
+
 interface StorefrontConfig {
   hero: {
     badge: string;
@@ -89,6 +96,13 @@ const EMAIL_DEFAULTS: EmailConfig = {
   smtpPort: '587',
   smtpUser: '',
   smtpPass: '',
+};
+
+const ANNOUNCEMENT_DEFAULTS: AnnouncementBannerConfig = {
+  enabled: true,
+  text: '15% off store wide - use code TWINS15',
+  linkUrl: '/shop',
+  linkLabel: 'Shop now',
 };
 
 const DEFAULTS: StorefrontConfig = {
@@ -237,6 +251,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
 
   const [ticker, setTicker] = useState<TickerConfig>({ enabled: true, items: [], facebookPageUrl: 'https://www.facebook.com/profile.php?id=61574996320860' });
+  const [announcementBanner, setAnnouncementBanner] = useState<AnnouncementBannerConfig>(ANNOUNCEMENT_DEFAULTS);
 
   const [pushStats, setPushStats] = useState<{ subscribers: number } | null>(null);
   const [pushForm, setPushForm] = useState({ title: "O'Connor — Update", body: '', url: '' });
@@ -294,6 +309,7 @@ export default function SettingsPage() {
         if (data?.payment) setPayment({ ...PAYMENT_DEFAULTS, ...data.payment });
         if (data?.email) setEmail({ ...EMAIL_DEFAULTS, ...data.email });
         if (data?.ticker) setTicker({ enabled: true, items: [], facebookPageUrl: 'https://www.facebook.com/profile.php?id=61574996320860', ...data.ticker });
+        if (data?.announcementBanner) setAnnouncementBanner({ ...ANNOUNCEMENT_DEFAULTS, ...data.announcementBanner });
         if (data?.about) setAbout((prev) => ({ ...prev, ...data.about }));
         if (data?.rewards) setRewards((prev) => ({ ...prev, ...data.rewards }));
         if (data?.subscriptionFrequencies) setSubscriptionFrequencies(data.subscriptionFrequencies);
@@ -331,6 +347,8 @@ export default function SettingsPage() {
     setPayment((p) => ({ ...p, [k]: v }));
   const setEmailField = <K extends keyof EmailConfig>(k: K, v: EmailConfig[K]) =>
     setEmail((e) => ({ ...e, [k]: v }));
+  const setAnnouncement = <K extends keyof AnnouncementBannerConfig>(k: K, v: AnnouncementBannerConfig[K]) =>
+    setAnnouncementBanner((a) => ({ ...a, [k]: v }));
 
   const setHero = (key: keyof StorefrontConfig['hero'], val: string) =>
     setConfig((c) => ({ ...c, hero: { ...c.hero, [key]: val } }));
@@ -354,7 +372,7 @@ export default function SettingsPage() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await api.config.update({ storefront: config, payment, email, ticker, about, rewards, subscriptionFrequencies, reviews });
+      await api.config.update({ storefront: config, payment, email, ticker, announcementBanner, about, rewards, subscriptionFrequencies, reviews });
       toast('Settings saved — storefront updated immediately');
     } catch (e) {
       console.error('Save failed:', e);
@@ -404,6 +422,50 @@ export default function SettingsPage() {
           </button>
         </div>
       </div>
+
+      <Section title="Site Promo Banner" icon={Bell}>
+        <Field label="Show banner" hint="Displays a slim announcement across the top of every public website page.">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={announcementBanner.enabled}
+              onChange={(e) => setAnnouncement('enabled', e.target.checked)}
+              className="accent-brand w-4 h-4"
+            />
+            <span className="text-sm text-gray-700">Banner is active</span>
+          </label>
+        </Field>
+        <Field label="Banner message" hint="Use this for promos, delivery notices, cutoff reminders, or urgent updates.">
+          <input
+            className={inputCls}
+            value={announcementBanner.text}
+            onChange={(e) => setAnnouncement('text', e.target.value)}
+            placeholder="15% off store wide - use code TWINS15"
+          />
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Link URL" hint="Optional. Use /shop, /cart, or a full URL.">
+            <input
+              className={inputCls}
+              value={announcementBanner.linkUrl}
+              onChange={(e) => setAnnouncement('linkUrl', e.target.value)}
+              placeholder="/shop"
+            />
+          </Field>
+          <Field label="Link label" hint="Optional short call to action.">
+            <input
+              className={inputCls}
+              value={announcementBanner.linkLabel}
+              onChange={(e) => setAnnouncement('linkLabel', e.target.value)}
+              placeholder="Shop now"
+            />
+          </Field>
+        </div>
+        <div className="rounded-lg bg-accent text-white text-center text-sm font-bold px-4 py-2">
+          {announcementBanner.text || 'Banner preview'}
+          {announcementBanner.linkLabel && <span className="ml-2 underline underline-offset-2">{announcementBanner.linkLabel}</span>}
+        </div>
+      </Section>
 
       <Section title="Hero Section" icon={Type}>
         <Field label="Badge text (small line above headline)">

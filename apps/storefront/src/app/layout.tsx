@@ -4,6 +4,7 @@ import './globals.css';
 import ChatWidget from '@/components/ChatWidget';
 import ClerkTokenProvider from '@/components/ClerkTokenProvider';
 import InstallPrompt from '@/components/InstallPrompt';
+import AnnouncementBanner from '@/components/AnnouncementBanner';
 import Toaster from '@/components/Toaster';
 import { defaultDescription, defaultShareImage, siteName, siteUrl } from '@/lib/siteMetadata';
 
@@ -45,6 +46,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <html lang="en">
         <body className="min-h-screen flex flex-col">
           <ClerkTokenProvider />
+          <AnnouncementBanner />
           {children}
           <ChatWidget />
           <InstallPrompt />
