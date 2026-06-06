@@ -4,13 +4,12 @@ import { test } from 'node:test';
 
 const source = readFileSync(new URL('./pages/Dashboard.tsx', import.meta.url), 'utf8');
 
-test('dashboard separates awaiting Square payment attempts from paid order stats', () => {
-  assert.match(source, /awaitingPayment/);
-  assert.match(source, /setAwaitingOrders\(awaitingPayment\.slice\(0,\s*5\)\)/);
-  assert.match(source, /Awaiting Square Payment/);
-  assert.match(source, /not yet confirmed by Square/);
-  assert.match(source, /paymentStatus/);
-  assert.match(source, /Sync Square/);
-  assert.match(source, /api\.post\('\/api\/square\/reconcile'/);
-  assert.match(source, /setSyncingSquare/);
+test('dashboard keeps unpaid Square checkout attempts out of owner-facing stats', () => {
+  assert.match(source, /const paidOrders = allOrders\.filter/);
+  assert.match(source, /paymentStatus === 'paid'/);
+  assert.doesNotMatch(source, /Awaiting Square Payment/);
+  assert.doesNotMatch(source, /not yet confirmed by Square/);
+  assert.doesNotMatch(source, /Sync Square/);
+  assert.doesNotMatch(source, /awaitingPayment/);
+  assert.doesNotMatch(source, /setSyncingSquare/);
 });

@@ -66,5 +66,14 @@ test('Square webhooks can mark paid orders without relying on browser redirects'
 test('admins can trigger a Square reconciliation without waiting for the daily cron', () => {
   assert.match(source, /app\.post\('\/api\/square\/reconcile'/);
   assert.match(source, /requireRole\('admin'\)/);
-  assert.match(source, /reconcileOutstandingSquarePayments\(c\.env\)/);
+  assert.match(source, /c\.req\.query\('limit'\)/);
+  assert.match(source, /deepSearch = c\.req\.query\('deep'\) === 'true'/);
+  assert.match(source, /reconcileOutstandingSquarePayments\(c\.env,\s*\{\s*limit,\s*deepSearch\s*\}\)/);
+});
+
+test('manual Square reconciliation is bounded and uses fast payment-link checks first', () => {
+  assert.match(source, /interface SquareReconcileOptions/);
+  assert.match(source, /Math\.min\(options\.limit \?\? 25,\s*100\)/);
+  assert.match(source, /confirmOrderFromSquarePaymentLinkIfPaid\(db,\s*order,\s*env\)/);
+  assert.match(source, /if \(options\.deepSearch\)/);
 });

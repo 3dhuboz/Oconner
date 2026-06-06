@@ -46,6 +46,30 @@ interface SquareInvoiceMatch {
   amountCents: number | null;
 }
 
+interface SquarePaymentLinkMatch {
+  paymentId: string;
+  amountCents: number;
+  matchStrategy: string;
+  squareOrderId: string;
+}
+
+interface SquarePaymentLinkLookup {
+  match: SquarePaymentLinkMatch | null;
+  squareState?: string;
+  reason?: string;
+}
+
+interface SquareReconcileOptions {
+  limit?: number;
+  deepSearch?: boolean;
+}
+
+interface SquareReconcileResult {
+  checked: number;
+  reconciled: number;
+  failed: number;
+}
+
 function resolvePaidOrderStatus(order: OrderRow): string {
   return order.status === 'pending_payment' ? 'confirmed' : order.status;
 }
@@ -209,6 +233,62 @@ async function confirmOrderFromSquarePayment(
   return { orderId: order.id, paymentId: payment.id, matchStrategy };
 }
 
+function getLatestSquarePaymentLinkId(internalNotes: string | null): string | null {
+  const matches = [...(internalNotes ?? '').matchAll(/Square payment link:\s*(\S+)/g)];
+  const paymentLinkId = matches.length ? matches[matches.length - 1][1] : null;
+  return paymentLinkId && paymentLinkId !== 'unknown' ? paymentLinkId : null;
+}
+
+async function confirmOrderFromSquarePaymentLinkIfPaid(
+  db: ReturnType<typeof drizzle>,
+  order: OrderRow,
+  env: Env,
+): Promise<SquarePaymentLinkLookup> {
+  const paymentLinkId = getLatestSquarePaymentLinkId(order.internalNotes);
+  if (!paymentLinkId) return { match: null, reason: 'missing_payment_link' };
+
+  const linkResp = await squareGet(env, `/online-checkout/payment-links/${paymentLinkId}`);
+  const squareOrderId = linkResp.payment_link?.order_id;
+  if (!squareOrderId) return { match: null, reason: 'missing_square_order' };
+
+  const orderResp = await squareGet(env, `/orders/${squareOrderId}`);
+  const squareOrder = orderResp.order;
+  if (!squareOrder) return { match: null, reason: 'missing_square_order' };
+
+  if (squareOrder.state !== 'COMPLETED') {
+    return { match: null, squareState: squareOrder.state };
+  }
+
+  const tenderedCents = (squareOrder.tenders ?? []).reduce(
+    (sum: number, t: any) => sum + (t.amount_money?.amount ?? 0),
+    0,
+  );
+  const expectedCents = squareOrder.total_money?.amount ?? order.total;
+  if (tenderedCents < expectedCents) {
+    return { match: null, squareState: squareOrder.state, reason: 'partial_tender' };
+  }
+
+  const paymentId = squareOrder.tenders?.[0]?.id ?? squareOrderId;
+  await db.update(ordersTable).set({
+    paymentStatus: 'paid',
+    status: resolvePaidOrderStatus(order),
+    paymentIntentId: paymentId,
+    paymentProvider: 'square',
+    internalNotes: `${order.internalNotes ?? ''}\nSquare payment confirmed: order=${squareOrderId} amount=${tenderedCents}c matched_by=payment_link_square_order`.trim(),
+    updatedAt: Date.now(),
+  }).where(eq(ordersTable.id, order.id));
+
+  return {
+    match: {
+      paymentId,
+      amountCents: tenderedCents,
+      matchStrategy: 'payment_link_square_order',
+      squareOrderId,
+    },
+    squareState: squareOrder.state,
+  };
+}
+
 function getLatestSquareInvoiceId(internalNotes: string | null): string | null {
   const matches = [...(internalNotes ?? '').matchAll(/Square invoice sent:\s*(inv:[^\s\n]+)/g)];
   return matches.length ? matches[matches.length - 1][1] : null;
@@ -257,33 +337,44 @@ async function confirmOrderFromSquareInvoiceIfPaid(
   return { invoiceId, invoiceStatus: invoice.status, amountCents };
 }
 
-async function reconcileOutstandingSquarePayments(env: Env): Promise<number> {
+async function reconcileOutstandingSquarePayments(env: Env, options: SquareReconcileOptions = {}): Promise<SquareReconcileResult> {
   const db = drizzle(env.DB);
+  const limit = Math.max(1, Math.min(options.limit ?? 25, 100));
   const pendingOrders = await db.select().from(ordersTable)
     .where(or(
       eq(ordersTable.paymentStatus, 'awaiting_payment'),
       eq(ordersTable.paymentStatus, 'invoice_sent'),
     ))
     .orderBy(desc(ordersTable.createdAt))
-    .limit(200);
+    .limit(limit);
 
   let reconciled = 0;
+  let failed = 0;
   for (const order of pendingOrders) {
     const internalNotes = order.internalNotes ?? '';
     try {
       if (order.paymentStatus === 'awaiting_payment' && internalNotes.includes('Square payment link')) {
-        const match = await confirmOrderFromSquarePaymentMatch(db, order, env);
-        if (match) reconciled++;
+        const direct = await confirmOrderFromSquarePaymentLinkIfPaid(db, order, env);
+        if (direct.match) {
+          reconciled++;
+          continue;
+        }
+
+        if (options.deepSearch) {
+          const match = await confirmOrderFromSquarePaymentMatch(db, order, env);
+          if (match) reconciled++;
+        }
       }
       if (order.paymentStatus === 'invoice_sent' && internalNotes.includes('Square invoice sent')) {
         const match = await confirmOrderFromSquareInvoiceIfPaid(db, order, env);
         if (match) reconciled++;
       }
     } catch (e) {
+      failed++;
       console.error(`[square-reconcile] failed for order ${order.id}:`, e);
     }
   }
-  return reconciled;
+  return { checked: pendingOrders.length, reconciled, failed };
 }
 
 app.use('*', cors({
@@ -720,27 +811,15 @@ app.post('/api/orders/:id/mark-paid', async (c) => {
   // The /payment-link handler appends `Square payment link: <id>` to
   // internal_notes on every create. Take the LAST one — same convention as
   // /invoice/cancel. We verify against that specific link's Square order.
-  const notes = order.internalNotes ?? '';
-  const matches = [...notes.matchAll(/Square payment link:\s*(\S+)/g)];
-  const paymentLinkId = matches.length ? matches[matches.length - 1][1] : null;
-  if (!paymentLinkId || paymentLinkId === 'unknown') {
+  const paymentLinkId = getLatestSquarePaymentLinkId(order.internalNotes);
+  if (!paymentLinkId) {
     return c.json({ error: 'No Square payment link associated with this order' }, 400);
   }
-
-  const squareGet = async (path: string) => {
-    const res = await fetch(`${SQUARE_API}${path}`, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Square-Version': '2024-01-18',
-      },
-    });
-    return res.json() as Promise<any>;
-  };
 
   try {
     // Payment link → Square order ID. The payment_link object carries the
     // order_id of the Square order it created at checkout time.
-    const linkResp = await squareGet(`/online-checkout/payment-links/${paymentLinkId}`);
+    const linkResp = await squareGet(c.env, `/online-checkout/payment-links/${paymentLinkId}`);
     if (linkResp.errors) {
       return c.json({ error: 'Could not load payment link from Square', details: linkResp.errors }, 502);
     }
@@ -752,7 +831,7 @@ app.post('/api/orders/:id/mark-paid', async (c) => {
     // Square order → state + tenders. state=COMPLETED means the order is paid
     // and finalised; OPEN means the link hasn't been paid yet; CANCELED means
     // the customer abandoned it. We only flip our row on COMPLETED.
-    const orderResp = await squareGet(`/orders/${squareOrderId}`);
+    const orderResp = await squareGet(c.env, `/orders/${squareOrderId}`);
     if (orderResp.errors) {
       return c.json({ error: 'Could not load Square order', details: orderResp.errors }, 502);
     }
@@ -882,8 +961,11 @@ app.route('/api/admin-rescue', adminRescueRouter);
 app.use('/api/*', requireAuth);
 
 app.post('/api/square/reconcile', requireRole('admin'), async (c) => {
-  const reconciled = await reconcileOutstandingSquarePayments(c.env);
-  return c.json({ ok: true, reconciled });
+  const rawLimit = Number(c.req.query('limit') ?? '10');
+  const limit = Number.isFinite(rawLimit) ? rawLimit : 10;
+  const deepSearch = c.req.query('deep') === 'true';
+  const result = await reconcileOutstandingSquarePayments(c.env, { limit, deepSearch });
+  return c.json({ ok: true, ...result });
 });
 
 app.route('/api/orders', ordersRouter);
@@ -1241,8 +1323,8 @@ export const scheduled: ExportedHandlerScheduledHandler<Env> = async (event, env
 
     // ── 2. Send "delivery tomorrow" notifications ──
     try {
-      const reconciled = await reconcileOutstandingSquarePayments(env);
-      if (reconciled > 0) console.log(`[square-reconcile] marked ${reconciled} orders paid`);
+      const result = await reconcileOutstandingSquarePayments(env, { limit: 50, deepSearch: true });
+      if (result.reconciled > 0) console.log(`[square-reconcile] marked ${result.reconciled} orders paid`);
     } catch (e) {
       console.error('Square payment reconciliation failed:', e);
     }
