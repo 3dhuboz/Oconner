@@ -533,6 +533,12 @@ export default function AccountPage() {
                         </div>
                         <div className="border-t pt-3 space-y-1 text-sm">
                           <div className="flex justify-between text-gray-500"><span>Subtotal</span><span>{formatCurrency(order.subtotal)}</span></div>
+                          {(order.promoDiscount ?? 0) > 0 && (
+                            <div className="flex justify-between text-green-600">
+                              <span>Discount{order.promoCode ? ` (${order.promoCode})` : ''}</span>
+                              <span>-{formatCurrency(order.promoDiscount ?? 0)}</span>
+                            </div>
+                          )}
                           {order.deliveryFee > 0 && <div className="flex justify-between text-gray-500"><span>Delivery</span><span>{formatCurrency(order.deliveryFee)}</span></div>}
                           <div className="flex justify-between font-semibold text-gray-900 pt-1"><span>Total</span><span>{formatCurrency(order.total)}</span></div>
                         </div>

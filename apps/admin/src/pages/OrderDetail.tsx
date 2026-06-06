@@ -359,6 +359,14 @@ export default function OrderDetailPage() {
             </tbody>
             <tfoot className="border-t text-sm">
               <tr><td colSpan={2} className="pt-2 text-gray-500">Subtotal</td><td className="pt-2 text-right">{formatCurrency(order.subtotal)}</td></tr>
+              {(order.promoDiscount ?? 0) > 0 && (
+                <tr>
+                  <td colSpan={2} className="text-green-700">
+                    Discount{order.promoCode ? ` (${order.promoCode})` : ''}
+                  </td>
+                  <td className="text-right text-green-700">-{formatCurrency(order.promoDiscount ?? 0)}</td>
+                </tr>
+              )}
               <tr><td colSpan={2} className="text-gray-500">Delivery</td><td className="text-right">{formatCurrency(order.deliveryFee)}</td></tr>
               <tr><td colSpan={2} className="text-gray-500">GST (inc.)</td><td className="text-right">{formatCurrency(order.gst)}</td></tr>
               <tr className="font-bold"><td colSpan={2} className="pt-2">Total</td><td className="pt-2 text-right text-brand">{formatCurrency(order.total)}</td></tr>

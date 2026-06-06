@@ -4,8 +4,8 @@ import type { Env, AuthUser } from './types';
 import { requireAuth, requireRole, verifyClerkToken } from './middleware/auth';
 import { drizzle } from 'drizzle-orm/d1';
 import { eq, desc, asc, and, gte, sql, or } from 'drizzle-orm';
-import { orders as ordersTable, customers as customersTable, products as productsTable, deliveryDays as deliveryDaysTable, subscriptions as subscriptionsTable, processedWebhooks, pageEvents } from '@butcher/db';
-import { deductStock, getStockDayId, reserveDayStock } from './lib/stock';
+import { orders as ordersTable, customers as customersTable, products as productsTable, deliveryDays as deliveryDaysTable, subscriptions as subscriptionsTable, processedWebhooks, pageEvents, promoCodes as promoCodesTable } from '@butcher/db';
+import { deductStock, getStockDayId, reserveDayStock, consumePromoCode } from './lib/stock';
 import ordersRouter from './routes/orders';
 import productsRouter from './routes/products';
 import deliveryDaysRouter from './routes/deliveryDays';
@@ -828,6 +828,8 @@ app.get('/api/orders/:id/tracking', async (c) => {
     deliveryFee: order.deliveryFee,
     gst: order.gst,
     total: order.total,
+    promoCode: order.promoCode,
+    promoDiscount: order.promoDiscount,
     proofUrl: order.proofUrl,
     customerName: order.customerName, // first-name / display name only — already on the address label
     createdAt: order.createdAt,
@@ -875,8 +877,46 @@ app.post('/api/orders', async (c) => {
     }
   }
   const verifiedSubtotal = verifiedItems.reduce((s: number, i: any) => s + (i.lineTotal ?? 0), 0);
+  const deliveryFee = Math.max(0, Number(body.deliveryFee ?? 0));
+  const requestedPromoId = String((body as any).promoId ?? '').trim();
+  const requestedPromoCode = String((body as any).promoCode ?? '').trim().toUpperCase();
+  let promoDiscount = 0;
+  let appliedPromoId: string | null = null;
+  let appliedPromoCode: string | null = null;
+
+  if (requestedPromoId || requestedPromoCode) {
+    const [promo] = requestedPromoId
+      ? await db.select().from(promoCodesTable).where(eq(promoCodesTable.id, requestedPromoId)).limit(1)
+      : await db.select().from(promoCodesTable).where(eq(promoCodesTable.code, requestedPromoCode)).limit(1);
+
+    if (!promo) {
+      return c.json({ error: 'Promo code is no longer valid. Please remove it and try again.' }, 400);
+    }
+    if (!promo.active) {
+      return c.json({ error: 'This promo code is no longer active. Please remove it and try again.' }, 400);
+    }
+    if (promo.expiresAt && Date.now() > promo.expiresAt) {
+      return c.json({ error: 'This promo code has expired. Please remove it and try again.' }, 400);
+    }
+    if (promo.maxUses && promo.usedCount >= promo.maxUses) {
+      return c.json({ error: 'This promo code has been fully redeemed. Please remove it and try again.' }, 400);
+    }
+    if (promo.minOrder && verifiedSubtotal < promo.minOrder) {
+      return c.json({ error: 'This order no longer meets the promo code minimum spend.' }, 400);
+    }
+
+    promoDiscount = promo.type === 'percentage'
+      ? Math.round(verifiedSubtotal * (promo.value / 100))
+      : Math.min(promo.value, verifiedSubtotal);
+    appliedPromoId = promo.id;
+    appliedPromoCode = promo.code;
+  }
+
+  const discountedSubtotal = Math.max(0, verifiedSubtotal - promoDiscount);
+  const total = discountedSubtotal + deliveryFee;
   body.subtotal = verifiedSubtotal;
-  body.total = verifiedSubtotal + (body.deliveryFee ?? 0);
+  body.deliveryFee = deliveryFee;
+  body.total = total;
 
   // ── Pool-aware stock validation + atomic reservation ──
   // reserveDayStock does a conditional UPDATE per item, so two concurrent
@@ -889,6 +929,22 @@ app.post('/api/orders', async (c) => {
   const reserveResult = await reserveDayStock(db, dayAllocations, verifiedItems);
   if (!reserveResult.ok) {
     return c.json({ error: reserveResult.error }, 400);
+  }
+
+  if (appliedPromoId) {
+    const consumed = await consumePromoCode(db, appliedPromoId, now);
+    if (!consumed.ok) {
+      for (const item of verifiedItems) {
+        const alloc = dayAllocations.find((a: any) => a.productId === item.productId);
+        if (!alloc) continue;
+        const qty = item.weight ? item.weight / 1000 : (item.weightKg ?? item.quantity ?? 1);
+        if (qty <= 0) continue;
+        await db.update(deliveryDayStock)
+          .set({ sold: sql`${deliveryDayStock.sold} - ${qty}` })
+          .where(eq(deliveryDayStock.id, alloc.id));
+      }
+      return c.json({ error: consumed.error }, 400);
+    }
   }
 
   // Explicit paymentStatus floor — even though the column default is now
@@ -909,6 +965,11 @@ app.post('/api/orders', async (c) => {
     customerId,
     items: JSON.stringify(verifiedItems),
     deliveryAddress: JSON.stringify(body.deliveryAddress),
+    subtotal: verifiedSubtotal,
+    deliveryFee,
+    total,
+    promoCode: appliedPromoCode,
+    promoDiscount,
     paymentStatus: initialPaymentStatus,
     createdAt: now,
     updatedAt: now,
@@ -921,7 +982,7 @@ app.post('/api/orders', async (c) => {
   // orders both compute the same +1 and clobber each other's increment.
   if (day) await db.update(deliveryDaysTable).set({ orderCount: sql`${deliveryDaysTable.orderCount} + 1` }).where(eq(deliveryDaysTable.id, day.id));
   await db.update(customersTable)
-    .set({ orderCount: sql`${customersTable.orderCount} + 1`, totalSpent: sql`${customersTable.totalSpent} + ${body.total ?? 0}`, updatedAt: now })
+    .set({ orderCount: sql`${customersTable.orderCount} + 1`, totalSpent: sql`${customersTable.totalSpent} + ${total}`, updatedAt: now })
     .where(eq(customersTable.id, customerId));
   return c.json({ id: orderId }, 201);
 });

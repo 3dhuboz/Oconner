@@ -78,6 +78,9 @@ export interface Order {
   gst: number;
   /** cents */
   total: number;
+  promoCode?: string | null;
+  /** cents */
+  promoDiscount?: number | null;
   status: OrderStatus;
   deliveryDayId: string;
   deliveryAddress: Address;

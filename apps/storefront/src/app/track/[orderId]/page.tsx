@@ -222,6 +222,12 @@ export default function TrackOrderPage({ params }: { params: { orderId: string }
           <hr />
           <div className="space-y-1 text-sm">
             <div className="flex justify-between"><span>Subtotal</span><span>{formatCurrency(order.subtotal)}</span></div>
+            {(order.promoDiscount ?? 0) > 0 && (
+              <div className="flex justify-between text-green-600">
+                <span>Discount{order.promoCode ? ` (${order.promoCode})` : ''}</span>
+                <span>-{formatCurrency(order.promoDiscount ?? 0)}</span>
+              </div>
+            )}
             <div className="flex justify-between"><span>Delivery</span><span>{formatCurrency(order.deliveryFee)}</span></div>
             <div className="flex justify-between font-bold"><span>Total</span><span className="text-brand">{formatCurrency(order.total)}</span></div>
           </div>
