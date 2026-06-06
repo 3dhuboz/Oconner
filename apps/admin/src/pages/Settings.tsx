@@ -44,6 +44,8 @@ interface AnnouncementBannerConfig {
   text: string;
   linkUrl: string;
   linkLabel: string;
+  backgroundColor: string;
+  textColor: string;
 }
 
 interface StorefrontConfig {
@@ -103,7 +105,12 @@ const ANNOUNCEMENT_DEFAULTS: AnnouncementBannerConfig = {
   text: '15% off store wide - use code TWINS15',
   linkUrl: '/shop',
   linkLabel: 'Shop now',
+  backgroundColor: '#4f7f35',
+  textColor: '#ffffff',
 };
+
+const colorPickerValue = (value: string, fallback: string) =>
+  /^#[0-9a-f]{6}$/i.test(value) ? value : fallback;
 
 const DEFAULTS: StorefrontConfig = {
   hero: {
@@ -461,7 +468,44 @@ export default function SettingsPage() {
             />
           </Field>
         </div>
-        <div className="rounded-lg bg-accent text-white text-center text-sm font-bold px-4 py-2">
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Banner colour" hint="Background colour shown across the top of the website.">
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                value={colorPickerValue(announcementBanner.backgroundColor, ANNOUNCEMENT_DEFAULTS.backgroundColor)}
+                onChange={(e) => setAnnouncement('backgroundColor', e.target.value)}
+                className="h-10 w-12 cursor-pointer rounded-md border border-gray-300 bg-white p-1"
+              />
+              <input
+                className={inputCls}
+                value={announcementBanner.backgroundColor}
+                onChange={(e) => setAnnouncement('backgroundColor', e.target.value)}
+                placeholder="#4f7f35"
+              />
+            </div>
+          </Field>
+          <Field label="Text colour" hint="Keep contrast high so the message is easy to read.">
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                value={colorPickerValue(announcementBanner.textColor, ANNOUNCEMENT_DEFAULTS.textColor)}
+                onChange={(e) => setAnnouncement('textColor', e.target.value)}
+                className="h-10 w-12 cursor-pointer rounded-md border border-gray-300 bg-white p-1"
+              />
+              <input
+                className={inputCls}
+                value={announcementBanner.textColor}
+                onChange={(e) => setAnnouncement('textColor', e.target.value)}
+                placeholder="#ffffff"
+              />
+            </div>
+          </Field>
+        </div>
+        <div
+          className="rounded-lg text-center text-sm font-bold px-4 py-2"
+          style={{ backgroundColor: announcementBanner.backgroundColor, color: announcementBanner.textColor }}
+        >
           {announcementBanner.text || 'Banner preview'}
           {announcementBanner.linkLabel && <span className="ml-2 underline underline-offset-2">{announcementBanner.linkLabel}</span>}
         </div>

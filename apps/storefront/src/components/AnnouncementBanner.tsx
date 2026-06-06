@@ -9,6 +9,8 @@ interface AnnouncementBannerConfig {
   text: string;
   linkUrl?: string;
   linkLabel?: string;
+  backgroundColor?: string;
+  textColor?: string;
 }
 
 const DEFAULT_BANNER: AnnouncementBannerConfig = {
@@ -16,6 +18,8 @@ const DEFAULT_BANNER: AnnouncementBannerConfig = {
   text: '',
   linkUrl: '',
   linkLabel: '',
+  backgroundColor: '#4f7f35',
+  textColor: '#ffffff',
 };
 
 function isExternalUrl(url: string) {
@@ -49,15 +53,19 @@ export default function AnnouncementBanner() {
     </span>
   );
 
-  const className = "block bg-accent text-white text-center text-sm md:text-base font-bold px-4 py-2 tracking-wide";
+  const className = "block text-center text-sm md:text-base font-bold px-4 py-2 tracking-wide";
+  const style = {
+    backgroundColor: banner.backgroundColor || DEFAULT_BANNER.backgroundColor,
+    color: banner.textColor || DEFAULT_BANNER.textColor,
+  };
 
   if (banner.linkUrl?.trim()) {
     const href = banner.linkUrl.trim();
     if (isExternalUrl(href)) {
-      return <a href={href} className={className}>{content}</a>;
+      return <a href={href} className={className} style={style}>{content}</a>;
     }
-    return <Link href={href} className={className}>{content}</Link>;
+    return <Link href={href} className={className} style={style}>{content}</Link>;
   }
 
-  return <div className={className}>{content}</div>;
+  return <div className={className} style={style}>{content}</div>;
 }

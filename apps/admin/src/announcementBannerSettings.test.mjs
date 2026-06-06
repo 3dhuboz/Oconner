@@ -11,4 +11,8 @@ test('admin settings can edit the global site promo banner', () => {
   assert.match(source, /Site Promo Banner/);
   assert.match(source, /api\.config\.update\(\{[\s\S]*announcementBanner/);
   assert.match(source, /15% off store wide - use code TWINS15/);
+  assert.match(source, /backgroundColor/);
+  assert.match(source, /textColor/);
+  assert.match(source, /type="color"/);
+  assert.match(source, /colorPickerValue/);
 });
