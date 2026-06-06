@@ -13,6 +13,15 @@ test('admin insights page consumes the authenticated insights API', () => {
   assert.match(page, /Recent Visitor Sessions/);
 });
 
+test('admin insights page has a phone-friendly layout', () => {
+  assert.match(page, /RecentSessionCards/);
+  assert.match(page, /md:hidden/);
+  assert.match(page, /hidden overflow-x-auto md:block/);
+  assert.match(page, /min-w-\[520px\]/);
+  assert.match(page, /min-w-0 rounded-lg border bg-white shadow-sm/);
+  assert.match(page, /sm:text-2xl/);
+});
+
 test('insights route is available from the admin navigation', () => {
   assert.match(app, /path="insights"/);
   assert.match(layout, /to: '\/insights'/);
