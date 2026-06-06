@@ -393,6 +393,133 @@ async function confirmOrderFromSquarePayment(
   return { orderId: order.id, paymentId: payment.id, matchStrategy };
 }
 
+function squarePaymentIdFromPayoutEntry(entry: any): string | null {
+  return entry?.type_charge_details?.payment_id ??
+    entry?.type_refunded_charge_details?.payment_id ??
+    entry?.payment_id ??
+    null;
+}
+
+async function listRecentSquarePaymentIds(env: Env, sinceMs: number): Promise<string[]> {
+  const locationId = env.SQUARE_LOCATION_ID;
+  if (!env.SQUARE_ACCESS_TOKEN || !locationId) return [];
+
+  const beginTime = new Date(Math.max(0, sinceMs)).toISOString();
+  const endTime = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+  const paymentIds = new Set<string>();
+  let cursor: string | undefined;
+  let pages = 0;
+
+  do {
+    const params = new URLSearchParams({
+      begin_time: beginTime,
+      end_time: endTime,
+      location_id: locationId,
+      sort_order: 'DESC',
+      limit: '100',
+    });
+    if (cursor) params.set('cursor', cursor);
+
+    const paymentsResp = await squareGet(env, `/payments?${params}`);
+    for (const payment of paymentsResp.payments ?? []) {
+      if (payment?.id && payment.status === 'COMPLETED') paymentIds.add(payment.id);
+    }
+
+    cursor = paymentsResp.cursor;
+    pages++;
+  } while (cursor && pages < 3);
+
+  return [...paymentIds].slice(0, 200);
+}
+
+async function listRecentSquarePayoutPaymentIds(env: Env, sinceMs: number): Promise<string[]> {
+  const locationId = env.SQUARE_LOCATION_ID;
+  if (!env.SQUARE_ACCESS_TOKEN || !locationId) return [];
+
+  const beginTime = new Date(Math.max(0, sinceMs - DAY_MS)).toISOString();
+  const endTime = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+  const paymentIds = new Set<string>();
+  let payoutCursor: string | undefined;
+  let payoutPages = 0;
+
+  do {
+    const payoutParams = new URLSearchParams({
+      location_id: locationId,
+      begin_time: beginTime,
+      end_time: endTime,
+      sort_order: 'DESC',
+      limit: '100',
+    });
+    if (payoutCursor) payoutParams.set('cursor', payoutCursor);
+
+    const payoutsResp = await squareGet(env, `/payouts?${payoutParams}`);
+    for (const payout of payoutsResp.payouts ?? []) {
+      if (!payout?.id) continue;
+      let entryCursor: string | undefined;
+      let entryPages = 0;
+      do {
+        const entryParams = new URLSearchParams({ limit: '100' });
+        if (entryCursor) entryParams.set('cursor', entryCursor);
+        const entriesResp = await squareGet(env, `/payouts/${payout.id}/payout-entries?${entryParams}`);
+        for (const entry of entriesResp.payout_entries ?? []) {
+          const paymentId = squarePaymentIdFromPayoutEntry(entry);
+          if (paymentId) paymentIds.add(paymentId);
+        }
+        entryCursor = entriesResp.cursor;
+        entryPages++;
+      } while (entryCursor && entryPages < 5);
+    }
+
+    payoutCursor = payoutsResp.cursor;
+    payoutPages++;
+  } while (payoutCursor && payoutPages < 3);
+
+  return [...paymentIds].slice(0, 200);
+}
+
+async function reconcileSquarePaymentsById(
+  db: ReturnType<typeof drizzle>,
+  env: Env,
+  paymentIds: string[],
+): Promise<number> {
+  let reconciled = 0;
+
+  for (let i = 0; i < paymentIds.length; i += 10) {
+    const batch = paymentIds.slice(i, i + 10);
+    const matches: number[] = await Promise.all(batch.map(async (paymentId) => {
+      try {
+        const paymentResp = await squareGet(env, `/payments/${paymentId}`);
+        const match = await confirmOrderFromSquarePayment(db, paymentResp.payment, env);
+        return match ? 1 : 0;
+      } catch (e) {
+        console.error(`[square-reconcile] failed to verify payout payment ${paymentId}:`, e);
+        return 0;
+      }
+    }));
+    reconciled += matches.reduce((sum, count) => sum + count, 0);
+  }
+
+  return reconciled;
+}
+
+async function reconcileRecentSquarePayments(
+  db: ReturnType<typeof drizzle>,
+  env: Env,
+  sinceMs: number,
+): Promise<number> {
+  const paymentIds = await listRecentSquarePaymentIds(env, sinceMs);
+  return reconcileSquarePaymentsById(db, env, paymentIds);
+}
+
+async function reconcileRecentSquarePayoutPayments(
+  db: ReturnType<typeof drizzle>,
+  env: Env,
+  sinceMs: number,
+): Promise<number> {
+  const paymentIds = await listRecentSquarePayoutPaymentIds(env, sinceMs);
+  return reconcileSquarePaymentsById(db, env, paymentIds);
+}
+
 function getLatestSquarePaymentLinkId(internalNotes: string | null): string | null {
   const matches = [...(internalNotes ?? '').matchAll(/Square payment link:\s*(\S+)/g)];
   const paymentLinkId = matches.length ? matches[matches.length - 1][1] : null;
@@ -508,12 +635,30 @@ async function reconcileOutstandingSquarePayments(env: Env, options: SquareRecon
     .orderBy(desc(ordersTable.createdAt))
     .limit(limit);
 
+  const oldestPendingCreatedAt = pendingOrders.reduce(
+    (oldest, order) => Math.min(oldest, order.createdAt),
+    Date.now(),
+  );
   let reconciled = 0;
   let failed = 0;
+
+  if (options.deepSearch && pendingOrders.length > 0) {
+    try {
+      const directLookbackStart = Math.max(oldestPendingCreatedAt, Date.now() - 3 * DAY_MS);
+      reconciled += await reconcileRecentSquarePayments(db, env, directLookbackStart);
+
+      const payoutLookbackStart = Math.max(oldestPendingCreatedAt, Date.now() - 7 * DAY_MS);
+      reconciled += await reconcileRecentSquarePayoutPayments(db, env, payoutLookbackStart);
+    } catch (e) {
+      failed++;
+      console.error('[square-reconcile] failed to scan recent Square payments:', e);
+    }
+  }
+
   for (const order of pendingOrders) {
     const internalNotes = order.internalNotes ?? '';
     try {
-      if (order.paymentStatus === 'awaiting_payment' && internalNotes.includes('Square payment link')) {
+      if (!options.deepSearch && order.paymentStatus === 'awaiting_payment' && internalNotes.includes('Square payment link')) {
         const direct = await confirmOrderFromSquarePaymentLinkIfPaid(db, order, env);
         if (direct.match) {
           reconciled++;
@@ -534,6 +679,7 @@ async function reconcileOutstandingSquarePayments(env: Env, options: SquareRecon
       console.error(`[square-reconcile] failed for order ${order.id}:`, e);
     }
   }
+
   return { checked: pendingOrders.length, reconciled, failed };
 }
 

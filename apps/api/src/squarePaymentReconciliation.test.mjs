@@ -77,3 +77,24 @@ test('manual Square reconciliation is bounded and uses fast payment-link checks 
   assert.match(source, /confirmOrderFromSquarePaymentLinkIfPaid\(db,\s*order,\s*env\)/);
   assert.match(source, /if \(options\.deepSearch\)/);
 });
+
+test('deep Square reconciliation falls back to recent payout entries', () => {
+  assert.match(source, /reconcileRecentSquarePayoutPayments/);
+  assert.match(source, /listRecentSquarePayoutPaymentIds/);
+  assert.match(source, /\/payouts\?\$\{payoutParams\}/);
+  assert.match(source, /\/payouts\/\$\{payout\.id\}\/payout-entries\?\$\{entryParams\}/);
+  assert.match(source, /squarePaymentIdFromPayoutEntry/);
+  assert.match(source, /\/payments\/\$\{paymentId\}/);
+  assert.match(source, /confirmOrderFromSquarePayment\(db,\s*paymentResp\.payment,\s*env\)/);
+});
+
+test('deep Square reconciliation also scans recent completed payments before payout settlement', () => {
+  assert.match(source, /reconcileRecentSquarePayments/);
+  assert.match(source, /listRecentSquarePaymentIds/);
+  assert.match(source, /\/payments\?\$\{params\}/);
+  assert.match(source, /payment\.status === 'COMPLETED'/);
+  assert.match(source, /Date\.now\(\) - 3 \* DAY_MS/);
+  assert.match(source, /Date\.now\(\) - 7 \* DAY_MS/);
+  assert.match(source, /reconcileRecentSquarePayments\(db,\s*env,\s*directLookbackStart\)/);
+  assert.match(source, /reconcileRecentSquarePayoutPayments\(db,\s*env,\s*payoutLookbackStart\)/);
+});
