@@ -54,6 +54,21 @@ export const authFailures = sqliteTable('auth_failures', {
   createdAt: integer('created_at').notNull(),
 });
 
+// Privacy-safe website analytics for the admin Insights tab. The session hash
+// rotates daily and no IP address, name, email, or raw user agent is stored.
+export const pageEvents = sqliteTable('page_events', {
+  id: text('id').primaryKey(),
+  path: text('path').notNull(),
+  itemId: text('item_id'),
+  sessionHash: text('session_hash').notNull(),
+  referrerHost: text('referrer_host'),
+  countryCode: text('country_code'),
+  deviceType: text('device_type'),
+  browser: text('browser'),
+  os: text('os'),
+  createdAt: integer('created_at').notNull(),
+});
+
 // Customers
 export const customers = sqliteTable('customers', {
   id: text('id').primaryKey(),            // UUID

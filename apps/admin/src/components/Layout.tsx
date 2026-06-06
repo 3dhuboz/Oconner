@@ -3,7 +3,7 @@ import { useClerk } from '@clerk/clerk-react';
 import { clearStaffRescuePin } from '@butcher/shared';
 import {
   LayoutDashboard, ShoppingBag, Package, CalendarDays,
-  BarChart2, Users, FileText, LogOut, Menu, Settings, Sparkles,
+  BarChart2, BarChart3, Users, FileText, LogOut, Menu, Settings, Sparkles,
   ExternalLink, Store, Truck, UserCog, RefreshCcw, ShieldCheck,
   DollarSign, Tag, Film, Receipt,
 } from 'lucide-react';
@@ -40,6 +40,7 @@ const NAV_SECTIONS = [
     items: [
       { to: '/customers', icon: Users, label: 'Customers' },
       { to: '/staff', icon: ShieldCheck, label: 'Staff & Admins' },
+      { to: '/insights', icon: BarChart3, label: 'Insights' },
       { to: '/reports', icon: DollarSign, label: 'Revenue' },
       { to: '/promo-codes', icon: Tag, label: 'Promo Codes' },
       { to: '/audit', icon: FileText, label: 'Audit Log' },

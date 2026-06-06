@@ -5,6 +5,7 @@ export const runtime = 'edge';
 import { useState, useEffect } from 'react';
 import { api } from '@butcher/shared';
 import { useCart } from '@/lib/cart';
+import { trackItemView } from '@/lib/track';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import type { Product } from '@butcher/shared';
@@ -67,7 +68,7 @@ export default function ShopPage() {
       key={product.id}
       product={product}
       qty={getItemQty(product.id!)}
-      onOpen={() => { setModal(product); setModalQty(1); }}
+      onOpen={() => { trackItemView(product.id!); setModal(product); setModalQty(1); }}
       onAdd={() => addProductToCart(product)}
       onIncrement={() => {
         const w = getItemWeight(product.id!);

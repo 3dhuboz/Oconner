@@ -4,7 +4,7 @@ import type { Env, AuthUser } from './types';
 import { requireAuth, requireRole, verifyClerkToken } from './middleware/auth';
 import { drizzle } from 'drizzle-orm/d1';
 import { eq, desc, asc, and, gte, sql, or } from 'drizzle-orm';
-import { orders as ordersTable, customers as customersTable, products as productsTable, deliveryDays as deliveryDaysTable, subscriptions as subscriptionsTable, processedWebhooks } from '@butcher/db';
+import { orders as ordersTable, customers as customersTable, products as productsTable, deliveryDays as deliveryDaysTable, subscriptions as subscriptionsTable, processedWebhooks, pageEvents } from '@butcher/db';
 import { deductStock, getStockDayId, reserveDayStock } from './lib/stock';
 import ordersRouter from './routes/orders';
 import productsRouter from './routes/products';
@@ -68,6 +68,166 @@ interface SquareReconcileResult {
   checked: number;
   reconciled: number;
   failed: number;
+}
+
+const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
+const WEEK_MS = 7 * DAY_MS;
+const MONTH_MS = 30 * DAY_MS;
+const TRACK_PATH_MAX = 200;
+const TRACK_ITEM_ID_MAX = 80;
+const TRACK_BOT_UA_RE = /bot|crawler|spider|preview|facebookexternalhit|pingdom|uptimerobot|gtmetrix|lighthouse|wget|curl|headlesschrome|monitis|prerender/i;
+const TRACK_PROD_HOSTS = new Set(['oconnoragriculture.com.au', 'www.oconnoragriculture.com.au']);
+
+function startOfBrisbaneDay(now: number = Date.now()): number {
+  const aest = now + 10 * HOUR_MS;
+  const dayStart = aest - (aest % DAY_MS);
+  return dayStart - 10 * HOUR_MS;
+}
+
+function dayKeyFromMs(ms: number): string {
+  return new Date(startOfBrisbaneDay(ms) + 10 * HOUR_MS).toISOString().slice(0, 10);
+}
+
+function num(row: any, field = 'n'): number {
+  return row?.[field] != null ? Number(row[field]) : 0;
+}
+
+function pct(numerator: number, denominator: number): number {
+  if (!denominator) return 0;
+  return Math.round((numerator / denominator) * 1000) / 10;
+}
+
+function centsPer(numerator: number, denominator: number): number {
+  if (!denominator) return 0;
+  return Math.round(numerator / denominator);
+}
+
+function parseHostname(headerValue: string | null): string | null {
+  if (!headerValue) return null;
+  try {
+    return new URL(headerValue).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+function cleanReferrerHost(request: Request): string | null {
+  const host = parseHostname(request.headers.get('Referer'));
+  if (!host || TRACK_PROD_HOSTS.has(host)) return null;
+  return host.slice(0, 120);
+}
+
+function countryCode(request: Request): string | null {
+  const raw = request.headers.get('CF-IPCountry') || request.headers.get('cf-ipcountry') || '';
+  const code = raw.trim().toUpperCase();
+  return /^[A-Z]{2}$/.test(code) ? code : null;
+}
+
+function deviceType(ua: string): string {
+  const s = ua.toLowerCase();
+  if (/ipad|tablet|kindle|silk|playbook/.test(s)) return 'tablet';
+  if (/mobi|iphone|android.*mobile|windows phone/.test(s)) return 'mobile';
+  return 'desktop';
+}
+
+function browserName(ua: string): string {
+  const s = ua.toLowerCase();
+  if (/edg\//.test(s)) return 'Edge';
+  if (/opr\//.test(s) || /opera/.test(s)) return 'Opera';
+  if (/firefox\//.test(s)) return 'Firefox';
+  if (/samsungbrowser\//.test(s)) return 'Samsung Internet';
+  if (/crios\//.test(s)) return 'Chrome iOS';
+  if (/chrome\//.test(s) || /chromium\//.test(s)) return 'Chrome';
+  if (/safari\//.test(s)) return 'Safari';
+  return 'Other';
+}
+
+function osName(ua: string): string {
+  const s = ua.toLowerCase();
+  if (/iphone|ipad|ipod/.test(s)) return 'iOS';
+  if (/android/.test(s)) return 'Android';
+  if (/windows/.test(s)) return 'Windows';
+  if (/mac os x|macintosh/.test(s)) return 'macOS';
+  if (/linux/.test(s)) return 'Linux';
+  return 'Other';
+}
+
+async function sha256Hex(input: string): Promise<string> {
+  const data = new TextEncoder().encode(input);
+  const buf = await crypto.subtle.digest('SHA-256', data);
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('').slice(0, 16);
+}
+
+function sanitizeTrackPath(input: unknown): string | null {
+  if (typeof input !== 'string') return null;
+  const withoutQuery = input.trim().split('#')[0].split('?')[0];
+  if (!withoutQuery.startsWith('/')) return null;
+  const path = withoutQuery.replace(/\/{2,}/g, '/').slice(0, TRACK_PATH_MAX) || '/';
+  if (path.includes('..')) return null;
+  if (/^\/(api|admin|login|sign-in|sign-up|ticket|images)\b/i.test(path)) return null;
+  return path;
+}
+
+function sanitizeTrackItemId(input: unknown): string | null {
+  if (typeof input !== 'string') return null;
+  const itemId = input.trim().slice(0, TRACK_ITEM_ID_MAX);
+  return /^[a-zA-Z0-9_-]{3,80}$/.test(itemId) ? itemId : null;
+}
+
+function localHourFromMs(ms: number): number {
+  return new Date(ms + 10 * HOUR_MS).getUTCHours();
+}
+
+function asList<T extends Record<string, unknown>>(result: D1Result<T>): T[] {
+  return result.results ?? [];
+}
+
+function rowNumber(row: Record<string, unknown>, field: string): number {
+  const value = row[field];
+  return typeof value === 'number' ? value : Number(value ?? 0);
+}
+
+function rowString(row: Record<string, unknown>, field: string, fallback = ''): string {
+  const value = row[field];
+  return typeof value === 'string' && value.trim() ? value : fallback;
+}
+
+async function visitorWindowSummary(env: Env, from: number) {
+  const row = await env.DB.prepare(`
+    SELECT
+      COUNT(*) AS events,
+      COUNT(CASE WHEN item_id IS NULL OR item_id = '' THEN 1 END) AS pageviews,
+      COUNT(CASE WHEN item_id IS NOT NULL AND item_id != '' THEN 1 END) AS itemViews,
+      COUNT(DISTINCT session_hash) AS visitors
+    FROM page_events
+    WHERE created_at >= ?
+  `).bind(from).first<Record<string, unknown>>();
+
+  return {
+    events: rowNumber(row ?? {}, 'events'),
+    pageviews: rowNumber(row ?? {}, 'pageviews'),
+    itemViews: rowNumber(row ?? {}, 'itemViews'),
+    visitors: rowNumber(row ?? {}, 'visitors'),
+  };
+}
+
+async function paidOrderWindowSummary(env: Env, from: number) {
+  const row = await env.DB.prepare(`
+    SELECT COUNT(*) AS orders, COALESCE(SUM(total), 0) AS revenueCents
+    FROM orders
+    WHERE created_at >= ?
+      AND status NOT IN ('cancelled', 'refunded')
+      AND (
+        payment_status = 'paid'
+        OR status IN ('confirmed', 'preparing', 'packed', 'out_for_delivery', 'delivered')
+      )
+  `).bind(from).first<Record<string, unknown>>();
+
+  return {
+    orders: rowNumber(row ?? {}, 'orders'),
+    revenueCents: rowNumber(row ?? {}, 'revenueCents'),
+  };
 }
 
 function resolvePaidOrderStatus(order: OrderRow): string {
@@ -945,6 +1105,46 @@ app.post('/api/square/webhook', async (c) => {
   return c.json({ ok: true, matched: Boolean(match), ...match });
 });
 
+// Privacy-safe website analytics. Fire-and-forget by design: tracking must
+// never interrupt a customer's shop, cart, or checkout flow.
+app.post('/api/track/pageview', async (c) => {
+  try {
+    const ua = c.req.header('User-Agent') ?? '';
+    if (TRACK_BOT_UA_RE.test(ua)) return c.body(null, 204);
+
+    const originHost = parseHostname(c.req.header('Origin') ?? null);
+    const refererHost = parseHostname(c.req.header('Referer') ?? null);
+    if (originHost && !TRACK_PROD_HOSTS.has(originHost)) return c.body(null, 204);
+    if (!originHost && refererHost && !TRACK_PROD_HOSTS.has(refererHost)) return c.body(null, 204);
+
+    const body = await c.req.json<{ path?: unknown; itemId?: unknown }>().catch(() => null);
+    const path = sanitizeTrackPath(body?.path);
+    if (!path) return c.body(null, 204);
+
+    const itemId = sanitizeTrackItemId(body?.itemId);
+    const ip = (c.req.header('CF-Connecting-IP') ?? c.req.header('X-Forwarded-For')?.split(',')[0] ?? 'unknown').trim();
+    const dayStamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const sessionHash = await sha256Hex(`${ip}|${ua}|${dayStamp}|${c.env.ENVIRONMENT ?? 'prod'}`);
+
+    const db = drizzle(c.env.DB);
+    await db.insert(pageEvents).values({
+      id: crypto.randomUUID(),
+      path,
+      itemId,
+      sessionHash,
+      referrerHost: cleanReferrerHost(c.req.raw),
+      countryCode: countryCode(c.req.raw),
+      deviceType: deviceType(ua),
+      browser: browserName(ua),
+      os: osName(ua),
+      createdAt: Date.now(),
+    });
+  } catch (error) {
+    console.warn('[track/pageview]', error);
+  }
+  return c.body(null, 204);
+});
+
 // ── Public: read single config key (storefront/about page) ──
 app.get('/api/config/:key', async (c) => {
   const { drizzle } = await import('drizzle-orm/d1');
@@ -959,6 +1159,249 @@ app.get('/api/config/:key', async (c) => {
 app.route('/api/driver-rescue', driverRescueRouter);
 app.route('/api/admin-rescue', adminRescueRouter);
 app.use('/api/*', requireAuth);
+
+app.get('/api/insights', requireRole('admin'), async (c) => {
+  const now = Date.now();
+  const todayStart = startOfBrisbaneDay(now);
+  const weekStart = now - WEEK_MS;
+  const monthStart = now - MONTH_MS;
+  const seriesStart = startOfBrisbaneDay(now - 13 * DAY_MS);
+
+  const [
+    todayTraffic,
+    weekTraffic,
+    monthTraffic,
+    todayOrders,
+    weekOrders,
+    monthOrders,
+    lastEvent,
+    topPagesResult,
+    topItemsResult,
+    referrersResult,
+    countriesResult,
+    devicesResult,
+    browsersResult,
+    osResult,
+    recentSessionsResult,
+    seriesResult,
+  ] = await Promise.all([
+    visitorWindowSummary(c.env, todayStart),
+    visitorWindowSummary(c.env, weekStart),
+    visitorWindowSummary(c.env, monthStart),
+    paidOrderWindowSummary(c.env, todayStart),
+    paidOrderWindowSummary(c.env, weekStart),
+    paidOrderWindowSummary(c.env, monthStart),
+    c.env.DB.prepare('SELECT created_at AS lastEventAt FROM page_events ORDER BY created_at DESC LIMIT 1').first<Record<string, unknown>>(),
+    c.env.DB.prepare(`
+      SELECT path, COUNT(*) AS views, COUNT(DISTINCT session_hash) AS visitors
+      FROM page_events
+      WHERE created_at >= ? AND (item_id IS NULL OR item_id = '')
+      GROUP BY path
+      ORDER BY views DESC
+      LIMIT 10
+    `).bind(monthStart).all<Record<string, unknown>>(),
+    c.env.DB.prepare(`
+      SELECT
+        pe.item_id AS itemId,
+        COALESCE(p.name, pe.item_id) AS name,
+        COUNT(*) AS views,
+        COUNT(DISTINCT pe.session_hash) AS visitors
+      FROM page_events pe
+      LEFT JOIN products p ON p.id = pe.item_id
+      WHERE pe.created_at >= ? AND pe.item_id IS NOT NULL AND pe.item_id != ''
+      GROUP BY pe.item_id
+      ORDER BY views DESC
+      LIMIT 10
+    `).bind(monthStart).all<Record<string, unknown>>(),
+    c.env.DB.prepare(`
+      SELECT COALESCE(referrer_host, 'Direct') AS referrer, COUNT(*) AS views, COUNT(DISTINCT session_hash) AS visitors
+      FROM page_events
+      WHERE created_at >= ?
+      GROUP BY COALESCE(referrer_host, 'Direct')
+      ORDER BY views DESC
+      LIMIT 10
+    `).bind(monthStart).all<Record<string, unknown>>(),
+    c.env.DB.prepare(`
+      SELECT COALESCE(country_code, 'Unknown') AS country, COUNT(*) AS events, COUNT(DISTINCT session_hash) AS visitors
+      FROM page_events
+      WHERE created_at >= ?
+      GROUP BY COALESCE(country_code, 'Unknown')
+      ORDER BY events DESC
+      LIMIT 10
+    `).bind(monthStart).all<Record<string, unknown>>(),
+    c.env.DB.prepare(`
+      SELECT COALESCE(device_type, 'unknown') AS label, COUNT(*) AS events, COUNT(DISTINCT session_hash) AS visitors
+      FROM page_events
+      WHERE created_at >= ?
+      GROUP BY COALESCE(device_type, 'unknown')
+      ORDER BY events DESC
+    `).bind(monthStart).all<Record<string, unknown>>(),
+    c.env.DB.prepare(`
+      SELECT COALESCE(browser, 'Other') AS label, COUNT(*) AS events, COUNT(DISTINCT session_hash) AS visitors
+      FROM page_events
+      WHERE created_at >= ?
+      GROUP BY COALESCE(browser, 'Other')
+      ORDER BY events DESC
+      LIMIT 8
+    `).bind(monthStart).all<Record<string, unknown>>(),
+    c.env.DB.prepare(`
+      SELECT COALESCE(os, 'Other') AS label, COUNT(*) AS events, COUNT(DISTINCT session_hash) AS visitors
+      FROM page_events
+      WHERE created_at >= ?
+      GROUP BY COALESCE(os, 'Other')
+      ORDER BY events DESC
+      LIMIT 8
+    `).bind(monthStart).all<Record<string, unknown>>(),
+    c.env.DB.prepare(`
+      SELECT
+        session_hash AS id,
+        MIN(created_at) AS firstSeen,
+        MAX(created_at) AS lastSeen,
+        COUNT(CASE WHEN item_id IS NULL OR item_id = '' THEN 1 END) AS pageviews,
+        COUNT(CASE WHEN item_id IS NOT NULL AND item_id != '' THEN 1 END) AS itemViews,
+        GROUP_CONCAT(DISTINCT path) AS paths,
+        COALESCE(MIN(referrer_host), 'Direct') AS referrer,
+        COALESCE(MAX(country_code), 'Unknown') AS country,
+        COALESCE(MAX(device_type), 'unknown') AS device,
+        COALESCE(MAX(browser), 'Other') AS browser,
+        COALESCE(MAX(os), 'Other') AS os
+      FROM page_events
+      WHERE created_at >= ?
+      GROUP BY session_hash
+      ORDER BY lastSeen DESC
+      LIMIT 20
+    `).bind(monthStart).all<Record<string, unknown>>(),
+    c.env.DB.prepare(`
+      SELECT created_at AS createdAt, item_id AS itemId, session_hash AS sessionHash
+      FROM page_events
+      WHERE created_at >= ?
+      ORDER BY created_at ASC
+    `).bind(seriesStart).all<Record<string, unknown>>(),
+  ]);
+
+  const dailyMap = new Map<string, { date: string; visitors: Set<string>; pageviews: number; itemViews: number }>();
+  for (let i = 0; i < 14; i++) {
+    const date = dayKeyFromMs(seriesStart + i * DAY_MS);
+    dailyMap.set(date, { date, visitors: new Set<string>(), pageviews: 0, itemViews: 0 });
+  }
+
+  const hourlyToday = Array.from({ length: 24 }, (_, hour) => ({ hour, events: 0, visitors: new Set<string>() }));
+  for (const row of asList(seriesResult)) {
+    const createdAt = rowNumber(row, 'createdAt');
+    const sessionHash = rowString(row, 'sessionHash');
+    const date = dayKeyFromMs(createdAt);
+    const bucket = dailyMap.get(date);
+    if (bucket) {
+      bucket.visitors.add(sessionHash);
+      if (rowString(row, 'itemId')) bucket.itemViews += 1;
+      else bucket.pageviews += 1;
+    }
+    if (createdAt >= todayStart) {
+      const hour = localHourFromMs(createdAt);
+      hourlyToday[hour].events += 1;
+      hourlyToday[hour].visitors.add(sessionHash);
+    }
+  }
+
+  const formatTraffic = (traffic: Awaited<ReturnType<typeof visitorWindowSummary>>) => ({
+    visitors: traffic.visitors,
+    pageviews: traffic.pageviews,
+    itemViews: traffic.itemViews,
+    events: traffic.events,
+  });
+
+  return c.json({
+    generatedAt: now,
+    window: { todayStart, weekStart, monthStart },
+    tracker: {
+      lastEventAt: lastEvent?.lastEventAt ? Number(lastEvent.lastEventAt) : null,
+    },
+    traffic: {
+      today: formatTraffic(todayTraffic),
+      week: formatTraffic(weekTraffic),
+      month: formatTraffic(monthTraffic),
+      dailySeries: [...dailyMap.values()].map((bucket) => ({
+        date: bucket.date,
+        visitors: bucket.visitors.size,
+        pageviews: bucket.pageviews,
+        itemViews: bucket.itemViews,
+      })),
+      hourlyToday: hourlyToday.map((bucket) => ({
+        hour: bucket.hour,
+        events: bucket.events,
+        visitors: bucket.visitors.size,
+      })),
+    },
+    orders: {
+      todayCount: todayOrders.orders,
+      todayRevenueCents: todayOrders.revenueCents,
+      weekCount: weekOrders.orders,
+      weekRevenueCents: weekOrders.revenueCents,
+      monthCount: monthOrders.orders,
+      monthRevenueCents: monthOrders.revenueCents,
+    },
+    conversion: {
+      todayOrderRate: pct(todayOrders.orders, todayTraffic.visitors),
+      weekOrderRate: pct(weekOrders.orders, weekTraffic.visitors),
+      monthOrderRate: pct(monthOrders.orders, monthTraffic.visitors),
+      weekRevenuePerVisitorCents: centsPer(weekOrders.revenueCents, weekTraffic.visitors),
+      monthRevenuePerVisitorCents: centsPer(monthOrders.revenueCents, monthTraffic.visitors),
+    },
+    topPages: asList(topPagesResult).map((row) => ({
+      path: rowString(row, 'path', '/'),
+      views: rowNumber(row, 'views'),
+      visitors: rowNumber(row, 'visitors'),
+    })),
+    topItems: asList(topItemsResult).map((row) => ({
+      itemId: rowString(row, 'itemId'),
+      name: rowString(row, 'name', rowString(row, 'itemId')),
+      views: rowNumber(row, 'views'),
+      visitors: rowNumber(row, 'visitors'),
+    })),
+    acquisition: {
+      referrers: asList(referrersResult).map((row) => ({
+        referrer: rowString(row, 'referrer', 'Direct'),
+        views: rowNumber(row, 'views'),
+        visitors: rowNumber(row, 'visitors'),
+      })),
+      countries: asList(countriesResult).map((row) => ({
+        country: rowString(row, 'country', 'Unknown'),
+        events: rowNumber(row, 'events'),
+        visitors: rowNumber(row, 'visitors'),
+      })),
+    },
+    technology: {
+      devices: asList(devicesResult).map((row) => ({
+        label: rowString(row, 'label', 'unknown'),
+        events: rowNumber(row, 'events'),
+        visitors: rowNumber(row, 'visitors'),
+      })),
+      browsers: asList(browsersResult).map((row) => ({
+        label: rowString(row, 'label', 'Other'),
+        events: rowNumber(row, 'events'),
+        visitors: rowNumber(row, 'visitors'),
+      })),
+      os: asList(osResult).map((row) => ({
+        label: rowString(row, 'label', 'Other'),
+        events: rowNumber(row, 'events'),
+        visitors: rowNumber(row, 'visitors'),
+      })),
+    },
+    recentSessions: asList(recentSessionsResult).map((row) => ({
+      id: rowString(row, 'id').slice(0, 8).toUpperCase(),
+      firstSeen: rowNumber(row, 'firstSeen'),
+      lastSeen: rowNumber(row, 'lastSeen'),
+      pageviews: rowNumber(row, 'pageviews'),
+      itemViews: rowNumber(row, 'itemViews'),
+      paths: rowString(row, 'paths').split(',').filter(Boolean).slice(0, 6),
+      referrer: rowString(row, 'referrer', 'Direct'),
+      country: rowString(row, 'country', 'Unknown'),
+      device: rowString(row, 'device', 'unknown'),
+      browser: rowString(row, 'browser', 'Other'),
+      os: rowString(row, 'os', 'Other'),
+    })),
+  });
+});
 
 app.post('/api/square/reconcile', requireRole('admin'), async (c) => {
   const rawLimit = Number(c.req.query('limit') ?? '10');

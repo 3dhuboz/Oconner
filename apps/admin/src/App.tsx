@@ -20,6 +20,7 @@ import SettingsPage from './pages/Settings';
 import SocialHubPage from './pages/SocialHub';
 import StaffPage from './pages/Staff';
 import ReportsPage from './pages/Reports';
+import InsightsPage from './pages/Insights';
 import PromoCodesPage from './pages/PromoCodes';
 import ReelsPage from './pages/Reels';
 import ReceiptsPage from './pages/Receipts';
@@ -55,6 +56,7 @@ export default function App() {
         <Route path="social-hub" element={<SocialHubPage />} />
         <Route path="staff" element={<StaffPage />} />
         <Route path="reports" element={<ReportsPage />} />
+        <Route path="insights" element={<InsightsPage />} />
         <Route path="promo-codes" element={<PromoCodesPage />} />
         <Route path="reels" element={<ReelsPage />} />
         <Route path="receipts" element={<ReceiptsPage />} />
