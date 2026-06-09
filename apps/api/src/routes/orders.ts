@@ -695,6 +695,7 @@ app.post('/:id/payment-link', async (c) => {
   const items = JSON.parse(order.items) as Array<{ productName: string; quantity?: number; weightKg?: number; weight?: number; lineTotal: number }>;
   const promoDiscount = Math.max(0, order.promoDiscount ?? 0);
   const promoCode = (order.promoCode ?? '').trim();
+  const metadata = promoCode ? { orderId, promoCode } : { orderId };
 
   try {
     const squareLineItems = items.map((i) => {
@@ -736,7 +737,7 @@ app.post('/:id/payment-link', async (c) => {
             scope: 'ORDER',
             amount_money: { amount: promoDiscount, currency: 'AUD' },
           }] : undefined,
-          metadata: { orderId, promoCode },
+          metadata,
         },
         checkout_options: {
           redirect_url: `${storefrontUrl}/checkout/success?orderId=${orderId}`,

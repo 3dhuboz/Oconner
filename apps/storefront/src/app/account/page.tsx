@@ -10,7 +10,7 @@ import type { Order } from '@butcher/shared';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import Link from 'next/link';
-import { MapPin, Phone, Package, RefreshCw, ChevronDown, ChevronUp, Pencil, Check, X, Bell, BellOff, Gift } from 'lucide-react';
+import { MapPin, Phone, Package, RefreshCw, ChevronDown, ChevronUp, Pencil, Check, X, Bell, BellOff, Gift, CreditCard } from 'lucide-react';
 
 interface CustomerProfile {
   id: string;
@@ -88,6 +88,7 @@ export default function AccountPage() {
   const [setupPhone, setSetupPhone] = useState('');
   const [setupAddr, setSetupAddr] = useState<Address>({ line1: '', suburb: '', state: 'QLD', postcode: '' });
   const [setupSaving, setSetupSaving] = useState(false);
+  const [payingOrderId, setPayingOrderId] = useState('');
 
   // API_URL imported from @butcher/shared
 
@@ -139,6 +140,19 @@ export default function AccountPage() {
     } catch {
       toast('Failed to save address', 'error');
     } finally { setSaving(false); }
+  };
+
+  const payForOrder = async (orderId: string) => {
+    setPayingOrderId(orderId);
+    try {
+      const result = await api.orders.createPaymentLink(orderId);
+      if (!result.paymentUrl) throw new Error('Square did not return a payment link.');
+      window.location.href = result.paymentUrl;
+    } catch (e: any) {
+      toast(e?.message ?? 'Failed to open Square checkout', 'error');
+    } finally {
+      setPayingOrderId('');
+    }
   };
 
   if (!isLoaded) {
@@ -542,6 +556,17 @@ export default function AccountPage() {
                           {order.deliveryFee > 0 && <div className="flex justify-between text-gray-500"><span>Delivery</span><span>{formatCurrency(order.deliveryFee)}</span></div>}
                           <div className="flex justify-between font-semibold text-gray-900 pt-1"><span>Total</span><span>{formatCurrency(order.total)}</span></div>
                         </div>
+                        {['pending_payment', 'awaiting_payment'].includes(order.paymentStatus) && (
+                          <button
+                            type="button"
+                            onClick={() => payForOrder(order.id)}
+                            disabled={payingOrderId === order.id}
+                            className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-mid disabled:opacity-60"
+                          >
+                            <CreditCard className="h-4 w-4" />
+                            {payingOrderId === order.id ? 'Opening Square checkout...' : 'Pay now'}
+                          </button>
+                        )}
                         {(order.status === 'out_for_delivery' || order.status === 'delivered') && (
                           <Link href={`/track/${order.id}`} className="mt-4 inline-block text-sm text-brand font-medium hover:underline">
                             Track delivery →
