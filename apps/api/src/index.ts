@@ -4,7 +4,7 @@ import type { Env, AuthUser } from './types';
 import { requireAuth, requireRole, verifyClerkToken } from './middleware/auth';
 import { drizzle } from 'drizzle-orm/d1';
 import { eq, desc, asc, and, gte, sql, or } from 'drizzle-orm';
-import { orders as ordersTable, customers as customersTable, products as productsTable, deliveryDays as deliveryDaysTable, subscriptions as subscriptionsTable, processedWebhooks, pageEvents, promoCodes as promoCodesTable } from '@butcher/db';
+import { orders as ordersTable, customers as customersTable, products as productsTable, deliveryDays as deliveryDaysTable, subscriptions as subscriptionsTable, processedWebhooks, pageEvents, promoCodes as promoCodesTable, stops as stopsTable } from '@butcher/db';
 import { deductStock, getStockDayId, reserveDayStock, consumePromoCode } from './lib/stock';
 import { parsePromoDeliveryDayIds, promoAllowsDeliveryDay } from './lib/promos';
 import ordersRouter from './routes/orders';
@@ -235,6 +235,38 @@ function resolvePaidOrderStatus(order: OrderRow): string {
   return order.status === 'pending_payment' ? 'confirmed' : order.status;
 }
 
+async function ensureStopForPaidDeliveryOrder(db: ReturnType<typeof drizzle>, order: OrderRow): Promise<boolean> {
+  if (order.fulfillmentType !== 'delivery') return false;
+  const [day] = await db.select().from(deliveryDaysTable).where(eq(deliveryDaysTable.id, order.deliveryDayId)).limit(1);
+  if (!day || day.type !== 'delivery') return false;
+
+  const [existing] = await db.select({ id: stopsTable.id }).from(stopsTable).where(eq(stopsTable.orderId, order.id)).limit(1);
+  if (existing) return false;
+
+  const [seqRow] = await db.select({ maxSequence: sql<number>`coalesce(max(${stopsTable.sequence}), 0)` })
+    .from(stopsTable)
+    .where(eq(stopsTable.deliveryDayId, order.deliveryDayId));
+  const sequence = Number(seqRow?.maxSequence ?? 0) + 1;
+
+  await db.insert(stopsTable).values({
+    id: crypto.randomUUID(),
+    deliveryDayId: order.deliveryDayId,
+    orderId: order.id,
+    customerId: order.customerId,
+    customerName: order.customerName,
+    customerPhone: order.customerPhone ?? '',
+    address: order.deliveryAddress,
+    items: order.items,
+    sequence,
+    status: 'pending',
+    customerNote: order.notes ?? null,
+    lat: null,
+    lng: null,
+    createdAt: Date.now(),
+  });
+  return true;
+}
+
 async function squareGet(env: Env, path: string): Promise<any> {
   if (!env.SQUARE_ACCESS_TOKEN) throw new Error('Square not configured');
   const res = await fetch(`${SQUARE_API}${path}`, {
@@ -335,6 +367,7 @@ async function confirmOrderFromSquarePaymentMatch(
     internalNotes: `${order.internalNotes ?? ''}\nSquare payment confirmed: payment=${match.paymentId} amount=${match.amountCents}c matched_by=${match.matchStrategy}`.trim(),
     updatedAt: Date.now(),
   }).where(eq(ordersTable.id, order.id));
+  await ensureStopForPaidDeliveryOrder(db, order);
 
   return match;
 }
@@ -390,6 +423,7 @@ async function confirmOrderFromSquarePayment(
     internalNotes: `${order.internalNotes ?? ''}\nSquare webhook confirmed: payment=${payment.id} amount=${amountCents}c matched_by=${matchStrategy}`.trim(),
     updatedAt: Date.now(),
   }).where(eq(ordersTable.id, order.id));
+  await ensureStopForPaidDeliveryOrder(db, order);
 
   return { orderId: order.id, paymentId: payment.id, matchStrategy };
 }
@@ -565,6 +599,7 @@ async function confirmOrderFromSquarePaymentLinkIfPaid(
     internalNotes: `${order.internalNotes ?? ''}\nSquare payment confirmed: order=${squareOrderId} amount=${tenderedCents}c matched_by=payment_link_square_order`.trim(),
     updatedAt: Date.now(),
   }).where(eq(ordersTable.id, order.id));
+  await ensureStopForPaidDeliveryOrder(db, order);
 
   return {
     match: {
@@ -621,6 +656,7 @@ async function confirmOrderFromSquareInvoiceIfPaid(
     internalNotes: `${order.internalNotes ?? ''}\nSquare invoice paid: invoice=${invoiceId} amount=${amountCents ?? 'unknown'}c matched_by=invoice_status`.trim(),
     updatedAt: Date.now(),
   }).where(eq(ordersTable.id, order.id));
+  await ensureStopForPaidDeliveryOrder(db, order);
 
   return { invoiceId, invoiceStatus: invoice.status, amountCents };
 }
@@ -1252,6 +1288,7 @@ app.post('/api/orders/:id/mark-paid', async (c) => {
       internalNotes: `${order.internalNotes ?? ''}\nSquare payment confirmed: order=${squareOrderId} amount=${tenderedCents}c`.trim(),
       updatedAt: Date.now(),
     }).where(eq(ordersTable.id, orderId));
+    await ensureStopForPaidDeliveryOrder(db, order);
 
     return c.json({ ok: true, status: 'paid' });
   } catch (e: any) {

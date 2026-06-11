@@ -75,7 +75,15 @@ test('manual Square reconciliation is bounded and uses fast payment-link checks 
   assert.match(source, /interface SquareReconcileOptions/);
   assert.match(source, /Math\.min\(options\.limit \?\? 25,\s*100\)/);
   assert.match(source, /confirmOrderFromSquarePaymentLinkIfPaid\(db,\s*order,\s*env\)/);
-  assert.match(source, /if \(options\.deepSearch\)/);
+  assert.match(source, /if \(options\.deepSearch \|\| direct\.squareState\)/);
+});
+
+test('Square-paid delivery orders ensure a manifest stop exists', () => {
+  assert.match(source, /async function ensureStopForPaidDeliveryOrder/);
+  assert.match(source, /order\.fulfillmentType !== 'delivery'/);
+  assert.match(source, /day\.type !== 'delivery'/);
+  assert.match(source, /db\.insert\(stopsTable\)\.values/);
+  assert.match(source, /await ensureStopForPaidDeliveryOrder\(db,\s*order\)/);
 });
 
 test('deep Square reconciliation falls back to recent payout entries', () => {

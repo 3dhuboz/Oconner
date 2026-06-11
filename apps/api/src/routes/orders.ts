@@ -25,6 +25,38 @@ function formatAddress(addr: Record<string, string>): string {
   return `${addr.line1}${addr.line2 ? ', ' + addr.line2 : ''}, ${addr.suburb} ${addr.state} ${addr.postcode}`;
 }
 
+async function ensureStopForPaidDeliveryOrder(db: ReturnType<typeof drizzle>, order: typeof orders.$inferSelect): Promise<boolean> {
+  if (order.fulfillmentType !== 'delivery') return false;
+  const [day] = await db.select().from(deliveryDays).where(eq(deliveryDays.id, order.deliveryDayId)).limit(1);
+  if (!day || day.type !== 'delivery') return false;
+
+  const [existing] = await db.select({ id: stops.id }).from(stops).where(eq(stops.orderId, order.id)).limit(1);
+  if (existing) return false;
+
+  const [seqRow] = await db.select({ maxSequence: sql<number>`coalesce(max(${stops.sequence}), 0)` })
+    .from(stops)
+    .where(eq(stops.deliveryDayId, order.deliveryDayId));
+  const sequence = Number(seqRow?.maxSequence ?? 0) + 1;
+
+  await db.insert(stops).values({
+    id: crypto.randomUUID(),
+    deliveryDayId: order.deliveryDayId,
+    orderId: order.id,
+    customerId: order.customerId,
+    customerName: order.customerName,
+    customerPhone: order.customerPhone ?? '',
+    address: order.deliveryAddress,
+    items: order.items,
+    sequence,
+    status: 'pending',
+    customerNote: order.notes ?? null,
+    lat: null,
+    lng: null,
+    createdAt: Date.now(),
+  });
+  return true;
+}
+
 app.get('/', async (c) => {
   const db = drizzle(c.env.DB);
   const { status } = c.req.query();
@@ -261,6 +293,9 @@ app.patch('/:id/status', async (c) => {
   if (paymentStatus !== undefined) patch.paymentStatus = paymentStatus;
 
   await db.update(orders).set(patch).where(eq(orders.id, orderId));
+  if (paymentStatus === 'paid') {
+    await ensureStopForPaidDeliveryOrder(db, { ...order, ...patch });
+  }
 
   await db.insert(auditLog).values({
     id: crypto.randomUUID(),
@@ -326,7 +361,7 @@ app.patch('/:id', async (c) => {
     customerName?: string; customerEmail?: string; customerPhone?: string;
     items?: unknown[]; subtotal?: number; deliveryFee?: number; gst?: number; total?: number;
     deliveryAddress?: object; deliveryDayId?: string;
-    notes?: string; internalNotes?: string; status?: string;
+    notes?: string; internalNotes?: string; status?: string; paymentStatus?: string;
   }>();
 
   const patch: Partial<typeof orders.$inferInsert> = { updatedAt: now };
@@ -342,6 +377,7 @@ app.patch('/:id', async (c) => {
   if (body.notes !== undefined) patch.notes = body.notes;
   if (body.internalNotes !== undefined) patch.internalNotes = body.internalNotes;
   if (body.status !== undefined) patch.status = body.status;
+  if (body.paymentStatus !== undefined) patch.paymentStatus = body.paymentStatus;
 
   // Handle delivery day change — atomic deltas on both old and new day counters.
   if (body.deliveryDayId !== undefined && body.deliveryDayId !== order.deliveryDayId) {
@@ -366,6 +402,10 @@ app.patch('/:id', async (c) => {
   }
 
   await db.update(orders).set(patch).where(eq(orders.id, orderId));
+  const effectiveOrder = { ...order, ...patch };
+  if (effectiveOrder.paymentStatus === 'paid') {
+    await ensureStopForPaidDeliveryOrder(db, effectiveOrder);
+  }
 
   await db.insert(auditLog).values({
     id: crypto.randomUUID(),
