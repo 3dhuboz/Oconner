@@ -35,6 +35,12 @@ export interface DeliveryDay {
   notes?: string;
   routeGenerated: boolean;
   routeGeneratedAt?: number;
+  routeStartAddress?: string | null;
+  routeStartLat?: number | null;
+  routeStartLng?: number | null;
+  routeFinishAddress?: string | null;
+  routeFinishLat?: number | null;
+  routeFinishLng?: number | null;
   driverUid?: string;
   runStartedAt?: number;
   runCompletedAt?: number;

@@ -145,6 +145,12 @@ export const deliveryDays = sqliteTable('delivery_days', {
   routeGenerated: integer('route_generated', { mode: 'boolean' }).notNull().default(false),
   routeGeneratedAt: integer('route_generated_at'),
   deliveryWindowStart: text('delivery_window_start').default('09:00'), // HH:MM 24-hr
+  routeStartAddress: text('route_start_address'),
+  routeStartLat: real('route_start_lat'),
+  routeStartLng: real('route_start_lng'),
+  routeFinishAddress: text('route_finish_address'),
+  routeFinishLat: real('route_finish_lat'),
+  routeFinishLng: real('route_finish_lng'),
   driverUid: text('driver_uid').references(() => users.id),
   zones: text('zones').default(''),            // comma-separated area names e.g. "Rockhampton, Yeppoon, Biloela"
   type: text('type').notNull().default('delivery'),  // 'delivery' | 'pickup'

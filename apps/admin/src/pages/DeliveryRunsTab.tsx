@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '@butcher/shared';
-import type { DeliveryRun, Stop } from '@butcher/shared';
+import type { DeliveryDay, DeliveryRun, Stop } from '@butcher/shared';
 import { Plus, X, Truck, User, Pencil, Trash2, ChevronRight, MapPin, CheckCircle, Clock, AlertTriangle, MoreHorizontal, Package, Route } from 'lucide-react';
 import { toast } from '../lib/toast';
 
@@ -9,6 +9,23 @@ const RUN_COLORS = [
 ];
 
 interface DriverUser { id: string; name?: string; email: string; }
+type RoutePoint = { label: string; lat: number; lng: number };
+
+const DEFAULT_ROUTE_START: RoutePoint = { label: 'base', lat: -24.2119, lng: 151.2833 };
+
+function getRouteStartPoint(day: DeliveryDay | null): RoutePoint {
+  if (day?.routeStartLat != null && day?.routeStartLng != null) {
+    return { label: day.routeStartAddress?.trim() || 'custom start', lat: day.routeStartLat, lng: day.routeStartLng };
+  }
+  return DEFAULT_ROUTE_START;
+}
+
+function getRouteFinishPoint(day: DeliveryDay | null): RoutePoint | null {
+  if (day?.routeFinishLat != null && day?.routeFinishLng != null) {
+    return { label: day.routeFinishAddress?.trim() || 'custom finish', lat: day.routeFinishLat, lng: day.routeFinishLng };
+  }
+  return null;
+}
 
 const STOP_STATUS_CFG: Record<string, { label: string; cls: string }> = {
   pending:   { label: 'Pending',   cls: 'bg-gray-100 text-gray-600' },
@@ -23,6 +40,7 @@ const EMPTY_RUN_FORM = { name: '', zone: '', color: '#1B3A2E', driverUid: '', no
 
 export default function DeliveryRunsTab({ dayId }: { dayId: string }) {
   const [runs, setRuns] = useState<DeliveryRun[]>([]);
+  const [day, setDay] = useState<DeliveryDay | null>(null);
   const [allStops, setAllStops] = useState<Stop[]>([]);
   const [unassigned, setUnassigned] = useState<Stop[]>([]);
   const [drivers, setDrivers] = useState<DriverUser[]>([]);
@@ -39,15 +57,17 @@ export default function DeliveryRunsTab({ dayId }: { dayId: string }) {
 
   const load = async () => {
     try {
-      const [runsData, stopsData, driversData] = await Promise.all([
+      const [runsData, stopsData, driversData, dayData] = await Promise.all([
         api.deliveryRuns.list(dayId) as Promise<DeliveryRun[]>,
         api.stops.list(dayId) as Promise<Stop[]>,
         api.users.drivers() as Promise<DriverUser[]>,
+        api.deliveryDays.get(dayId) as Promise<DeliveryDay>,
       ]);
       setRuns(runsData);
       setAllStops(stopsData);
       setUnassigned(stopsData.filter((s) => !s.runId));
       setDrivers(driversData);
+      setDay(dayData);
     } catch {
       toast('Failed to load runs', 'error');
     } finally {
@@ -152,9 +172,10 @@ export default function DeliveryRunsTab({ dayId }: { dayId: string }) {
     if (runStops.length < 2) return;
     setOptimising(true);
     try {
-      // Anti-clockwise spiral outward from Boynedale depot. Nearest stop first,
-      // furthest last, middle sorted by anti-clockwise bearing from start.
-      const DEPOT = { lat: -24.2119, lng: 151.2833 };
+      // Anti-clockwise spiral outward from the saved start point. If a finish
+      // point is set for the delivery day, the last stop is nearest to it.
+      const routeStart = getRouteStartPoint(day);
+      const routeFinish = getRouteFinishPoint(day);
       const R = 6371;
       const toRad = Math.PI / 180;
       const hav = (lat1: number, lng1: number, lat2: number, lng2: number) => {
@@ -176,13 +197,17 @@ export default function DeliveryRunsTab({ dayId }: { dayId: string }) {
         const lng = (s as any).lng ?? 0;
         return {
           stop: s,
-          dist: (lat && lng) ? hav(DEPOT.lat, DEPOT.lng, lat, lng) : 0,
-          bearing: (lat && lng) ? bearing(DEPOT.lat, DEPOT.lng, lat, lng) : 0,
+          dist: (lat && lng) ? hav(routeStart.lat, routeStart.lng, lat, lng) : 0,
+          finishDist: (routeFinish && lat && lng) ? hav(routeFinish.lat, routeFinish.lng, lat, lng) : null,
+          bearing: (lat && lng) ? bearing(routeStart.lat, routeStart.lng, lat, lng) : 0,
         };
       });
 
       const start = annotated.reduce((a, b) => a.dist < b.dist ? a : b);
-      const end = annotated.reduce((a, b) => a.dist > b.dist ? a : b);
+      const endCandidates = annotated.filter((a) => a !== start);
+      const end = routeFinish && endCandidates.length > 0
+        ? endCandidates.reduce((a, b) => (a.finishDist ?? Infinity) < (b.finishDist ?? Infinity) ? a : b)
+        : annotated.reduce((a, b) => a.dist > b.dist ? a : b);
       const middle = annotated
         .filter((a) => a !== start && a !== end)
         .map((a) => ({ ...a, acDist: (start.bearing - a.bearing + 360) % 360 }))
@@ -191,7 +216,7 @@ export default function DeliveryRunsTab({ dayId }: { dayId: string }) {
 
       await Promise.all(ordered.map((s, i) => api.stops.updateSequence(s.id!, i + 1)));
       await load();
-      toast('Route optimised — anti-clockwise from base');
+      toast(`Route optimised from ${routeStart.label}`);
     } catch {
       toast('Failed to optimise', 'error');
     } finally {

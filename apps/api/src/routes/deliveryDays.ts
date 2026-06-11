@@ -79,13 +79,6 @@ app.post('/', async (c) => {
   return c.json({ id }, 201);
 });
 
-app.patch('/:id', async (c) => {
-  const db = drizzle(c.env.DB);
-  const body = await c.req.json<Partial<typeof deliveryDays.$inferInsert>>();
-  await db.update(deliveryDays).set(body).where(eq(deliveryDays.id, c.req.param('id')));
-  return c.json({ ok: true });
-});
-
 app.delete('/:id', async (c) => {
   const db = drizzle(c.env.DB);
   const user = c.get('user');
@@ -105,6 +98,53 @@ async function geocodeAddress(address: { line1: string; suburb: string; postcode
   } catch {}
   return null;
 }
+
+async function geocodeFreeformAddress(address: string): Promise<{ lat: number; lng: number } | null> {
+  const clean = address.trim();
+  if (!clean) return null;
+  try {
+    const q = encodeURIComponent(`${clean}, Queensland, Australia`);
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${q}&limit=1&countrycodes=au`, {
+      headers: { 'User-Agent': "OConnorAgriculture/1.0 (orders@oconnoragriculture.com.au)" },
+    });
+    const data = await res.json() as Array<{ lat: string; lon: string }>;
+    if (data.length > 0) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+  } catch {}
+  return null;
+}
+
+app.patch('/:id/route-endpoints', async (c) => {
+  const db = drizzle(c.env.DB);
+  const id = c.req.param('id');
+  const body = await c.req.json<{ routeStartAddress?: string | null; routeFinishAddress?: string | null }>();
+  const routeStartAddress = body.routeStartAddress?.trim() || null;
+  const routeFinishAddress = body.routeFinishAddress?.trim() || null;
+
+  const startGeo = routeStartAddress ? await geocodeFreeformAddress(routeStartAddress) : null;
+  const finishGeo = routeFinishAddress ? await geocodeFreeformAddress(routeFinishAddress) : null;
+
+  if (routeStartAddress && !startGeo) return c.json({ error: 'Could not find the start address' }, 400);
+  if (routeFinishAddress && !finishGeo) return c.json({ error: 'Could not find the finish address' }, 400);
+
+  await db.update(deliveryDays).set({
+    routeStartAddress,
+    routeStartLat: startGeo?.lat ?? null,
+    routeStartLng: startGeo?.lng ?? null,
+    routeFinishAddress,
+    routeFinishLat: finishGeo?.lat ?? null,
+    routeFinishLng: finishGeo?.lng ?? null,
+  }).where(eq(deliveryDays.id, id));
+
+  const [day] = await db.select().from(deliveryDays).where(eq(deliveryDays.id, id)).limit(1);
+  return c.json(day);
+});
+
+app.patch('/:id', async (c) => {
+  const db = drizzle(c.env.DB);
+  const body = await c.req.json<Partial<typeof deliveryDays.$inferInsert>>();
+  await db.update(deliveryDays).set(body).where(eq(deliveryDays.id, c.req.param('id')));
+  return c.json({ ok: true });
+});
 
 app.post('/:id/generate-stops', async (c) => {
   const db = drizzle(c.env.DB);

@@ -196,6 +196,8 @@ export const api = {
     get: (id: string) => api.get(`/api/delivery-days/${id}`),
     create: (data: unknown) => api.post('/api/delivery-days', data),
     update: (id: string, data: unknown) => api.patch(`/api/delivery-days/${id}`, data),
+    updateRouteEndpoints: (id: string, data: { routeStartAddress?: string | null; routeFinishAddress?: string | null }) =>
+      api.patch(`/api/delivery-days/${id}/route-endpoints`, data),
     delete: (id: string) => api.delete(`/api/delivery-days/${id}`),
     sendReminders: (id: string) => api.post(`/api/delivery-days/${id}/send-reminders`, {}),
     broadcast: (id: string, data: { subject?: string; message: string }) =>

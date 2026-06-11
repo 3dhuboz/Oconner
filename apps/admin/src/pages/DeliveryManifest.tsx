@@ -65,23 +65,25 @@ function windowStatus(etaMs: number, w: { earliest?: number; latest?: number }):
   return 'ok';
 }
 
+type RoutePoint = { label: string; lat: number; lng: number };
+
 function optimizeWithConstraints(
-  stops: Stop[], departureMs: number,
+  stops: Stop[], departureMs: number, routeStart: RoutePoint, routeFinish: RoutePoint | null,
 ): { stops: Stop[]; reasons: Record<string, string> } {
   const STOP_TIME_MS = 5 * 60 * 1000; // 5 min per stop for unloading
   const AVG_SPEED_KMH = 80; // average regional driving speed
   const ROAD_FACTOR = 1.3; // roads are ~30% longer than straight line
 
-  let sorted = antiClockwiseOutwardRoute([...stops]);
+  let sorted = antiClockwiseOutwardRoute([...stops], routeStart, routeFinish);
   const geoPos: Record<string, number> = {};
   sorted.forEach((s, i) => { geoPos[s.id!] = i; });
 
-  // Calculate cumulative drive time from depot through each stop
+  // Calculate cumulative drive time from the chosen start point through each stop.
   const calcEtas = (list: Stop[]) => {
     let cumulativeMs = 0;
     return list.map((s, i) => {
-      const prevLat = i === 0 ? DEPOT_LAT : (list[i - 1].lat ?? DEPOT_LAT);
-      const prevLng = i === 0 ? DEPOT_LNG : (list[i - 1].lng ?? DEPOT_LNG);
+      const prevLat = i === 0 ? routeStart.lat : (list[i - 1].lat ?? routeStart.lat);
+      const prevLng = i === 0 ? routeStart.lng : (list[i - 1].lng ?? routeStart.lng);
       const km = (s.lat && s.lng) ? haversineKm(prevLat, prevLng, s.lat, s.lng) * ROAD_FACTOR : 20;
       const driveMs = (km / AVG_SPEED_KMH) * 60 * 60 * 1000;
       cumulativeMs += driveMs + STOP_TIME_MS;
@@ -123,8 +125,8 @@ function optimizeWithConstraints(
         : w.latest ? `before ${minsToTime(w.latest)}` : `after ${minsToTime(w.earliest!)}`;
       reasons[s.id!] = `Time request (${constraint}) met at current geographic position`;
     } else {
-      const dist = (s.lat && s.lng) ? haversineKm(DEPOT_LAT, DEPOT_LNG, s.lat, s.lng).toFixed(1) : '?';
-      reasons[s.id!] = `${dist}km from depot — ${s.address.suburb} (${s.address.postcode})`;
+      const dist = (s.lat && s.lng) ? haversineKm(routeStart.lat, routeStart.lng, s.lat, s.lng).toFixed(1) : '?';
+      reasons[s.id!] = `${dist}km from ${routeStart.label} - ${s.address.suburb} (${s.address.postcode})`;
     }
   });
   return { stops: withEta, reasons };
@@ -138,6 +140,12 @@ interface DeliveryDayData {
   notes?: string;
   active: boolean;
   deliveryWindowStart?: string; // HH:MM 24-hr, e.g. "09:00"
+  routeStartAddress?: string | null;
+  routeStartLat?: number | null;
+  routeStartLng?: number | null;
+  routeFinishAddress?: string | null;
+  routeFinishLat?: number | null;
+  routeFinishLng?: number | null;
 }
 
 function departureTimestamp(day: DeliveryDayData | null): number {
@@ -148,9 +156,32 @@ function departureTimestamp(day: DeliveryDayData | null): number {
   return base.getTime();
 }
 
-// O'Connor Agriculture depot — Rockhampton, QLD
+// O'Connor Agriculture default route base.
 const DEPOT_LAT = -24.2119; // Boynedale, QLD
 const DEPOT_LNG = 151.2833;
+const DEFAULT_ROUTE_START: RoutePoint = { label: 'base', lat: DEPOT_LAT, lng: DEPOT_LNG };
+
+function getRouteStartPoint(day: DeliveryDayData | null): RoutePoint {
+  if (day?.routeStartLat != null && day?.routeStartLng != null) {
+    return {
+      label: day.routeStartAddress?.trim() || 'custom start',
+      lat: day.routeStartLat,
+      lng: day.routeStartLng,
+    };
+  }
+  return DEFAULT_ROUTE_START;
+}
+
+function getRouteFinishPoint(day: DeliveryDayData | null): RoutePoint | null {
+  if (day?.routeFinishLat != null && day?.routeFinishLng != null) {
+    return {
+      label: day.routeFinishAddress?.trim() || 'custom finish',
+      lat: day.routeFinishLat,
+      lng: day.routeFinishLng,
+    };
+  }
+  return null;
+}
 
 /** Haversine distance in km between two lat/lng points */
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -185,17 +216,21 @@ function bearingDeg(lat1: number, lng1: number, lat2: number, lng2: number): num
  * Stops missing lat/lng fall back to 0 distance/bearing — they'll sort to
  * the front but the admin can manually reorder using the chevrons.
  */
-function antiClockwiseOutwardRoute(stops: Stop[]): Stop[] {
+function antiClockwiseOutwardRoute(stops: Stop[], routeStart: RoutePoint, routeFinish: RoutePoint | null): Stop[] {
   if (stops.length <= 1) return [...stops];
 
   const annotated = stops.map((s) => ({
     stop: s,
-    dist: (s.lat && s.lng) ? haversineKm(DEPOT_LAT, DEPOT_LNG, s.lat, s.lng) : 0,
-    bearing: (s.lat && s.lng) ? bearingDeg(DEPOT_LAT, DEPOT_LNG, s.lat, s.lng) : 0,
+    dist: (s.lat && s.lng) ? haversineKm(routeStart.lat, routeStart.lng, s.lat, s.lng) : 0,
+    finishDist: (routeFinish && s.lat && s.lng) ? haversineKm(routeFinish.lat, routeFinish.lng, s.lat, s.lng) : null,
+    bearing: (s.lat && s.lng) ? bearingDeg(routeStart.lat, routeStart.lng, s.lat, s.lng) : 0,
   }));
 
   const start = annotated.reduce((a, b) => a.dist < b.dist ? a : b);
-  const end = annotated.reduce((a, b) => a.dist > b.dist ? a : b);
+  const endCandidates = annotated.filter((a) => a !== start);
+  const end = routeFinish && endCandidates.length > 0
+    ? endCandidates.reduce((a, b) => (a.finishDist ?? Infinity) < (b.finishDist ?? Infinity) ? a : b)
+    : annotated.reduce((a, b) => a.dist > b.dist ? a : b);
 
   // Only two stops, or nearest == furthest (e.g. 1 valid stop): just return ordered list.
   if (stops.length === 2 || start === end) {
@@ -242,6 +277,9 @@ export default function DeliveryManifestPage() {
   const [lastPushed, setLastPushed] = useState<Date | null>(null);
   const [showExplainer, setShowExplainer] = useState(false);
   const [showAddStop, setShowAddStop] = useState(false);
+  const [routeStartAddress, setRouteStartAddress] = useState('');
+  const [routeFinishAddress, setRouteFinishAddress] = useState('');
+  const [savingRouteEndpoints, setSavingRouteEndpoints] = useState(false);
   const [editingStopId, setEditingStopId] = useState<string | null>(null);
   const [manualStop, setManualStop] = useState({
     name: '',
@@ -302,6 +340,14 @@ export default function DeliveryManifestPage() {
     }).catch(() => {});
   }, [dayId]);
 
+  useEffect(() => {
+    setRouteStartAddress(day?.routeStartAddress ?? '');
+    setRouteFinishAddress(day?.routeFinishAddress ?? '');
+  }, [day?.id, day?.routeStartAddress, day?.routeFinishAddress]);
+
+  const routeStartPoint = useMemo(() => getRouteStartPoint(day), [day]);
+  const routeFinishPoint = useMemo(() => getRouteFinishPoint(day), [day]);
+
   const generateSocialPost = async () => {
     if (!dayId) return;
     setGeneratingPost(true);
@@ -339,7 +385,7 @@ export default function DeliveryManifestPage() {
     if (!dayId || stops.length === 0) return;
     setOptimizing(true);
     const departure = departureTimestamp(day);
-    const { stops: optimized, reasons } = optimizeWithConstraints(stops, departure);
+    const { stops: optimized, reasons } = optimizeWithConstraints(stops, departure, routeStartPoint, routeFinishPoint);
     const withSeq = optimized.map((s, i) => ({ ...s, sequence: i + 1 }));
     await Promise.all(withSeq.map((s) => api.stops.updateSequence(s.id!, s.sequence!, s.estimatedArrival)));
     setStops(withSeq);
@@ -348,6 +394,24 @@ export default function DeliveryManifestPage() {
     setShowPreview(true);
     setLastPushed(new Date());
     setOptimizing(false);
+  };
+
+  const saveRouteEndpoints = async () => {
+    if (!dayId) return;
+    setSavingRouteEndpoints(true);
+    try {
+      const updatedDay = await api.deliveryDays.updateRouteEndpoints(dayId, {
+        routeStartAddress,
+        routeFinishAddress,
+      });
+      setDay(updatedDay as DeliveryDayData);
+      setRouteOptimised(false);
+      toast('Route start and finish saved');
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'Failed to save route start and finish', 'error');
+    } finally {
+      setSavingRouteEndpoints(false);
+    }
   };
 
   const moveStop = async (stopId: string, dir: 'up' | 'down') => {
@@ -538,8 +602,8 @@ export default function DeliveryManifestPage() {
             const ROAD_FACTOR = 1.3;
             let cumulativeMs = 0;
             const updated = sorted.map((s, i) => {
-              const prevLat = i === 0 ? DEPOT_LAT : (sorted[i - 1].lat ?? DEPOT_LAT);
-              const prevLng = i === 0 ? DEPOT_LNG : (sorted[i - 1].lng ?? DEPOT_LNG);
+              const prevLat = i === 0 ? routeStartPoint.lat : (sorted[i - 1].lat ?? routeStartPoint.lat);
+              const prevLng = i === 0 ? routeStartPoint.lng : (sorted[i - 1].lng ?? routeStartPoint.lng);
               const km = (s.lat && s.lng) ? haversineKm(prevLat, prevLng, s.lat, s.lng) * ROAD_FACTOR : 20;
               cumulativeMs += (km / AVG_SPEED_KMH) * 3600000 + STOP_TIME_MS;
               return { ...s, estimatedArrival: departure + cumulativeMs };
@@ -582,6 +646,69 @@ export default function DeliveryManifestPage() {
           <Send className="h-4 w-4" />
           Send Custom Message
         </button>
+      </div>
+
+      <div className="bg-white rounded-xl border p-4 mb-6">
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div>
+            <h2 className="font-semibold text-brand flex items-center gap-2">
+              <MapPin className="h-4 w-4" /> Route start and finish
+            </h2>
+            <p className="text-xs text-gray-500 mt-1">
+              Save custom start or finish points for this delivery day, then run Optimise Route again.
+            </p>
+          </div>
+          {(day?.routeStartAddress || day?.routeFinishAddress) && (
+            <button
+              onClick={async () => {
+                setRouteStartAddress('');
+                setRouteFinishAddress('');
+                await api.deliveryDays.updateRouteEndpoints(dayId!, { routeStartAddress: null, routeFinishAddress: null });
+                const updatedDay = await api.deliveryDays.get(dayId!);
+                setDay(updatedDay as DeliveryDayData);
+                setRouteOptimised(false);
+                toast('Route reset to default base');
+              }}
+              className="text-xs text-gray-500 hover:text-brand underline"
+            >
+              Use default base
+            </button>
+          )}
+        </div>
+        <div className="grid md:grid-cols-2 gap-3">
+          <label className="block">
+            <span className="text-xs font-medium text-gray-500">Start from</span>
+            <input
+              value={routeStartAddress}
+              onChange={(event) => setRouteStartAddress(event.target.value)}
+              placeholder="Default base"
+              className="mt-1 w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand/30"
+            />
+          </label>
+          <label className="block">
+            <span className="text-xs font-medium text-gray-500">Finish near</span>
+            <input
+              value={routeFinishAddress}
+              onChange={(event) => setRouteFinishAddress(event.target.value)}
+              placeholder="Optional finish address"
+              className="mt-1 w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand/30"
+            />
+          </label>
+        </div>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs text-gray-500">
+            Active: starts at <span className="font-medium text-gray-700">{routeStartPoint.label}</span>
+            {routeFinishPoint ? <> and finishes near <span className="font-medium text-gray-700">{routeFinishPoint.label}</span></> : <> and finishes at the furthest stop</>}.
+          </p>
+          <button
+            onClick={saveRouteEndpoints}
+            disabled={savingRouteEndpoints}
+            className="flex items-center gap-2 bg-brand text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-brand-mid disabled:opacity-50"
+          >
+            <MapPin className="h-4 w-4" />
+            {savingRouteEndpoints ? 'Saving...' : 'Save Route Points'}
+          </button>
+        </div>
       </div>
 
       {showPreview && (() => {
@@ -692,7 +819,7 @@ export default function DeliveryManifestPage() {
             {/* Route Map */}
             {stopsWithEta.some((s) => s.lat && s.lng) && (
               <div className="border-b border-indigo-100">
-                <RouteMap stops={stopsWithEta} depotLat={DEPOT_LAT} depotLng={DEPOT_LNG} />
+                <RouteMap stops={stopsWithEta} routeStart={routeStartPoint} routeFinish={routeFinishPoint} />
               </div>
             )}
             {/* Per-stop timeline */}
@@ -1143,7 +1270,7 @@ export default function DeliveryManifestPage() {
 // ── Route Map Component (Interactive Google Maps) ──
 const GOOGLE_MAPS_KEY = 'AIzaSyA1nxhaU5f0ns9ZHJDkYeQh7tNRXlkdmWU';
 
-function RouteMap({ stops, depotLat, depotLng }: { stops: { lat?: number; lng?: number; customerName: string; sequence?: number }[]; depotLat: number; depotLng: number }) {
+function RouteMap({ stops, routeStart, routeFinish }: { stops: { lat?: number; lng?: number; customerName: string; sequence?: number }[]; routeStart: RoutePoint; routeFinish: RoutePoint | null }) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
 
@@ -1156,8 +1283,9 @@ function RouteMap({ stops, depotLat, depotLng }: { stops: { lat?: number; lng?: 
       if (!google?.maps) return;
 
       const bounds = new google.maps.LatLngBounds();
-      bounds.extend({ lat: depotLat, lng: depotLng });
+      bounds.extend({ lat: routeStart.lat, lng: routeStart.lng });
       geoStops.forEach((s) => bounds.extend({ lat: s.lat!, lng: s.lng! }));
+      if (routeFinish) bounds.extend({ lat: routeFinish.lat, lng: routeFinish.lng });
 
       if (!mapInstanceRef.current) {
         mapInstanceRef.current = new google.maps.Map(mapRef.current!, {
@@ -1177,17 +1305,25 @@ function RouteMap({ stops, depotLat, depotLng }: { stops: { lat?: number; lng?: 
 
       // Depot marker
       const depotMarker = new google.maps.Marker({
-        position: { lat: depotLat, lng: depotLng },
+        position: { lat: routeStart.lat, lng: routeStart.lng },
         map,
-        label: { text: '🏠', fontSize: '16px' },
-        title: 'Depot — Boynedale',
+        label: { text: 'S', color: 'white', fontWeight: 'bold', fontSize: '12px' },
+        icon: {
+          path: google.maps.SymbolPath.CIRCLE,
+          scale: 14,
+          fillColor: '#1B3A2E',
+          fillOpacity: 1,
+          strokeColor: 'white',
+          strokeWeight: 2,
+        },
+        title: `Start - ${routeStart.label}`,
         zIndex: 1000,
       });
       (map as any)._markers.push(depotMarker);
 
       // Stop markers with numbered circles (offset overlapping positions)
       const usedPositions: string[] = [];
-      const routePath = [{ lat: depotLat, lng: depotLng }];
+      const routePath = [{ lat: routeStart.lat, lng: routeStart.lng }];
       geoStops.forEach((s) => {
         let lat = s.lat!, lng = s.lng!;
         const key = `${lat.toFixed(4)},${lng.toFixed(4)}`;
@@ -1222,6 +1358,26 @@ function RouteMap({ stops, depotLat, depotLng }: { stops: { lat?: number; lng?: 
         });
         marker.addListener('click', () => infoWindow.open(map, marker));
       });
+
+      if (routeFinish) {
+        routePath.push({ lat: routeFinish.lat, lng: routeFinish.lng });
+        const finishMarker = new google.maps.Marker({
+          position: { lat: routeFinish.lat, lng: routeFinish.lng },
+          map,
+          label: { text: 'F', color: 'white', fontWeight: 'bold', fontSize: '12px' },
+          icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 14,
+            fillColor: '#dc2626',
+            fillOpacity: 1,
+            strokeColor: 'white',
+            strokeWeight: 2,
+          },
+          title: `Finish - ${routeFinish.label}`,
+          zIndex: 1000,
+        });
+        (map as any)._markers.push(finishMarker);
+      }
 
       // Route polyline
       const polyline = new google.maps.Polyline({
@@ -1260,7 +1416,7 @@ function RouteMap({ stops, depotLat, depotLng }: { stops: { lat?: number; lng?: 
       if (pollInterval) clearInterval(pollInterval);
       if (pollTimeout) clearTimeout(pollTimeout);
     };
-  }, [stops, depotLat, depotLng]);
+  }, [stops, routeStart, routeFinish]);
 
   return <div ref={mapRef} style={{ height: 400 }} className="bg-gray-200 rounded-none" />;
 }
