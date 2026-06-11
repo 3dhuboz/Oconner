@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { drizzle } from 'drizzle-orm/d1';
-import { and, asc, eq, gt, gte, lte } from 'drizzle-orm';
+import { and, asc, eq, gt, gte, inArray, lte } from 'drizzle-orm';
 import { deliveryDays, orders, stops, users } from '@butcher/db';
 import { parseJson } from '../lib/json';
 import { sendSms } from '../lib/sms';
@@ -25,12 +25,31 @@ function requireRescuePin(c: RescueContext): boolean {
   return !!expected && rescuePin(c) === expected;
 }
 
-function serializeStop(stop: typeof stops.$inferSelect) {
+function serializeStop(
+  stop: typeof stops.$inferSelect,
+  order?: typeof orders.$inferSelect | null,
+) {
   return {
     ...stop,
     address: parseJson<Record<string, string>>(stop.address, {}),
     items: parseJson<unknown[]>(stop.items, []),
+    orderTotal: order?.total,
+    orderPaymentStatus: order?.paymentStatus,
+    orderPaymentProvider: order?.paymentProvider,
+    orderPaymentIntentId: order?.paymentIntentId,
   };
+}
+
+async function attachOrderPaymentDetails(
+  db: ReturnType<typeof drizzle>,
+  rows: Array<typeof stops.$inferSelect>,
+) {
+  const orderIds = [...new Set(rows.map((s) => s.orderId).filter((id): id is string => Boolean(id)))];
+  if (orderIds.length === 0) return rows.map((s) => serializeStop(s));
+
+  const orderRows = await db.select().from(orders).where(inArray(orders.id, orderIds));
+  const byId = new Map(orderRows.map((order) => [order.id, order]));
+  return rows.map((s) => serializeStop(s, s.orderId ? byId.get(s.orderId) : null));
 }
 
 async function findTodayDeliveryDay(db: ReturnType<typeof drizzle>) {
@@ -56,7 +75,7 @@ app.get('/today', async (c) => {
   const rows = await db.select().from(stops)
     .where(eq(stops.deliveryDayId, day.id))
     .orderBy(asc(stops.sequence));
-  const res = c.json({ deliveryDay: day, stops: rows.map(serializeStop) });
+  const res = c.json({ deliveryDay: day, stops: await attachOrderPaymentDetails(db, rows) });
   res.headers.set('Cache-Control', 'no-store');
   return res;
 });
@@ -86,7 +105,8 @@ app.get('/stops/:id', async (c) => {
   const db = drizzle(c.env.DB);
   const [stop] = await db.select().from(stops).where(eq(stops.id, c.req.param('id'))).limit(1);
   if (!stop) return c.json({ error: 'Not found' }, 404);
-  const res = c.json(serializeStop(stop));
+  const [serialized] = await attachOrderPaymentDetails(db, [stop]);
+  const res = c.json(serialized);
   res.headers.set('Cache-Control', 'no-store');
   return res;
 });

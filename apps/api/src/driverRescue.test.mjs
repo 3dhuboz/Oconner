@@ -24,6 +24,15 @@ test('driver rescue status updates keep the active stop moving', () => {
   assert.match(routeSource, /status:\s*'en_route'/);
 });
 
+test('driver rescue includes linked order payment details', () => {
+  assert.match(routeSource, /function serializeStop\([\s\S]*order\?: typeof orders\.\$inferSelect/);
+  assert.match(routeSource, /orderPaymentStatus:\s*order\?\.paymentStatus/);
+  assert.match(routeSource, /orderPaymentProvider:\s*order\?\.paymentProvider/);
+  assert.match(routeSource, /orderPaymentIntentId:\s*order\?\.paymentIntentId/);
+  assert.match(routeSource, /attachOrderPaymentDetails/);
+  assert.match(routeSource, /inArray\(orders\.id,\s*orderIds\)/);
+});
+
 test('driver rescue can text the emergency access instructions', () => {
   assert.match(routeSource, /app\.post\('\/sms-access'/);
   assert.match(routeSource, /sendSms\(c\.env,\s*to,\s*message\)/);
