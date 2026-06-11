@@ -659,16 +659,22 @@ async function reconcileOutstandingSquarePayments(env: Env, options: SquareRecon
   for (const order of pendingOrders) {
     const internalNotes = order.internalNotes ?? '';
     try {
-      if (!options.deepSearch && order.paymentStatus === 'awaiting_payment' && internalNotes.includes('Square payment link')) {
+      if (order.paymentStatus === 'awaiting_payment' && internalNotes.includes('Square payment link')) {
         const direct = await confirmOrderFromSquarePaymentLinkIfPaid(db, order, env);
         if (direct.match) {
           reconciled++;
           continue;
         }
 
-        if (options.deepSearch) {
+        // Square hosted-checkout can show a paid receipt while the template
+        // order attached to the payment link remains OPEN. In that case, match
+        // the completed payment by our payment note / Square order metadata.
+        if (options.deepSearch || direct.squareState) {
           const match = await confirmOrderFromSquarePaymentMatch(db, order, env);
-          if (match) reconciled++;
+          if (match) {
+            reconciled++;
+            continue;
+          }
         }
       }
       if (order.paymentStatus === 'invoice_sent' && internalNotes.includes('Square invoice sent')) {
