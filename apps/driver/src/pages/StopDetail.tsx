@@ -373,7 +373,7 @@ export default function StopDetailPage() {
           </div>
         </div>
 
-        {(stop.orderId || stop.orderTotal) && (
+        {!isRescueMode && (stop.orderId || stop.orderTotal) && (
           <div className={`rounded-xl border p-4 ${isPaid ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'}`}>
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -410,10 +410,6 @@ export default function StopDetailPage() {
                   Refresh payment
                 </button>
               </div>
-            )}
-
-            {isRescueMode && !isPaid && (
-              <p className="text-sm text-amber-800 mt-3">Payments are disabled in emergency mode. Use the normal driver login to collect through Square.</p>
             )}
 
             {paymentMessage && (

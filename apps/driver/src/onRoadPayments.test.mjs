@@ -11,7 +11,8 @@ test('driver stop detail can launch and refresh Square on-road payments', () => 
   assert.match(detailSource, /api\.orders\.createPaymentLink\(stop\.orderId\)/);
   assert.match(detailSource, /api\.orders\.markPaid\(stop\.orderId\)/);
   assert.match(detailSource, /Refresh payment/);
-  assert.match(detailSource, /Payments are disabled in emergency mode/);
+  assert.match(detailSource, /!\s*isRescueMode && \(stop\.orderId \|\| stop\.orderTotal\)/);
+  assert.doesNotMatch(detailSource, /Payments are disabled in emergency mode/);
 });
 
 test('shared stop and API types expose linked order payment fields', () => {
