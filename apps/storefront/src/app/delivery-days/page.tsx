@@ -3,6 +3,7 @@ import Footer from '@/components/Footer';
 import type { DeliveryDay } from '@butcher/shared';
 import { api } from '@butcher/shared';
 import DeliveryCalendar from './DeliveryCalendar';
+import DeliveryAreaChecker from './DeliveryAreaChecker';
 import { pageMetadata } from '@/lib/siteMetadata';
 
 export const dynamic = 'force-dynamic';
@@ -33,7 +34,8 @@ export default async function DeliveryDaysPage() {
       <Navbar />
       <main className="flex-1 max-w-5xl mx-auto px-4 py-10">
         <h1 className="text-3xl font-bold text-brand mb-1">Delivery Days</h1>
-        <p className="text-gray-500 mb-8">Select a delivery date to start your order.</p>
+        <p className="text-gray-500 mb-8">Check your area, then select a delivery date to start your order.</p>
+        <DeliveryAreaChecker days={deliveryDays2 as any} />
         <DeliveryCalendar days={deliveryDays2} />
 
         {marketDays.length > 0 && (

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { DeliveryDay } from '@butcher/shared';
-import { ChevronLeft, ChevronRight, ShoppingCart, Clock, CalendarDays, Truck } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ShoppingCart, Clock, CalendarDays, Truck, MapPin } from 'lucide-react';
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -209,6 +209,14 @@ export default function DeliveryCalendar({ days }: { days: DeliveryDay[] }) {
                 </div>
                 {selected.maxOrders - selected.orderCount} spots remaining
               </div>
+              {(selected as DeliveryDay & { zones?: string | null }).zones && (
+                <div className="flex items-start gap-2.5 text-sm text-gray-600">
+                  <div className="w-8 h-8 rounded-lg bg-brand/10 flex items-center justify-center flex-shrink-0">
+                    <MapPin className="h-4 w-4 text-brand" />
+                  </div>
+                  <span>{(selected as DeliveryDay & { zones?: string | null }).zones}</span>
+                </div>
+              )}
               {selected.notes && (
                 <p className="text-xs text-gray-500 bg-gray-50 rounded-lg p-3 border border-gray-100">{selected.notes}</p>
               )}
@@ -259,6 +267,11 @@ export default function DeliveryCalendar({ days }: { days: DeliveryDay[] }) {
                         <p className={`text-xs mt-0.5 ${isFull ? 'text-gray-400' : 'text-brand'}`}>
                           {isFull ? 'Fully booked' : `${spotsLeft} spots left`}
                         </p>
+                        {(d as DeliveryDay & { zones?: string | null }).zones && (
+                          <p className="text-xs text-gray-400 mt-0.5 line-clamp-1">
+                            {(d as DeliveryDay & { zones?: string | null }).zones}
+                          </p>
+                        )}
                       </div>
                     </div>
                     {!isFull && <ChevronRight className="h-4 w-4 text-gray-300 group-hover:text-brand transition-colors" />}
