@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { notifyCustomer } from './push';
 import { drizzle } from 'drizzle-orm/d1';
-import { eq, asc, gte, and, sql } from 'drizzle-orm';
+import { eq, asc, gte, and, sql, or, isNull } from 'drizzle-orm';
 import { deliveryDays, orders, stops, notifications, subscriptions, customers, users, deliveryRuns, products, deliveryDayStock, auditLog } from '@butcher/db';
 import { deductStock, getStockDayId } from '../lib/stock';
 import { sendEmail, buildOrderEmail, getSubject, buildBroadcastEmail } from '../lib/email';
@@ -304,7 +304,6 @@ app.post('/:id/generate-stops', async (c) => {
   if (existingRuns.length === 0) {
     // Only auto-create if no runs exist yet for this day
     // Include users with role='driver' or any user with canDrive=true.
-    const { or } = await import('drizzle-orm');
     const activeDrivers = await db.select().from(users)
       .where(and(
         or(eq(users.role, 'driver'), eq(users.canDrive, true)),
@@ -359,6 +358,36 @@ app.post('/:id/generate-stops', async (c) => {
         if (idx >= 0) allDayStops[idx] = { ...allDayStops[idx], runId };
       }
     }
+
+    const stillUnassigned = allDayStops.filter((stop) => !stop.runId);
+    if (runSeq === 0 && activeDrivers.length === 1 && stillUnassigned.length > 0) {
+      const driver = activeDrivers[0];
+      const runId = crypto.randomUUID();
+      await db.insert(deliveryRuns).values({
+        id: runId,
+        deliveryDayId: dayId,
+        name: driver.name || driver.email || 'Delivery Run',
+        zone: 'All stops',
+        color: RUN_COLORS[0],
+        driverUid: driver.id,
+        status: 'pending',
+        sequence: 0,
+        notes: 'Auto-created for single active driver with no zone split.',
+        createdAt: Date.now(),
+      });
+      await db.update(stops)
+        .set({ runId })
+        .where(and(eq(stops.deliveryDayId, dayId), or(isNull(stops.runId), eq(stops.runId, ''))));
+      await db.update(deliveryDays).set({
+        driverUid: driver.id,
+        routeGenerated: true,
+        routeGeneratedAt: Date.now(),
+      }).where(eq(deliveryDays.id, dayId));
+    }
+  } else if (existingRuns.length === 1) {
+    await db.update(stops)
+      .set({ runId: existingRuns[0].id })
+      .where(and(eq(stops.deliveryDayId, dayId), or(isNull(stops.runId), eq(stops.runId, ''))));
   }
 
   return c.json({ created, total: dayOrders.length });

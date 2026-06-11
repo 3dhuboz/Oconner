@@ -6,16 +6,20 @@ import type { Stop, DeliveryDay, DeliveryRun } from '@butcher/shared';
 import { useGPS, type GPSStatus } from '../hooks/useGPS';
 import { MapPin, Navigation, User, CheckCircle, Clock, Truck, PackagePlus } from 'lucide-react';
 import { hasAddOns } from '../lib/addOns';
-import { getRescuePin, hasRescueAccess, rescueApi } from '../lib/rescue';
+import { getRescuePin, hasRescueAccess, rescueApi, saveRescuePin } from '../lib/rescue';
 
 export default function StopsPage() {
   const navigate = useNavigate();
   const { user } = useUser();
   const rescuePin = getRescuePin();
-  const isRescueMode = !user && hasRescueAccess();
+  const isRescueMode = hasRescueAccess();
   const { dayId: paramDayId } = useParams<{ dayId?: string }>();
   const [deliveryDay, setDeliveryDay] = useState<DeliveryDay | null>(null);
   const [stops, setStops] = useState<Stop[]>([]);
+  const [loadError, setLoadError] = useState('');
+  const [emergencyPin, setEmergencyPin] = useState('');
+  const [emergencyLoading, setEmergencyLoading] = useState(false);
+  const [emergencyError, setEmergencyError] = useState('');
   const [trackingEnabled, setTrackingEnabled] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const { status: gpsStatus, error: gpsError, tracking } = useGPS({
@@ -27,21 +31,24 @@ export default function StopsPage() {
     if (isRescueMode) {
       rescueApi.today(rescuePin)
         .then(({ deliveryDay, stops }) => {
+          setLoadError('');
           if (deliveryDay) setDeliveryDay(deliveryDay);
           setStops(stops);
         })
-        .catch(() => {});
+        .catch((e) => {
+          setLoadError(e instanceof Error ? e.message : 'Could not load today\'s route');
+        });
       return;
     }
     if (!user) return;
     if (paramDayId) {
       api.deliveryDays.get(paramDayId)
-        .then((day) => { if (day) setDeliveryDay(day as DeliveryDay); })
-        .catch(() => {});
+        .then((day) => { setLoadError(''); if (day) setDeliveryDay(day as DeliveryDay); })
+        .catch((e) => setLoadError(e instanceof Error ? e.message : 'Could not load delivery day'));
     } else {
       api.deliveryDays.today()
-        .then((day) => { if (day) setDeliveryDay(day as DeliveryDay); })
-        .catch(() => {});
+        .then((day) => { setLoadError(''); if (day) setDeliveryDay(day as DeliveryDay); })
+        .catch((e) => setLoadError(e instanceof Error ? e.message : 'Could not load today\'s delivery day'));
     }
   }, [user, paramDayId, isRescueMode, rescuePin]);
 
@@ -63,7 +70,7 @@ export default function StopsPage() {
       .catch(() => {
         api.stops.list(deliveryDay.id)
           .then((data) => setStops(data as Stop[]))
-          .catch(() => {});
+          .catch((e) => setLoadError(e instanceof Error ? e.message : 'Could not load stops'));
       });
   }, [deliveryDay?.id, isRescueMode]);
 
@@ -174,6 +181,25 @@ export default function StopsPage() {
   const delivered = stops.filter((s) => s.status === 'delivered').length;
   const total = stops.length;
 
+  const handleEmergencyAccess = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleaned = emergencyPin.trim();
+    if (!cleaned) return;
+    setEmergencyLoading(true);
+    setEmergencyError('');
+    try {
+      const data = await rescueApi.today(cleaned);
+      saveRescuePin(cleaned);
+      setLoadError('');
+      if (data.deliveryDay) setDeliveryDay(data.deliveryDay);
+      setStops(data.stops);
+    } catch {
+      setEmergencyError('That driver PIN did not work. Check it and try again.');
+    } finally {
+      setEmergencyLoading(false);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full">
       <header className="bg-brand text-white px-4 pt-3 pb-4 flex-shrink-0">
@@ -276,25 +302,53 @@ export default function StopsPage() {
             </div>
 
             <div className="flex-1 bg-gray-50 px-4 py-6">
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-4 flex items-center gap-4">
-                <div className="w-12 h-12 bg-green-50 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <CheckCircle className="h-6 w-6 text-green-500" />
+              {loadError && (
+                <div className="bg-red-50 rounded-2xl border border-red-100 shadow-sm p-5 mb-4">
+                  <p className="font-semibold text-red-800">Route could not load</p>
+                  <p className="text-sm text-red-700 mt-1">{loadError}</p>
+                  <p className="text-xs text-red-600 mt-2">Use emergency driver access to load today&apos;s route while sign-in is refreshed.</p>
+                  <form onSubmit={handleEmergencyAccess} className="mt-4 flex gap-2">
+                    <input
+                      value={emergencyPin}
+                      onChange={(e) => { setEmergencyPin(e.target.value); setEmergencyError(''); }}
+                      inputMode="numeric"
+                      placeholder="Driver PIN"
+                      className="min-w-0 flex-1 rounded-lg border border-red-200 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-red-400"
+                    />
+                    <button
+                      type="submit"
+                      disabled={emergencyLoading || !emergencyPin.trim()}
+                      className="rounded-lg bg-red-700 px-4 py-2 text-sm font-bold text-white disabled:opacity-50"
+                    >
+                      {emergencyLoading ? 'Checking...' : 'Open'}
+                    </button>
+                  </form>
+                  {emergencyError && <p className="mt-2 text-xs text-red-700">{emergencyError}</p>}
                 </div>
-                <div>
-                  <p className="font-semibold text-gray-800">All clear for today</p>
-                  <p className="text-sm text-gray-500 mt-0.5">No deliveries have been assigned yet. Check back soon.</p>
+              )}
+              {!loadError && (
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 mb-4 flex items-center gap-4">
+                  <div className="w-12 h-12 bg-green-50 rounded-xl flex items-center justify-center flex-shrink-0">
+                    <CheckCircle className="h-6 w-6 text-green-500" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-800">All clear for today</p>
+                    <p className="text-sm text-gray-500 mt-0.5">No deliveries have been assigned yet. Check back soon.</p>
+                  </div>
                 </div>
-              </div>
+              )}
 
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 flex items-center gap-4">
-                <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <Clock className="h-6 w-6 text-blue-500" />
+              {!loadError && (
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 flex items-center gap-4">
+                  <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center flex-shrink-0">
+                    <Clock className="h-6 w-6 text-blue-500" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-gray-800">Delivery time</p>
+                    <p className="text-sm text-gray-500 mt-0.5">Your route will appear here once the admin assigns orders.</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="font-semibold text-gray-800">Delivery time</p>
-                  <p className="text-sm text-gray-500 mt-0.5">Your route will appear here once the admin assigns orders.</p>
-                </div>
-              </div>
+              )}
             </div>
           </div>
         ) : (

@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/d1';
-import { eq, desc, inArray, gte, sql } from 'drizzle-orm';
-import { orders, customers, deliveryDays, stops, stockMovements, notifications, auditLog, deliveryDayStock, promoCodes } from '@butcher/db';
+import { eq, desc, inArray, gte, sql, and, or } from 'drizzle-orm';
+import { orders, customers, deliveryDays, stops, stockMovements, notifications, auditLog, deliveryDayStock, promoCodes, deliveryRuns, users } from '@butcher/db';
 import type { Env, AuthUser } from '../types';
 import { sendEmail, buildOrderEmail, getSubject } from '../lib/email';
 import { formatBrisbaneShortDate } from '../lib/time';
@@ -37,10 +37,12 @@ async function ensureStopForPaidDeliveryOrder(db: ReturnType<typeof drizzle>, or
     .from(stops)
     .where(eq(stops.deliveryDayId, order.deliveryDayId));
   const sequence = Number(seqRow?.maxSequence ?? 0) + 1;
+  const runId = await ensureDriverRunForDeliveryDay(db, order.deliveryDayId);
 
   await db.insert(stops).values({
     id: crypto.randomUUID(),
     deliveryDayId: order.deliveryDayId,
+    runId,
     orderId: order.id,
     customerId: order.customerId,
     customerName: order.customerName,
@@ -55,6 +57,41 @@ async function ensureStopForPaidDeliveryOrder(db: ReturnType<typeof drizzle>, or
     createdAt: Date.now(),
   });
   return true;
+}
+
+async function ensureDriverRunForDeliveryDay(db: ReturnType<typeof drizzle>, deliveryDayId: string): Promise<string | null> {
+  const existingRuns = await db.select().from(deliveryRuns).where(eq(deliveryRuns.deliveryDayId, deliveryDayId));
+  if (existingRuns.length === 1) return existingRuns[0].id;
+  if (existingRuns.length > 1) return null;
+
+  const activeDrivers = await db.select().from(users)
+    .where(and(
+      or(eq(users.role, 'driver'), eq(users.canDrive, true)),
+      eq(users.active, true),
+    ));
+  if (activeDrivers.length !== 1) return null;
+
+  const driver = activeDrivers[0];
+  const now = Date.now();
+  const runId = crypto.randomUUID();
+  await db.insert(deliveryRuns).values({
+    id: runId,
+    deliveryDayId,
+    name: driver.name || driver.email || 'Delivery Run',
+    zone: 'All stops',
+    color: '#1B3A2E',
+    driverUid: driver.id,
+    status: 'pending',
+    sequence: 0,
+    notes: 'Auto-created for single active driver so paid delivery stops are visible in the driver app.',
+    createdAt: now,
+  });
+  await db.update(deliveryDays).set({
+    driverUid: driver.id,
+    routeGenerated: true,
+    routeGeneratedAt: now,
+  }).where(eq(deliveryDays.id, deliveryDayId));
+  return runId;
 }
 
 app.get('/', async (c) => {

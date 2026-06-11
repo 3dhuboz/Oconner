@@ -4,7 +4,7 @@ import type { Env, AuthUser } from './types';
 import { requireAuth, requireRole, verifyClerkToken } from './middleware/auth';
 import { drizzle } from 'drizzle-orm/d1';
 import { eq, desc, asc, and, gte, sql, or } from 'drizzle-orm';
-import { orders as ordersTable, customers as customersTable, products as productsTable, deliveryDays as deliveryDaysTable, subscriptions as subscriptionsTable, processedWebhooks, pageEvents, promoCodes as promoCodesTable, stops as stopsTable } from '@butcher/db';
+import { orders as ordersTable, customers as customersTable, products as productsTable, deliveryDays as deliveryDaysTable, subscriptions as subscriptionsTable, processedWebhooks, pageEvents, promoCodes as promoCodesTable, stops as stopsTable, deliveryRuns as deliveryRunsTable, users as usersTable } from '@butcher/db';
 import { deductStock, getStockDayId, reserveDayStock, consumePromoCode } from './lib/stock';
 import { parsePromoDeliveryDayIds, promoAllowsDeliveryDay } from './lib/promos';
 import ordersRouter from './routes/orders';
@@ -247,10 +247,12 @@ async function ensureStopForPaidDeliveryOrder(db: ReturnType<typeof drizzle>, or
     .from(stopsTable)
     .where(eq(stopsTable.deliveryDayId, order.deliveryDayId));
   const sequence = Number(seqRow?.maxSequence ?? 0) + 1;
+  const runId = await ensureDriverRunForDeliveryDay(db, order.deliveryDayId);
 
   await db.insert(stopsTable).values({
     id: crypto.randomUUID(),
     deliveryDayId: order.deliveryDayId,
+    runId,
     orderId: order.id,
     customerId: order.customerId,
     customerName: order.customerName,
@@ -265,6 +267,41 @@ async function ensureStopForPaidDeliveryOrder(db: ReturnType<typeof drizzle>, or
     createdAt: Date.now(),
   });
   return true;
+}
+
+async function ensureDriverRunForDeliveryDay(db: ReturnType<typeof drizzle>, deliveryDayId: string): Promise<string | null> {
+  const existingRuns = await db.select().from(deliveryRunsTable).where(eq(deliveryRunsTable.deliveryDayId, deliveryDayId));
+  if (existingRuns.length === 1) return existingRuns[0].id;
+  if (existingRuns.length > 1) return null;
+
+  const activeDrivers = await db.select().from(usersTable)
+    .where(and(
+      or(eq(usersTable.role, 'driver'), eq(usersTable.canDrive, true)),
+      eq(usersTable.active, true),
+    ));
+  if (activeDrivers.length !== 1) return null;
+
+  const driver = activeDrivers[0];
+  const now = Date.now();
+  const runId = crypto.randomUUID();
+  await db.insert(deliveryRunsTable).values({
+    id: runId,
+    deliveryDayId,
+    name: driver.name || driver.email || 'Delivery Run',
+    zone: 'All stops',
+    color: '#1B3A2E',
+    driverUid: driver.id,
+    status: 'pending',
+    sequence: 0,
+    notes: 'Auto-created for single active driver so paid delivery stops are visible in the driver app.',
+    createdAt: now,
+  });
+  await db.update(deliveryDaysTable).set({
+    driverUid: driver.id,
+    routeGenerated: true,
+    routeGeneratedAt: now,
+  }).where(eq(deliveryDaysTable.id, deliveryDayId));
+  return runId;
 }
 
 async function squareGet(env: Env, path: string): Promise<any> {

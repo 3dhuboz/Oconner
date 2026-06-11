@@ -105,4 +105,25 @@ app.post('/session', async (c) => {
   return res;
 });
 
+app.post('/sms', async (c) => {
+  if (!requireStaffRescuePin(c)) return unauthorized(c);
+
+  let body: { phone?: string; message?: string } = {};
+  try {
+    body = await c.req.json<typeof body>();
+  } catch {}
+  const message = (body.message ?? '').trim();
+  if (!message) return c.json({ error: 'Message is required' }, 400);
+
+  const db = drizzle(c.env.DB);
+  const [staff] = await db.select().from(users)
+    .where(sql`lower(${users.email}) = 'oconnoragriculture@gmail.com'`)
+    .limit(1);
+  const to = body.phone ?? staff?.phone ?? '';
+  const sms = await sendSms(c.env, to, message);
+  const res = c.json(sms.ok ? { ok: true, messageId: sms.messageId } : { ok: false, error: sms.error }, sms.ok ? 200 : 502);
+  res.headers.set('Cache-Control', 'no-store');
+  return res;
+});
+
 export default app;

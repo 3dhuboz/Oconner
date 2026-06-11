@@ -22,3 +22,10 @@ test('admin rescue exposes a Clerk-independent staff session check', () => {
   assert.match(routeSource, /oconnoragriculture@gmail\.com/);
   assert.match(routeSource, /Cache-Control',\s*'no-store'/);
 });
+
+test('admin rescue can send protected operational SMS messages', () => {
+  assert.match(routeSource, /app\.post\('\/sms'/);
+  assert.match(routeSource, /requireStaffRescuePin/);
+  assert.match(routeSource, /Message is required/);
+  assert.match(routeSource, /sendSms\(c\.env,\s*to,\s*message\)/);
+});

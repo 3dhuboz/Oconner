@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 const ordersRouteSource = readFileSync(new URL('./routes/orders.ts', import.meta.url), 'utf8');
+const deliveryDaysRouteSource = readFileSync(new URL('./routes/deliveryDays.ts', import.meta.url), 'utf8');
 const indexSource = readFileSync(new URL('./index.ts', import.meta.url), 'utf8');
 
 test('paid delivery orders create a stop from admin and Square confirmation paths', () => {
@@ -14,4 +15,18 @@ test('paid delivery orders create a stop from admin and Square confirmation path
 
   assert.match(indexSource, /async function ensureStopForPaidDeliveryOrder/);
   assert.match(indexSource, /await ensureStopForPaidDeliveryOrder\(db,\s*order\)/);
+});
+
+test('paid delivery stops are assigned to a driver run when one active driver exists', () => {
+  assert.match(indexSource, /async function ensureDriverRunForDeliveryDay/);
+  assert.match(indexSource, /existingRuns\.length === 1/);
+  assert.match(indexSource, /activeDrivers\.length !== 1/);
+  assert.match(indexSource, /runId,/);
+
+  assert.match(ordersRouteSource, /async function ensureDriverRunForDeliveryDay/);
+  assert.match(ordersRouteSource, /activeDrivers\.length !== 1/);
+  assert.match(ordersRouteSource, /runId,/);
+
+  assert.match(deliveryDaysRouteSource, /single active driver with no zone split/);
+  assert.match(deliveryDaysRouteSource, /isNull\(stops\.runId\)/);
 });
