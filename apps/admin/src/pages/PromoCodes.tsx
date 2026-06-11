@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '@butcher/shared';
-import { Plus, X, Trash2, Tag, Percent, DollarSign, Calendar, Hash, ToggleLeft, ToggleRight } from 'lucide-react';
+import type { DeliveryDay } from '@butcher/shared';
+import { Plus, X, Trash2, Tag, Percent, DollarSign, Calendar, Hash, ToggleLeft, ToggleRight, Truck } from 'lucide-react';
 import { toast } from '../lib/toast';
 
 interface PromoCode {
@@ -12,6 +13,7 @@ interface PromoCode {
   maxUses: number | null;
   usedCount: number;
   expiresAt: number | null;
+  deliveryDayIds: string | null;
   active: boolean;
   createdAt: number;
 }
@@ -23,21 +25,30 @@ const EMPTY_FORM = {
   minOrder: 0,
   maxUses: '' as string | number,
   expiresAt: '',
+  deliveryDayIds: [] as string[],
 };
 
 export default function PromoCodesPage() {
   const [codes, setCodes] = useState<PromoCode[]>([]);
+  const [deliveryDays, setDeliveryDays] = useState<DeliveryDay[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<PromoCode | null>(null);
+  const [runEditTarget, setRunEditTarget] = useState<PromoCode | null>(null);
+  const [runEditDayIds, setRunEditDayIds] = useState<string[]>([]);
 
   useEffect(() => {
     loadCodes();
+    loadDeliveryDays();
   }, []);
 
   const loadCodes = () => {
     api.get<PromoCode[]>('/api/promo-codes').then(setCodes).catch(() => {});
+  };
+
+  const loadDeliveryDays = () => {
+    api.deliveryDays.list(true).then((days) => setDeliveryDays(days as DeliveryDay[])).catch(() => {});
   };
 
   const handleCreate = async () => {
@@ -51,6 +62,7 @@ export default function PromoCodesPage() {
         minOrder: Math.round(form.minOrder * 100), // convert $ to cents
         maxUses: form.maxUses ? Number(form.maxUses) : undefined,
         expiresAt: form.expiresAt ? new Date(form.expiresAt).getTime() : undefined,
+        deliveryDayIds: form.deliveryDayIds,
       });
       toast('Promo code created!');
       setShowForm(false);
@@ -87,6 +99,51 @@ export default function PromoCodesPage() {
 
   const isExpired = (code: PromoCode) => code.expiresAt && Date.now() > code.expiresAt;
   const isMaxedOut = (code: PromoCode) => code.maxUses && code.usedCount >= code.maxUses;
+  const parseDeliveryDayIds = (value: string | null | undefined) => {
+    if (!value) return [];
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string') : [];
+    } catch {
+      return [];
+    }
+  };
+  const formatDayLabel = (day: DeliveryDay) => {
+    const date = new Date(day.date);
+    const place = (day as any).marketLocation || (day as any).zones || ((day as any).type === 'pickup' ? 'Pickup' : 'Delivery run');
+    return `${date.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })} - ${place}`;
+  };
+  const toggleDeliveryDay = (id: string) => {
+    setForm((prev) => ({
+      ...prev,
+      deliveryDayIds: prev.deliveryDayIds.includes(id)
+        ? prev.deliveryDayIds.filter((dayId) => dayId !== id)
+        : [...prev.deliveryDayIds, id],
+    }));
+  };
+  const openRunEditor = (code: PromoCode) => {
+    setRunEditTarget(code);
+    setRunEditDayIds(parseDeliveryDayIds(code.deliveryDayIds));
+  };
+  const toggleRunEditDay = (id: string) => {
+    setRunEditDayIds((prev) => prev.includes(id) ? prev.filter((dayId) => dayId !== id) : [...prev, id]);
+  };
+  const saveRunRestrictions = async () => {
+    if (!runEditTarget) return;
+    setSaving(true);
+    try {
+      await api.patch(`/api/promo-codes/${runEditTarget.id}`, { deliveryDayIds: runEditDayIds });
+      setCodes((prev) => prev.map((code) => code.id === runEditTarget.id
+        ? { ...code, deliveryDayIds: runEditDayIds.length ? JSON.stringify(runEditDayIds) : null }
+        : code));
+      setRunEditTarget(null);
+      toast('Eligible delivery days updated');
+    } catch {
+      toast('Failed to update delivery days', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div>
@@ -115,6 +172,7 @@ export default function PromoCodesPage() {
             const expired = isExpired(code);
             const maxed = isMaxedOut(code);
             const inactive = !code.active || expired || maxed;
+            const restrictedDayIds = parseDeliveryDayIds(code.deliveryDayIds);
             return (
               <div key={code.id} className={`bg-white rounded-xl border p-5 ${inactive ? 'opacity-60' : ''}`}>
                 <div className="flex items-center justify-between">
@@ -142,10 +200,19 @@ export default function PromoCodesPage() {
                             Expires {new Date(code.expiresAt).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' })}
                           </span>
                         )}
+                        {restrictedDayIds.length > 0 && (
+                          <span className="flex items-center gap-1 text-brand">
+                            <Truck className="h-3 w-3" />
+                            {restrictedDayIds.length} selected run{restrictedDayIds.length === 1 ? '' : 's'} only
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
+                    <button onClick={() => openRunEditor(code)} className="text-gray-400 hover:text-brand transition-colors" title="Choose eligible delivery days">
+                      <Truck className="h-4 w-4" />
+                    </button>
                     <button onClick={() => toggleActive(code)} className="text-gray-400 hover:text-brand transition-colors" title={code.active ? 'Deactivate' : 'Activate'}>
                       {code.active ? <ToggleRight className="h-6 w-6 text-brand" /> : <ToggleLeft className="h-6 w-6" />}
                     </button>
@@ -163,7 +230,7 @@ export default function PromoCodesPage() {
       {/* Create Modal */}
       {showForm && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowForm(false)}>
-          <div className="bg-white rounded-2xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5">
               <h2 className="font-bold text-lg">Create Promo Code</h2>
               <button onClick={() => setShowForm(false)}><X className="h-5 w-5 text-gray-400" /></button>
@@ -237,6 +304,27 @@ export default function PromoCodesPage() {
                   className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand"
                 />
               </div>
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block flex items-center gap-1"><Truck className="h-3 w-3" /> Eligible delivery days</label>
+                <div className="border rounded-lg p-3 space-y-2 max-h-48 overflow-y-auto">
+                  <p className="text-xs text-gray-400">Leave all unticked to allow this code on every delivery day.</p>
+                  {deliveryDays.length === 0 ? (
+                    <p className="text-xs text-amber-600">No upcoming delivery days found yet.</p>
+                  ) : (
+                    deliveryDays.map((day) => (
+                      <label key={day.id} className="flex items-start gap-2 text-sm text-gray-700 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={form.deliveryDayIds.includes(day.id)}
+                          onChange={() => toggleDeliveryDay(day.id)}
+                          className="mt-0.5 h-4 w-4 rounded border-gray-300 text-brand focus:ring-brand"
+                        />
+                        <span>{formatDayLabel(day)}</span>
+                      </label>
+                    ))
+                  )}
+                </div>
+              </div>
             </div>
             <div className="flex gap-3 mt-6">
               <button onClick={() => setShowForm(false)} className="flex-1 border py-2.5 rounded-lg text-sm">Cancel</button>
@@ -268,6 +356,49 @@ export default function PromoCodesPage() {
             <div className="flex gap-3">
               <button onClick={() => setDeleteTarget(null)} className="flex-1 border py-2 rounded-lg text-sm">Cancel</button>
               <button onClick={handleDelete} className="flex-1 bg-red-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-red-700">Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delivery Day Restrictions */}
+      {runEditTarget && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setRunEditTarget(null)}>
+          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <h2 className="font-bold text-lg">Eligible Delivery Days</h2>
+                <p className="text-sm text-gray-500 font-mono">{runEditTarget.code}</p>
+              </div>
+              <button onClick={() => setRunEditTarget(null)}><X className="h-5 w-5 text-gray-400" /></button>
+            </div>
+            <div className="border rounded-lg p-3 space-y-2 max-h-72 overflow-y-auto">
+              <p className="text-xs text-gray-400">Leave all unticked to allow this code on every delivery day.</p>
+              {deliveryDays.length === 0 ? (
+                <p className="text-xs text-amber-600">No upcoming delivery days found yet.</p>
+              ) : (
+                deliveryDays.map((day) => (
+                  <label key={day.id} className="flex items-start gap-2 text-sm text-gray-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={runEditDayIds.includes(day.id)}
+                      onChange={() => toggleRunEditDay(day.id)}
+                      className="mt-0.5 h-4 w-4 rounded border-gray-300 text-brand focus:ring-brand"
+                    />
+                    <span>{formatDayLabel(day)}</span>
+                  </label>
+                ))
+              )}
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button onClick={() => setRunEditTarget(null)} className="flex-1 border py-2.5 rounded-lg text-sm">Cancel</button>
+              <button
+                onClick={saveRunRestrictions}
+                disabled={saving}
+                className="flex-1 bg-brand text-white py-2.5 rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-brand-mid"
+              >
+                {saving ? 'Saving...' : 'Save Days'}
+              </button>
             </div>
           </div>
         </div>

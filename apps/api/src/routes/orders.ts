@@ -8,6 +8,7 @@ import { formatBrisbaneShortDate } from '../lib/time';
 import { deductStock, getStockDayId, reserveDayStock, consumePromoCode } from '../lib/stock';
 import { parseJson } from '../lib/json';
 import { dayServesPostcode } from '../lib/zones';
+import { promoAllowsDeliveryDay } from '../lib/promos';
 
 const app = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
 
@@ -133,6 +134,9 @@ app.post('/', async (c) => {
   if (promoId) {
     const [promo] = await db.select().from(promoCodes).where(eq(promoCodes.id, promoId)).limit(1);
     if (promo && promo.active) {
+      if (!promoAllowsDeliveryDay(promo, body.deliveryDayId)) {
+        return c.json({ error: 'This promo code is only valid for selected delivery days. Please choose an eligible day or remove the code.' }, 400);
+      }
       if (promo.type === 'percentage') {
         discount = Math.round(subtotal * (promo.value / 100));
       } else {

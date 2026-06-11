@@ -47,7 +47,7 @@ test('Square invoice payments can be reconciled from the recorded invoice id', (
 });
 
 test('Square payment links can reconcile through Square order metadata when payment notes are missing', () => {
-  assert.match(source, /metadata:\s*\{\s*orderId,\s*promoCode\s*\}/);
+  assert.match(source, /const metadata = promoCode \? \{ orderId, promoCode \} : \{ orderId \}/);
   assert.match(source, /squareOrderMetadataMatchesOrder/);
   assert.match(source, /data\.order\?\.metadata\?\.orderId === orderId/);
   assert.match(source, /matchStrategy:\s*'square_order_metadata'/);

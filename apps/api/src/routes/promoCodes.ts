@@ -29,6 +29,7 @@ app.post('/', async (c) => {
     minOrder?: number;
     maxUses?: number;
     expiresAt?: number;
+    deliveryDayIds?: string[];
   }>();
 
   const id = crypto.randomUUID();
@@ -40,6 +41,7 @@ app.post('/', async (c) => {
     minOrder: body.minOrder ?? 0,
     maxUses: body.maxUses ?? null,
     expiresAt: body.expiresAt ?? null,
+    deliveryDayIds: body.deliveryDayIds?.length ? JSON.stringify(body.deliveryDayIds) : null,
     usedCount: 0,
     active: true,
     createdAt: Date.now(),
@@ -51,7 +53,12 @@ app.post('/', async (c) => {
 // Update promo code (admin)
 app.patch('/:id', async (c) => {
   const db = drizzle(c.env.DB);
-  const body = await c.req.json<Partial<typeof promoCodes.$inferInsert>>();
+  const raw = await c.req.json<Partial<typeof promoCodes.$inferInsert> & { deliveryDayIds?: string[] | null }>();
+  const { deliveryDayIds, ...rest } = raw;
+  const body: Partial<typeof promoCodes.$inferInsert> = { ...rest };
+  if ('deliveryDayIds' in raw) {
+    body.deliveryDayIds = deliveryDayIds?.length ? JSON.stringify(deliveryDayIds) : null;
+  }
   await db.update(promoCodes).set(body).where(eq(promoCodes.id, c.req.param('id')));
   return c.json({ ok: true });
 });

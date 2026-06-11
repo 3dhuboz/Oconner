@@ -300,6 +300,7 @@ export const promoCodes = sqliteTable('promo_codes', {
   maxUses: integer('max_uses'),              // null = unlimited
   usedCount: integer('used_count').notNull().default(0),
   expiresAt: integer('expires_at'),          // unix ms, null = never
+  deliveryDayIds: text('delivery_day_ids'),  // JSON array of delivery_day ids; null = all days
   active: integer('active', { mode: 'boolean' }).notNull().default(true),
   createdAt: integer('created_at').notNull(),
 });

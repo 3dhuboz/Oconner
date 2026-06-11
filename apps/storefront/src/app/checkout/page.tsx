@@ -133,6 +133,23 @@ export default function CheckoutPage() {
     window.location.href = paymentResult.paymentUrl;
   };
 
+  useEffect(() => {
+    if (!promoApplied?.code || !selectedDayId) return;
+    let cancelled = false;
+    api.post<any>('/api/promo-codes/validate', { code: promoApplied.code, subtotal, deliveryDayId: selectedDayId })
+      .then((res) => {
+        if (cancelled) return;
+        if (res.valid) {
+          setPromoApplied({ promoId: res.promoId, code: res.code, discount: res.discount, label: res.label });
+        } else {
+          setPromoApplied(null);
+          setPromoError(res.error ?? 'Promo code removed for this delivery day');
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [promoApplied?.code, selectedDayId, subtotal]);
+
   const handleRetryPayment = async () => {
     if (!pendingPaymentOrderId) return;
     setOpeningPayment(true);
@@ -337,7 +354,7 @@ export default function CheckoutPage() {
                       setPromoLoading(true);
                       setPromoError('');
                       try {
-                        const res = await api.post<any>('/api/promo-codes/validate', { code: promoInput, subtotal });
+                        const res = await api.post<any>('/api/promo-codes/validate', { code: promoInput, subtotal, deliveryDayId: selectedDayId });
                         if (res.valid) {
                           setPromoApplied({ promoId: res.promoId, code: res.code, discount: res.discount, label: res.label });
                         } else {

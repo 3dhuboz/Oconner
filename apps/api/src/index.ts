@@ -6,6 +6,7 @@ import { drizzle } from 'drizzle-orm/d1';
 import { eq, desc, asc, and, gte, sql, or } from 'drizzle-orm';
 import { orders as ordersTable, customers as customersTable, products as productsTable, deliveryDays as deliveryDaysTable, subscriptions as subscriptionsTable, processedWebhooks, pageEvents, promoCodes as promoCodesTable } from '@butcher/db';
 import { deductStock, getStockDayId, reserveDayStock, consumePromoCode } from './lib/stock';
+import { parsePromoDeliveryDayIds, promoAllowsDeliveryDay } from './lib/promos';
 import ordersRouter from './routes/orders';
 import productsRouter from './routes/products';
 import deliveryDaysRouter from './routes/deliveryDays';
@@ -904,6 +905,9 @@ app.post('/api/orders', async (c) => {
     if (promo.minOrder && verifiedSubtotal < promo.minOrder) {
       return c.json({ error: 'This order no longer meets the promo code minimum spend.' }, 400);
     }
+    if (!promoAllowsDeliveryDay(promo, body.deliveryDayId)) {
+      return c.json({ error: 'This promo code is only valid for selected delivery days. Please choose an eligible day or remove the code.' }, 400);
+    }
 
     promoDiscount = promo.type === 'percentage'
       ? Math.round(verifiedSubtotal * (promo.value / 100))
@@ -1011,7 +1015,7 @@ app.route('/api/reels', reelsRouter);
 app.post('/api/promo-codes/validate', async (c) => {
   const { promoCodes: promoCodesTable } = await import('@butcher/db');
   const db = drizzle(c.env.DB);
-  const { code, subtotal } = await c.req.json<{ code: string; subtotal: number }>();
+  const { code, subtotal, deliveryDayId } = await c.req.json<{ code: string; subtotal: number; deliveryDayId?: string }>();
   const codeUpper = code.toUpperCase().trim();
 
   const [promo] = await db.select().from(promoCodesTable).where(eq(promoCodesTable.code, codeUpper)).limit(1);
@@ -1023,6 +1027,9 @@ app.post('/api/promo-codes/validate', async (c) => {
   if (promo.minOrder && subtotal < promo.minOrder) {
     const min = (promo.minOrder / 100).toFixed(2);
     return c.json({ valid: false, error: `Minimum order of $${min} required for this code` });
+  }
+  if (!promoAllowsDeliveryDay(promo, deliveryDayId)) {
+    return c.json({ valid: false, error: 'This code is only valid for selected delivery days' });
   }
 
   let discount = 0;
@@ -1040,6 +1047,7 @@ app.post('/api/promo-codes/validate', async (c) => {
     value: promo.value,
     discount,
     label: promo.type === 'percentage' ? `${promo.value}% off` : `$${(promo.value / 100).toFixed(2)} off`,
+    deliveryDayIds: parsePromoDeliveryDayIds(promo.deliveryDayIds),
   });
 });
 
