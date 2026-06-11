@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { drizzle } from 'drizzle-orm/d1';
-import { and, asc, eq, gt, gte, inArray, lte } from 'drizzle-orm';
+import { and, asc, eq, gt, gte, inArray, lte, ne } from 'drizzle-orm';
 import { deliveryDays, orders, stops, users } from '@butcher/db';
 import { parseJson } from '../lib/json';
 import { sendSms } from '../lib/sms';
@@ -9,6 +9,7 @@ import type { Env } from '../types';
 
 const app = new Hono<{ Bindings: Env }>();
 type RescueContext = Context<{ Bindings: Env }>;
+const ACTIVE_STOP_STATUSES = ['en_route', 'arrived'];
 
 function rescuePin(c: RescueContext): string {
   return c.req.header('X-Driver-Rescue-Pin') ?? c.req.query('pin') ?? '';
@@ -50,6 +51,50 @@ async function attachOrderPaymentDetails(
   const orderRows = await db.select().from(orders).where(inArray(orders.id, orderIds));
   const byId = new Map(orderRows.map((order) => [order.id, order]));
   return rows.map((s) => serializeStop(s, s.orderId ? byId.get(s.orderId) : null));
+}
+
+async function hasOtherActiveStop(
+  db: ReturnType<typeof drizzle>,
+  deliveryDayId: string,
+  stopId: string,
+) {
+  const rows = await db.select({ id: stops.id }).from(stops)
+    .where(and(
+      eq(stops.deliveryDayId, deliveryDayId),
+      ne(stops.id, stopId),
+      inArray(stops.status, ACTIVE_STOP_STATUSES),
+    ))
+    .limit(1);
+  return rows.length > 0;
+}
+
+async function clearOtherActiveStops(
+  db: ReturnType<typeof drizzle>,
+  deliveryDayId: string,
+  stopId: string,
+  now = Date.now(),
+) {
+  const rows = await db.select({ id: stops.id, orderId: stops.orderId }).from(stops)
+    .where(and(
+      eq(stops.deliveryDayId, deliveryDayId),
+      ne(stops.id, stopId),
+      inArray(stops.status, ACTIVE_STOP_STATUSES),
+    ));
+  if (rows.length === 0) return;
+
+  await db.update(stops)
+    .set({ status: 'pending' })
+    .where(inArray(stops.id, rows.map((s) => s.id)));
+
+  const orderIds = rows.map((s) => s.orderId).filter((id): id is string => Boolean(id));
+  if (orderIds.length === 0) return;
+
+  await db.update(orders)
+    .set({ status: 'confirmed', updatedAt: now })
+    .where(and(
+      inArray(orders.id, orderIds),
+      eq(orders.status, 'out_for_delivery'),
+    ));
 }
 
 async function findTodayDeliveryDay(db: ReturnType<typeof drizzle>) {
@@ -141,6 +186,10 @@ app.patch('/stops/:id/status', async (c) => {
   await db.update(stops).set(patch).where(eq(stops.id, stopId));
   const [currentStop] = await db.select().from(stops).where(eq(stops.id, stopId)).limit(1);
 
+  if ((status === 'en_route' || status === 'arrived') && currentStop) {
+    await clearOtherActiveStops(db, currentStop.deliveryDayId, currentStop.id, now);
+  }
+
   if (status === 'delivered' && currentStop?.orderId) {
     await db.update(orders)
       .set({ status: 'delivered', proofUrl: proofUrl ?? null, updatedAt: now })
@@ -154,6 +203,13 @@ app.patch('/stops/:id/status', async (c) => {
   }
 
   if ((status === 'delivered' || status === 'failed') && currentStop) {
+    const hasActiveStop = await hasOtherActiveStop(db, currentStop.deliveryDayId, currentStop.id);
+    if (hasActiveStop) {
+      const res = c.json({ ok: true });
+      res.headers.set('Cache-Control', 'no-store');
+      return res;
+    }
+
     const [nextStop] = await db.select().from(stops)
       .where(and(
         eq(stops.deliveryDayId, currentStop.deliveryDayId),

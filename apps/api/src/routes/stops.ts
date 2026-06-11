@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/d1';
-import { eq, asc, and, isNull, gt, inArray } from 'drizzle-orm';
+import { eq, asc, and, isNull, gt, inArray, ne } from 'drizzle-orm';
 import { stops, orders, driverSessions, notifications } from '@butcher/db';
 import { notifyCustomer } from './push';
 import { sendSms } from '../lib/sms';
@@ -16,6 +16,7 @@ async function alreadySent(db: ReturnType<typeof drizzle>, orderId: string, type
 }
 
 const app = new Hono<{ Bindings: Env; Variables: { user: AuthUser } }>();
+const ACTIVE_STOP_STATUSES = ['en_route', 'arrived'];
 
 function serializeStop(
   stop: typeof stops.$inferSelect,
@@ -42,6 +43,50 @@ async function attachOrderPaymentDetails(
   const orderRows = await db.select().from(orders).where(inArray(orders.id, orderIds));
   const byId = new Map(orderRows.map((order) => [order.id, order]));
   return rows.map((s) => serializeStop(s, s.orderId ? byId.get(s.orderId) : null));
+}
+
+async function hasOtherActiveStop(
+  db: ReturnType<typeof drizzle>,
+  deliveryDayId: string,
+  stopId: string,
+) {
+  const rows = await db.select({ id: stops.id }).from(stops)
+    .where(and(
+      eq(stops.deliveryDayId, deliveryDayId),
+      ne(stops.id, stopId),
+      inArray(stops.status, ACTIVE_STOP_STATUSES),
+    ))
+    .limit(1);
+  return rows.length > 0;
+}
+
+async function clearOtherActiveStops(
+  db: ReturnType<typeof drizzle>,
+  deliveryDayId: string,
+  stopId: string,
+  now = Date.now(),
+) {
+  const rows = await db.select({ id: stops.id, orderId: stops.orderId }).from(stops)
+    .where(and(
+      eq(stops.deliveryDayId, deliveryDayId),
+      ne(stops.id, stopId),
+      inArray(stops.status, ACTIVE_STOP_STATUSES),
+    ));
+  if (rows.length === 0) return;
+
+  await db.update(stops)
+    .set({ status: 'pending' })
+    .where(inArray(stops.id, rows.map((s) => s.id)));
+
+  const orderIds = rows.map((s) => s.orderId).filter((id): id is string => Boolean(id));
+  if (orderIds.length === 0) return;
+
+  await db.update(orders)
+    .set({ status: 'confirmed', updatedAt: now })
+    .where(and(
+      inArray(orders.id, orderIds),
+      eq(orders.status, 'out_for_delivery'),
+    ));
 }
 
 app.get('/', async (c) => {
@@ -160,6 +205,10 @@ app.patch('/:id/status', async (c) => {
   // Get the current stop for context (post-update)
   const [currentStop] = await db.select().from(stops).where(eq(stops.id, stopId)).limit(1);
 
+  if ((status === 'en_route' || status === 'arrived') && currentStop) {
+    await clearOtherActiveStops(db, currentStop.deliveryDayId, currentStop.id, now);
+  }
+
   if (status === 'delivered' && currentStop) {
     // Manual stops have orderId = null. Skip linked-order updates for them
     // (otherwise eq(orders.id, null) is a no-op WHERE that returns 0 rows in
@@ -199,6 +248,9 @@ app.patch('/:id/status', async (c) => {
 
   // Notify next customer that driver is on the way
   if ((status === 'delivered' || status === 'failed') && currentStop) {
+    const hasActiveStop = await hasOtherActiveStop(db, currentStop.deliveryDayId, currentStop.id);
+    if (hasActiveStop) return c.json({ ok: true });
+
     const nextStops = await db.select().from(stops)
       .where(and(
         eq(stops.deliveryDayId, currentStop.deliveryDayId),
