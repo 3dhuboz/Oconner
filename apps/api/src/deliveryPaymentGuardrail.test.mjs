@@ -33,4 +33,7 @@ test('subscription generation no longer forces unpaid orders into fulfilment', (
   assert.doesNotMatch(indexSource, /forceStatus:\s*'confirmed'/);
   assert.doesNotMatch(subscriptionHelperSource, /forceStatus/);
   assert.match(subscriptionHelperSource, /const orderStatus = paymentStatus === 'paid' \? 'confirmed' : 'pending_payment'/);
+  assert.match(subscriptionHelperSource, /createAndPublishSquareInvoiceForOrder/);
+  assert.match(subscriptionHelperSource, /paymentStatus === 'pending_payment'/);
+  assert.match(subscriptionHelperSource, /Square invoice failed:/);
 });

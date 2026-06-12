@@ -29,6 +29,7 @@ import { eq } from 'drizzle-orm';
 import { sql } from 'drizzle-orm';
 import { orders, customers, deliveryDays, subscriptions } from '@butcher/db';
 import { deductStock } from './stock';
+import { createAndPublishSquareInvoiceForOrder } from './squareInvoices';
 import type { Env } from '../types';
 
 const SQUARE_API = 'https://connect.squareup.com/v2';
@@ -203,7 +204,7 @@ export async function createSubscriptionOrder(
     ? `Auto-charge failed: ${chargeFailureReason}`
     : '';
 
-  await db.insert(orders).values({
+  const orderValues = {
     id: orderId,
     customerId: opts.customerId,
     customerEmail: opts.email,
@@ -225,7 +226,21 @@ export async function createSubscriptionOrder(
     internalNotes,
     createdAt: opts.now,
     updatedAt: opts.now,
-  });
+  };
+
+  await db.insert(orders).values(orderValues);
+
+  if (paymentStatus === 'pending_payment' && opts.env?.SQUARE_ACCESS_TOKEN && opts.env?.SQUARE_LOCATION_ID) {
+    try {
+      await createAndPublishSquareInvoiceForOrder(db, opts.env, orderValues);
+    } catch (error) {
+      console.error('subscription invoice send failed:', error);
+      await db.update(orders).set({
+        internalNotes: `${internalNotes}\nSquare invoice failed: ${String(error).slice(0, 500)}`.trim(),
+        updatedAt: Date.now(),
+      }).where(eq(orders.id, orderId));
+    }
+  }
 
   // Deduct stock for the subscription box.
   await deductStock(db, [item], orderId, opts.now);
