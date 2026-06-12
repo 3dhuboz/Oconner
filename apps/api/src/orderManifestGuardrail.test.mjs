@@ -32,3 +32,9 @@ test('paid delivery stops are assigned to a driver run when one active driver ex
   assert.match(deliveryDaysRouteSource, /single active driver with no zone split/);
   assert.match(deliveryDaysRouteSource, /isNull\(stops\.runId\)/);
 });
+
+test('public checkout orders are not fulfillable until Square confirms payment', () => {
+  assert.match(indexSource, /status:\s*'pending_payment'[\s\S]+paymentStatus:\s*initialPaymentStatus/);
+  assert.match(deliveryDaysRouteSource, /const FULFILLABLE_PAYMENT_STATUSES = new Set\(\['paid'\]\)/);
+  assert.match(deliveryDaysRouteSource, /!FULFILLABLE_PAYMENT_STATUSES\.has\(order\.paymentStatus\)/);
+});

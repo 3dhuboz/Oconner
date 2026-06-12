@@ -1050,6 +1050,7 @@ app.post('/api/orders', async (c) => {
     subtotal: verifiedSubtotal,
     deliveryFee,
     total,
+    status: 'pending_payment',
     promoCode: appliedPromoCode,
     promoDiscount,
     paymentStatus: initialPaymentStatus,
@@ -1981,9 +1982,8 @@ export const scheduled: ExportedHandlerScheduledHandler<Env> = async (event, env
     //
     // NOW: route through the shared createSubscriptionOrder helper, which
     // tries to auto-charge a saved Square card and falls back to
-    // `payment_status='pending_payment'` when no card exists. The order
-    // still ships (forceStatus='confirmed') — Seamus delivers and collects
-    // payment via the Send Square Invoice button in admin.
+    // `payment_status='pending_payment'` when no card exists. The order stays
+    // out of fulfilment until payment is confirmed.
     try {
       const now = Date.now();
       const FREQ_MS: Record<string, number> = {
@@ -2045,9 +2045,6 @@ export const scheduled: ExportedHandlerScheduledHandler<Env> = async (event, env
           subscriptionId: sub.id,
           now,
           env,
-          // Ship the order even when no card on file — the truck rolls on
-          // schedule and we send a Square Invoice to collect afterwards.
-          forceStatus: 'confirmed',
         });
         if (!orderId) continue; // no upcoming delivery day
 

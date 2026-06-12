@@ -18,10 +18,8 @@
  *   - Tries to auto-charge a saved Square card when one exists
  *   - Falls back to `payment_status='pending_payment'` when no card / no env
  *   - Pauses the subscription + emails the customer when a saved card fails
- *   - Caller can opt into `forceStatus: 'confirmed'` so the order ships
- *     anyway (used by cron + generate-stops — Seamus delivers and chases
- *     payment), or leave it auto so storefront checkout orders only ship
- *     once payment lands.
+ *   - Keeps unpaid orders out of fulfilment until Square or admin confirms
+ *     payment.
  *
  * Notes format is `Subscription: {boxName} ({frequency})` so the
  * cancelFutureSubscriptionOrders helper can match these via prefix.
@@ -69,19 +67,6 @@ export interface CreateSubscriptionOrderOpts {
   now: number;
   /** Pass env to enable auto-charging via Square + payment_action_required emails. */
   env?: Env;
-  /**
-   * Override the resulting `orders.status` regardless of payment outcome.
-   *
-   * - Default (undefined): `'confirmed'` if charge succeeded, else
-   *   `'pending_payment'`. Storefront /subscriptions/checkout uses this so
-   *   Mode-2 (Payment Link) orders only ship once the customer pays.
-   *
-   * - `'confirmed'`: ship the order no matter what the payment outcome was.
-   *   Used by the cron + generate-stops paths — Seamus delivers his weekly
-   *   route from the manifest and would rather chase payment than miss a
-   *   delivery.
-   */
-  forceStatus?: 'confirmed';
   /**
    * Optional: target a specific delivery day instead of letting the helper
    * pick the next active one. Used by POST /delivery-days/:id/generate-stops
@@ -203,11 +188,9 @@ export async function createSubscriptionOrder(
     }
   }
 
-  // Decide order.status:
-  //  - forceStatus='confirmed' → ship regardless (cron / generate-stops)
-  //  - default behaviour:        ship if paid, hold as pending_payment otherwise
-  const orderStatus = opts.forceStatus
-    ?? (paymentStatus === 'paid' ? 'confirmed' : 'pending_payment');
+  // Only paid subscription orders can become fulfilment candidates. No card on
+  // file or failed Square payment stays pending until payment is handled.
+  const orderStatus = paymentStatus === 'paid' ? 'confirmed' : 'pending_payment';
 
   // Notes format kept consistent so cancelFutureSubscriptionOrders can match
   // these via 'Subscription:' prefix + sub.boxName substring.

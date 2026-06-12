@@ -185,9 +185,20 @@ app.patch('/:id/status', async (c) => {
 
   // Read prior state so we can handle undo (terminal -> non-terminal) cleanly.
   const [priorStop] = await db.select().from(stops).where(eq(stops.id, stopId)).limit(1);
+  if (!priorStop) return c.json({ error: 'Not found' }, 404);
   const wasTerminal = priorStop?.status === 'delivered' || priorStop?.status === 'failed';
   const isTerminal = status === 'delivered' || status === 'failed';
   const isUndo = wasTerminal && !isTerminal;
+
+  if ((status === 'en_route' || status === 'arrived' || status === 'delivered') && priorStop.orderId) {
+    const [linkedOrder] = await db.select({ paymentStatus: orders.paymentStatus })
+      .from(orders)
+      .where(eq(orders.id, priorStop.orderId))
+      .limit(1);
+    if (linkedOrder?.paymentStatus !== 'paid') {
+      return c.json({ error: 'Payment must be marked paid before this delivery can continue.' }, 409);
+    }
+  }
 
   const patch: Partial<typeof stops.$inferInsert> = { status };
   if (driverNote !== undefined) patch.driverNote = driverNote;
@@ -200,14 +211,14 @@ app.patch('/:id/status', async (c) => {
     if (priorStop?.status === 'delivered') patch.proofUrl = null;
   }
 
+  if ((status === 'en_route' || status === 'arrived') && priorStop) {
+    await clearOtherActiveStops(db, priorStop.deliveryDayId, priorStop.id, now);
+  }
+
   await db.update(stops).set(patch).where(eq(stops.id, stopId));
 
   // Get the current stop for context (post-update)
   const [currentStop] = await db.select().from(stops).where(eq(stops.id, stopId)).limit(1);
-
-  if ((status === 'en_route' || status === 'arrived') && currentStop) {
-    await clearOtherActiveStops(db, currentStop.deliveryDayId, currentStop.id, now);
-  }
 
   if (status === 'delivered' && currentStop) {
     // Manual stops have orderId = null. Skip linked-order updates for them

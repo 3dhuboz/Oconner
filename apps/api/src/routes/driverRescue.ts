@@ -173,6 +173,17 @@ app.patch('/stops/:id/status', async (c) => {
   const wasTerminal = priorStop.status === 'delivered' || priorStop.status === 'failed';
   const isTerminal = status === 'delivered' || status === 'failed';
   const isUndo = wasTerminal && !isTerminal;
+  if ((status === 'en_route' || status === 'arrived' || status === 'delivered') && priorStop.orderId) {
+    const [linkedOrder] = await db.select({ paymentStatus: orders.paymentStatus })
+      .from(orders)
+      .where(eq(orders.id, priorStop.orderId))
+      .limit(1);
+    if (linkedOrder?.paymentStatus !== 'paid') {
+      const res = c.json({ error: 'Payment must be marked paid before this delivery can continue.' }, 409);
+      res.headers.set('Cache-Control', 'no-store');
+      return res;
+    }
+  }
   const patch: Partial<typeof stops.$inferInsert> = { status };
   if (driverNote !== undefined) patch.driverNote = driverNote;
   if (flagReason !== undefined) patch.flagReason = flagReason;
@@ -183,12 +194,12 @@ app.patch('/stops/:id/status', async (c) => {
     if (priorStop.status === 'delivered') patch.proofUrl = null;
   }
 
+  if (status === 'en_route' || status === 'arrived') {
+    await clearOtherActiveStops(db, priorStop.deliveryDayId, priorStop.id, now);
+  }
+
   await db.update(stops).set(patch).where(eq(stops.id, stopId));
   const [currentStop] = await db.select().from(stops).where(eq(stops.id, stopId)).limit(1);
-
-  if ((status === 'en_route' || status === 'arrived') && currentStop) {
-    await clearOtherActiveStops(db, currentStop.deliveryDayId, currentStop.id, now);
-  }
 
   if (status === 'delivered' && currentStop?.orderId) {
     await db.update(orders)

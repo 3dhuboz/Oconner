@@ -404,11 +404,9 @@ app.post('/', async (c) => {
     orderPrice = prod?.fixedPrice ?? 0;
   }
   if (!body.skipInitialOrder && customerId && body.address && orderPrice) {
-    // Admin-created sub via POST /. Force the order to 'confirmed' so it
-    // ships on the manifest — admin creates these for customers they intend
-    // to deliver to, and we don't want the cron-sweep to cancel it after 12h
-    // just because the customer has no card on file. Seamus will send a
-    // Square Invoice from the Order Detail page to collect.
+    // Admin-created subscriptions do not become deliverable until payment is
+    // confirmed. If no saved Square card exists, the helper leaves the order
+    // pending so it can be invoiced or manually marked paid first.
     await createSubscriptionOrder(db, {
       customerId,
       email: body.email,
@@ -422,7 +420,6 @@ app.post('/', async (c) => {
       subscriptionId: id,
       now,
       env: c.env,
-      forceStatus: 'confirmed',
     });
   }
 
@@ -536,10 +533,9 @@ app.post('/:id/generate-order', async (c) => {
   }
 
   const now = Date.now();
-  // Manual "create order now" from the admin Subscriptions page. Force the
-  // resulting order to 'confirmed' so it ships even when no saved card is on
-  // file — Seamus is explicitly creating this for delivery and will collect
-  // payment via Send Square Invoice in admin.
+  // Manual "create order now" from the admin Subscriptions page. The order is
+  // only confirmed automatically if Square successfully charges a saved card.
+  // Otherwise it remains pending until payment is collected.
   const orderId = await createSubscriptionOrder(db, {
     customerId,
     email: sub.email,
@@ -553,7 +549,6 @@ app.post('/:id/generate-order', async (c) => {
     subscriptionId: sub.id,
     now,
     env: c.env,
-    forceStatus: 'confirmed',
   });
 
   if (!orderId) return c.json({ error: 'No upcoming delivery day available' }, 400);
@@ -639,8 +634,8 @@ app.post('/auto-generate', async (c) => {
     const resolvedBoxId = boxProduct?.id ?? boxId;
     if (!price) { errors.push(`${sub.email}: box product not found or no price`); continue; }
 
-    // Batch /auto-generate endpoint — same intent as the cron and as
-    // /generate-order: create + ship + collect payment after. Force confirmed.
+    // Batch /auto-generate endpoint. Do not force unpaid subscriptions onto
+    // the manifest; payment must be confirmed before fulfilment.
     const orderId = await createSubscriptionOrder(db, {
       customerId,
       email: sub.email,
@@ -654,7 +649,6 @@ app.post('/auto-generate', async (c) => {
       subscriptionId: sub.id,
       now,
       env: c.env,
-      forceStatus: 'confirmed',
     });
 
     if (!orderId) { errors.push(`${sub.email}: no upcoming delivery day`); continue; }

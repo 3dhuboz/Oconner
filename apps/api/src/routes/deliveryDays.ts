@@ -229,8 +229,9 @@ app.post('/:id/generate-stops', async (c) => {
     // `paymentStatus: 'paid'` — same fake-paid bug as the cron path.
     // NOW: use the shared helper so payment status reflects reality
     // (auto-charge saved card if available, else pending_payment).
-    // forceStatus: 'confirmed' keeps the order on the manifest for Seamus
-    // to deliver; Send Square Invoice in admin chases payment after.
+    // Do not force this onto the manifest. If Square cannot auto-charge a
+    // saved card, the helper leaves the order pending until payment is
+    // confirmed or admin deliberately marks it paid.
     const resolvedBoxId = boxProduct.id!;
     const { createSubscriptionOrder } = await import('../lib/subscriptions');
     const orderId = await createSubscriptionOrder(db, {
@@ -246,7 +247,6 @@ app.post('/:id/generate-stops', async (c) => {
       subscriptionId: sub.id,
       now,
       env: c.env,
-      forceStatus: 'confirmed',
       deliveryDayId: dayId,
     });
     if (!orderId) continue;
@@ -269,6 +269,7 @@ app.post('/:id/generate-stops', async (c) => {
   const DELIVERABLE_STATUSES = new Set([
     'confirmed', 'preparing', 'packed', 'out_for_delivery',
   ]);
+  const FULFILLABLE_PAYMENT_STATUSES = new Set(['paid']);
   const dayOrders = await db.select().from(orders).where(eq(orders.deliveryDayId, dayId));
   const existingStops = await db.select({ orderId: stops.orderId }).from(stops).where(eq(stops.deliveryDayId, dayId));
   const existingOrderIds = new Set(existingStops.map((s) => s.orderId));
@@ -277,6 +278,7 @@ app.post('/:id/generate-stops', async (c) => {
   for (const order of dayOrders) {
     if (existingOrderIds.has(order.id)) continue;
     if (!DELIVERABLE_STATUSES.has(order.status)) continue;
+    if (!FULFILLABLE_PAYMENT_STATUSES.has(order.paymentStatus)) continue;
     const addr = JSON.parse(order.deliveryAddress) as { line1: string; suburb: string; postcode: string };
     const geo = await geocodeAddress(addr);
     await db.insert(stops).values({

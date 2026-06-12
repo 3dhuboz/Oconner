@@ -15,6 +15,7 @@ test('normal driver status updates enforce one active stop per delivery day', ()
   assert.match(stopsSource, /eq\(orders\.status,\s*'out_for_delivery'\)/);
   assert.match(stopsSource, /status:\s*'confirmed'/);
   assert.match(stopsSource, /status === 'en_route' \|\| status === 'arrived'/);
+  assert.match(stopsSource, /await clearOtherActiveStops\(db,\s*priorStop\.deliveryDayId,\s*priorStop\.id,\s*now\)[\s\S]+await db\.update\(stops\)\.set\(patch\)/);
   assert.match(stopsSource, /const hasActiveStop = await hasOtherActiveStop/);
   assert.match(stopsSource, /if \(hasActiveStop\) return c\.json\(\{ ok: true \}\)/);
 });
@@ -29,6 +30,7 @@ test('emergency driver status updates enforce one active stop per delivery day',
   assert.match(rescueSource, /eq\(orders\.status,\s*'out_for_delivery'\)/);
   assert.match(rescueSource, /status:\s*'confirmed'/);
   assert.match(rescueSource, /status === 'en_route' \|\| status === 'arrived'/);
+  assert.match(rescueSource, /await clearOtherActiveStops\(db,\s*priorStop\.deliveryDayId,\s*priorStop\.id,\s*now\)[\s\S]+await db\.update\(stops\)\.set\(patch\)/);
   assert.match(rescueSource, /const hasActiveStop = await hasOtherActiveStop/);
   assert.match(rescueSource, /res\.headers\.set\('Cache-Control',\s*'no-store'\)/);
 });
