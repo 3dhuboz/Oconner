@@ -13,10 +13,18 @@ test('driver stop status updates require linked orders to be paid before fulfilm
   assert.match(stopsSource, /status === 'en_route' \|\| status === 'arrived' \|\| status === 'delivered'/);
   assert.match(stopsSource, /linkedOrder\?\.paymentStatus !== 'paid'/);
   assert.match(stopsSource, /Payment must be marked paid before this delivery can continue\./);
+  assert.match(stopsSource, /function findNextDeliverableStop/);
+  assert.match(stopsSource, /isDeliverableLinkedOrder\(linkedOrder\)/);
+  assert.match(stopsSource, /paymentStatus: orders\.paymentStatus/);
+  assert.match(stopsSource, /NON_DELIVERABLE_ORDER_STATUSES/);
 
   assert.match(rescueSource, /status === 'en_route' \|\| status === 'arrived' \|\| status === 'delivered'/);
   assert.match(rescueSource, /linkedOrder\?\.paymentStatus !== 'paid'/);
   assert.match(rescueSource, /Payment must be marked paid before this delivery can continue\./);
+  assert.match(rescueSource, /function findNextDeliverableStop/);
+  assert.match(rescueSource, /isDeliverableLinkedOrder\(linkedOrder\)/);
+  assert.match(rescueSource, /paymentStatus: orders\.paymentStatus/);
+  assert.match(rescueSource, /NON_DELIVERABLE_ORDER_STATUSES/);
 });
 
 test('subscription generation no longer forces unpaid orders into fulfilment', () => {

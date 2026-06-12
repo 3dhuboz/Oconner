@@ -10,6 +10,14 @@ import type { Env } from '../types';
 const app = new Hono<{ Bindings: Env }>();
 type RescueContext = Context<{ Bindings: Env }>;
 const ACTIVE_STOP_STATUSES = ['en_route', 'arrived'];
+const NON_DELIVERABLE_ORDER_STATUSES = new Set([
+  'cancelled',
+  'refunded',
+  'failed',
+  'pending_payment',
+  'awaiting_payment',
+  'delivered',
+]);
 
 function rescuePin(c: RescueContext): string {
   return c.req.header('X-Driver-Rescue-Pin') ?? c.req.query('pin') ?? '';
@@ -95,6 +103,44 @@ async function clearOtherActiveStops(
       inArray(orders.id, orderIds),
       eq(orders.status, 'out_for_delivery'),
     ));
+}
+
+function isDeliverableLinkedOrder(
+  order?: Pick<typeof orders.$inferSelect, 'status' | 'paymentStatus'> | null,
+) {
+  return !!order
+    && order.paymentStatus === 'paid'
+    && !NON_DELIVERABLE_ORDER_STATUSES.has(order.status);
+}
+
+async function findNextDeliverableStop(
+  db: ReturnType<typeof drizzle>,
+  currentStop: typeof stops.$inferSelect,
+) {
+  const candidates = await db.select().from(stops)
+    .where(and(
+      eq(stops.deliveryDayId, currentStop.deliveryDayId),
+      gt(stops.sequence, currentStop.sequence),
+    ))
+    .orderBy(asc(stops.sequence))
+    .limit(20);
+
+  for (const candidate of candidates) {
+    if (candidate.status !== 'pending') continue;
+    if (!candidate.orderId) return candidate;
+
+    const [linkedOrder] = await db.select({
+      status: orders.status,
+      paymentStatus: orders.paymentStatus,
+    })
+      .from(orders)
+      .where(eq(orders.id, candidate.orderId))
+      .limit(1);
+
+    if (isDeliverableLinkedOrder(linkedOrder)) return candidate;
+  }
+
+  return null;
 }
 
 async function findTodayDeliveryDay(db: ReturnType<typeof drizzle>) {
@@ -221,14 +267,8 @@ app.patch('/stops/:id/status', async (c) => {
       return res;
     }
 
-    const [nextStop] = await db.select().from(stops)
-      .where(and(
-        eq(stops.deliveryDayId, currentStop.deliveryDayId),
-        gt(stops.sequence, currentStop.sequence),
-      ))
-      .orderBy(asc(stops.sequence))
-      .limit(1);
-    if (nextStop?.status === 'pending') {
+    const nextStop = await findNextDeliverableStop(db, currentStop);
+    if (nextStop) {
       await db.update(stops).set({ status: 'en_route' }).where(eq(stops.id, nextStop.id));
       if (nextStop.orderId) {
         await db.update(orders).set({ status: 'out_for_delivery', updatedAt: now }).where(eq(orders.id, nextStop.orderId));
