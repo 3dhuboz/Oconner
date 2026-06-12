@@ -26,7 +26,6 @@ function formatAddress(addr: Record<string, string>): string {
 }
 
 async function ensureStopForPaidDeliveryOrder(db: ReturnType<typeof drizzle>, order: typeof orders.$inferSelect): Promise<boolean> {
-  if (order.fulfillmentType !== 'delivery') return false;
   const [day] = await db.select().from(deliveryDays).where(eq(deliveryDays.id, order.deliveryDayId)).limit(1);
   if (!day || day.type !== 'delivery') return false;
 

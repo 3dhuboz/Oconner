@@ -80,7 +80,7 @@ test('manual Square reconciliation is bounded and uses fast payment-link checks 
 
 test('Square-paid delivery orders ensure a manifest stop exists', () => {
   assert.match(source, /async function ensureStopForPaidDeliveryOrder/);
-  assert.match(source, /order\.fulfillmentType !== 'delivery'/);
+  assert.doesNotMatch(source, /order\.fulfillmentType !== 'delivery'/);
   assert.match(source, /day\.type !== 'delivery'/);
   assert.match(source, /db\.insert\(stopsTable\)\.values/);
   assert.match(source, /await ensureStopForPaidDeliveryOrder\(db,\s*order\)/);

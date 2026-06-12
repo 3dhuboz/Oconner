@@ -236,7 +236,6 @@ function resolvePaidOrderStatus(order: OrderRow): string {
 }
 
 async function ensureStopForPaidDeliveryOrder(db: ReturnType<typeof drizzle>, order: OrderRow): Promise<boolean> {
-  if (order.fulfillmentType !== 'delivery') return false;
   const [day] = await db.select().from(deliveryDaysTable).where(eq(deliveryDaysTable.id, order.deliveryDayId)).limit(1);
   if (!day || day.type !== 'delivery') return false;
 

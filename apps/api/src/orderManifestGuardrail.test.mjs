@@ -8,12 +8,14 @@ const indexSource = readFileSync(new URL('./index.ts', import.meta.url), 'utf8')
 
 test('paid delivery orders create a stop from admin and Square confirmation paths', () => {
   assert.match(ordersRouteSource, /async function ensureStopForPaidDeliveryOrder/);
-  assert.match(ordersRouteSource, /order\.fulfillmentType !== 'delivery'/);
   assert.match(ordersRouteSource, /day\.type !== 'delivery'/);
+  assert.doesNotMatch(ordersRouteSource, /order\.fulfillmentType !== 'delivery'/);
   assert.match(ordersRouteSource, /paymentStatus === 'paid'[\s\S]+ensureStopForPaidDeliveryOrder/);
   assert.match(ordersRouteSource, /effectiveOrder\.paymentStatus === 'paid'[\s\S]+ensureStopForPaidDeliveryOrder/);
 
   assert.match(indexSource, /async function ensureStopForPaidDeliveryOrder/);
+  assert.doesNotMatch(indexSource, /order\.fulfillmentType !== 'delivery'/);
+  assert.match(indexSource, /day\.type !== 'delivery'/);
   assert.match(indexSource, /await ensureStopForPaidDeliveryOrder\(db,\s*order\)/);
 });
 
