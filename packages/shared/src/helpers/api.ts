@@ -368,20 +368,27 @@ export const api = {
      * a friendly retry banner.
      */
     upload: async (file: File, folder?: string): Promise<string> => {
-      const headers = await authHeaders();
       const formData = new FormData();
       formData.append('file', file);
       if (folder) formData.append('folder', folder);
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 30_000);
       try {
-        const res = await fetch(`${API_URL}/api/images/upload`, {
+        const run = async (freshToken = false) => fetch(`${API_URL}/api/images/upload`, {
           method: 'POST',
-          headers: { Authorization: headers.Authorization ?? '' },
+          headers: freshToken ? await authHeaders({ skipCache: true }) : await authHeaders(),
           body: formData,
           signal: controller.signal,
         });
-        if (!res.ok) throw new Error(`Upload failed (HTTP ${res.status})`);
+
+        let res = await run(false);
+        if ((res.status === 401 || res.status === 403) && _getToken) {
+          res = await run(true);
+        }
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: res.statusText })) as ApiErrorBody;
+          throw new ApiError(err.error ?? `Upload failed (HTTP ${res.status})`, res.status, err);
+        }
         const data = await res.json() as { url: string; key: string };
         return data.url;
       } catch (e) {

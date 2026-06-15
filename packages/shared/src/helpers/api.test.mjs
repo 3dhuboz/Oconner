@@ -24,3 +24,11 @@ test('shared api helper can attach the emergency staff PIN', () => {
   assert.match(source, /saveStaffRescuePin/);
   assert.match(source, /X-Staff-Rescue-Pin/);
 });
+
+test('image uploads use the same auth and retry path as JSON requests', () => {
+  assert.match(source, /images:\s*\{/);
+  assert.match(source, /await authHeaders\(\)/);
+  assert.match(source, /authHeaders\(\{ skipCache: true \}\)/);
+  assert.doesNotMatch(source, /headers:\s*\{\s*Authorization:\s*headers\.Authorization \?\? ''\s*\}/);
+  assert.match(source, /throw new ApiError\(err\.error \?\? `Upload failed \(HTTP \$\{res\.status\}\)`/);
+});
