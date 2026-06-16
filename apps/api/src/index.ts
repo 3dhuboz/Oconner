@@ -4,7 +4,7 @@ import type { Env, AuthUser } from './types';
 import { requireAuth, requireRole, verifyClerkToken } from './middleware/auth';
 import { drizzle } from 'drizzle-orm/d1';
 import { eq, desc, asc, and, gte, sql, or } from 'drizzle-orm';
-import { orders as ordersTable, customers as customersTable, products as productsTable, deliveryDays as deliveryDaysTable, subscriptions as subscriptionsTable, processedWebhooks, pageEvents, promoCodes as promoCodesTable, stops as stopsTable, deliveryRuns as deliveryRunsTable, users as usersTable } from '@butcher/db';
+import { orders as ordersTable, customers as customersTable, products as productsTable, deliveryDays as deliveryDaysTable, subscriptions as subscriptionsTable, processedWebhooks, pageEvents, promoCodes as promoCodesTable, stops as stopsTable, deliveryRuns as deliveryRunsTable, users as usersTable, deliveryDayStock as deliveryDayStockTable } from '@butcher/db';
 import { deductStock, getStockDayId, reserveDayStock, consumePromoCode, releaseDayStock, restoreStock } from './lib/stock';
 import { parsePromoDeliveryDayIds, promoAllowsDeliveryDay } from './lib/promos';
 import ordersRouter from './routes/orders';
@@ -71,6 +71,22 @@ interface SquareReconcileResult {
   failed: number;
 }
 
+type GuardrailSeverity = 'critical' | 'warning';
+
+interface OpsGuardrailIssue {
+  code: string;
+  severity: GuardrailSeverity;
+  message: string;
+  details?: Record<string, unknown>;
+}
+
+interface OpsGuardrailResult {
+  ok: boolean;
+  checkedAt: number;
+  issues: OpsGuardrailIssue[];
+  repaired: number;
+}
+
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 const WEEK_MS = 7 * DAY_MS;
@@ -97,6 +113,167 @@ function num(row: any, field = 'n'): number {
 function pct(numerator: number, denominator: number): number {
   if (!denominator) return 0;
   return Math.round((numerator / denominator) * 1000) / 10;
+}
+
+function activeOrderForOperationalCounts(order: Pick<OrderRow, 'status' | 'paymentStatus'>): boolean {
+  const terminal = new Set(['cancelled', 'refunded', 'failed']);
+  return !terminal.has(order.status ?? '') && !terminal.has(order.paymentStatus ?? '');
+}
+
+function orderItemReservationQty(item: { weight?: number; weightKg?: number; quantity?: number }): number {
+  const qty = item.weight ? item.weight / 1000 : (item.weightKg ?? item.quantity ?? 1);
+  return Number.isFinite(qty) && qty > 0 ? qty : 0;
+}
+
+function parseOrderItemsForGuardrails(order: Pick<OrderRow, 'items' | 'id'>): Array<{ productId?: string; productName?: string; weight?: number; weightKg?: number; quantity?: number }> {
+  try {
+    const parsed = JSON.parse(order.items) as Array<{ productId?: string; productName?: string; weight?: number; weightKg?: number; quantity?: number }>;
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+async function runOpsGuardrails(env: Env, options: { repair?: boolean } = {}): Promise<OpsGuardrailResult> {
+  const db = drizzle(env.DB);
+  const repair = options.repair === true;
+  const checkedAt = Date.now();
+  const issues: OpsGuardrailIssue[] = [];
+  let repaired = 0;
+
+  const [days, stockRows, orders, stops] = await Promise.all([
+    db.select().from(deliveryDaysTable).where(eq(deliveryDaysTable.active, true)),
+    db.select().from(deliveryDayStockTable),
+    db.select().from(ordersTable),
+    db.select().from(stopsTable),
+  ]);
+
+  const daysById = new Map(days.map((day) => [day.id, day]));
+  const activeDayIds = new Set(days.map((day) => day.id));
+  const stopOrderIds = new Set(stops.map((stop) => stop.orderId).filter(Boolean));
+  const expectedReservations = new Map<string, number>();
+  const orderCountsByDay = new Map<string, number>();
+  const stockKeys = new Set(stockRows.map((row) => `${row.deliveryDayId}:${row.productId}`));
+
+  for (const order of orders) {
+    const day = daysById.get(order.deliveryDayId);
+    if (!day) continue;
+    if (!activeOrderForOperationalCounts(order)) continue;
+
+    orderCountsByDay.set(order.deliveryDayId, (orderCountsByDay.get(order.deliveryDayId) ?? 0) + 1);
+    const stockDayId = day.stockPoolId ?? day.id;
+    const items = parseOrderItemsForGuardrails(order);
+
+    for (const item of items) {
+      if (!item.productId) continue;
+      const qty = orderItemReservationQty(item);
+      if (qty <= 0) continue;
+      const key = `${stockDayId}:${item.productId}`;
+      expectedReservations.set(key, (expectedReservations.get(key) ?? 0) + qty);
+      if (!stockKeys.has(key)) {
+        issues.push({
+          code: 'order_product_missing_allocation',
+          severity: 'critical',
+          message: `${item.productName ?? item.productId} is on an active order but not allocated for its stock pool.`,
+          details: { orderId: order.id, deliveryDayId: order.deliveryDayId, stockDayId, productId: item.productId, qty },
+        });
+      }
+    }
+
+    if (
+      order.paymentStatus === 'paid'
+      && ['confirmed', 'preparing', 'packed', 'out_for_delivery'].includes(order.status)
+      && day.type === 'delivery'
+      && !stopOrderIds.has(order.id)
+    ) {
+      issues.push({
+        code: 'paid_delivery_order_missing_stop',
+        severity: 'critical',
+        message: `${order.customerName || order.customerEmail} has a paid delivery order with no driver stop.`,
+        details: { orderId: order.id, deliveryDayId: order.deliveryDayId },
+      });
+      if (repair) {
+        const created = await ensureStopForPaidDeliveryOrder(db, order);
+        if (created) repaired++;
+      }
+    }
+
+    if (
+      order.status === 'pending_payment'
+      && order.createdAt < checkedAt - 12 * HOUR_MS
+      && ['pending_payment', 'awaiting_payment'].includes(order.paymentStatus)
+    ) {
+      issues.push({
+        code: 'stale_pending_checkout',
+        severity: 'warning',
+        message: `${order.customerName || order.customerEmail} has a checkout attempt older than 12 hours.`,
+        details: { orderId: order.id, deliveryDayId: order.deliveryDayId, createdAt: order.createdAt, paymentStatus: order.paymentStatus },
+      });
+    }
+
+    if (
+      (order.notes ?? '').startsWith('Subscription:')
+      && order.paymentStatus === 'pending_payment'
+      && !(order.internalNotes ?? '').includes('Square invoice sent:')
+    ) {
+      issues.push({
+        code: 'subscription_pending_without_invoice',
+        severity: 'critical',
+        message: `${order.customerName || order.customerEmail} has a subscription order pending without a Square invoice note.`,
+        details: { orderId: order.id, deliveryDayId: order.deliveryDayId },
+      });
+    }
+  }
+
+  for (const row of stockRows) {
+    if (!activeDayIds.has(row.deliveryDayId)) continue;
+    const key = `${row.deliveryDayId}:${row.productId}`;
+    const expected = expectedReservations.get(key) ?? 0;
+    if (Math.abs(row.sold - expected) > 0.001) {
+      issues.push({
+        code: 'stock_reservation_drift',
+        severity: 'critical',
+        message: `${row.productName} reserved stock is ${row.sold}, but active orders account for ${expected}.`,
+        details: { deliveryDayId: row.deliveryDayId, productId: row.productId, recorded: row.sold, expected },
+      });
+      if (repair) {
+        await db.update(deliveryDayStockTable).set({ sold: expected }).where(eq(deliveryDayStockTable.id, row.id));
+        repaired++;
+      }
+    }
+
+    if (expected > row.allocated) {
+      issues.push({
+        code: 'stock_pool_oversold',
+        severity: 'critical',
+        message: `${row.productName} is oversold for this stock pool.`,
+        details: { deliveryDayId: row.deliveryDayId, productId: row.productId, allocated: row.allocated, expected },
+      });
+    }
+  }
+
+  for (const day of days) {
+    const expected = orderCountsByDay.get(day.id) ?? 0;
+    if (day.orderCount !== expected) {
+      issues.push({
+        code: 'delivery_day_order_count_drift',
+        severity: 'warning',
+        message: `Delivery day order count is ${day.orderCount}, but active orders account for ${expected}.`,
+        details: { deliveryDayId: day.id, recorded: day.orderCount, expected },
+      });
+      if (repair) {
+        await db.update(deliveryDaysTable).set({ orderCount: expected }).where(eq(deliveryDaysTable.id, day.id));
+        repaired++;
+      }
+    }
+  }
+
+  return {
+    ok: !issues.some((issue) => issue.severity === 'critical'),
+    checkedAt,
+    issues,
+    repaired,
+  };
 }
 
 function centsPer(numerator: number, denominator: number): number {
@@ -1707,6 +1884,16 @@ app.post('/api/square/reconcile', requireRole('admin'), async (c) => {
   return c.json({ ok: true, ...result });
 });
 
+app.get('/api/ops/guardrails', requireRole('admin'), async (c) => {
+  const result = await runOpsGuardrails(c.env, { repair: false });
+  return c.json(result, result.ok ? 200 : 409);
+});
+
+app.post('/api/ops/guardrails/repair', requireRole('admin'), async (c) => {
+  const result = await runOpsGuardrails(c.env, { repair: true });
+  return c.json({ ...result, repaired: result.repaired });
+});
+
 app.route('/api/orders', ordersRouter);
 app.route('/api/products', productsRouter);
 app.route('/api/delivery-days', deliveryDaysRouter);
@@ -2132,6 +2319,18 @@ export const scheduled: ExportedHandlerScheduledHandler<Env> = async (event, env
       if (stale.length > 0) console.log(`[cron] auto-cancelled ${stale.length} stale pending_payment orders`);
     } catch (e) {
       console.error('Stale order sweep failed:', e);
+    }
+
+    try {
+      const guardrails = await runOpsGuardrails(env, { repair: true });
+      if (guardrails.issues.length > 0 || guardrails.repaired > 0) {
+        console.log(`[ops-guardrails] ok=${guardrails.ok} issues=${guardrails.issues.length} repaired=${guardrails.repaired}`);
+        for (const issue of guardrails.issues.slice(0, 10)) {
+          console.log(`[ops-guardrails] ${issue.severity} ${issue.code}: ${issue.message}`);
+        }
+      }
+    } catch (e) {
+      console.error('Ops guardrail check failed:', e);
     }
 
     // ── 3. Thursday meat audit email ──
