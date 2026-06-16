@@ -5,7 +5,7 @@ import { requireAuth, requireRole, verifyClerkToken } from './middleware/auth';
 import { drizzle } from 'drizzle-orm/d1';
 import { eq, desc, asc, and, gte, sql, or } from 'drizzle-orm';
 import { orders as ordersTable, customers as customersTable, products as productsTable, deliveryDays as deliveryDaysTable, subscriptions as subscriptionsTable, processedWebhooks, pageEvents, promoCodes as promoCodesTable, stops as stopsTable, deliveryRuns as deliveryRunsTable, users as usersTable } from '@butcher/db';
-import { deductStock, getStockDayId, reserveDayStock, consumePromoCode } from './lib/stock';
+import { deductStock, getStockDayId, reserveDayStock, consumePromoCode, releaseDayStock, restoreStock } from './lib/stock';
 import { parsePromoDeliveryDayIds, promoAllowsDeliveryDay } from './lib/promos';
 import ordersRouter from './routes/orders';
 import productsRouter from './routes/products';
@@ -2109,6 +2109,9 @@ export const scheduled: ExportedHandlerScheduledHandler<Env> = async (event, env
       const stale = await db.select().from(orders)
         .where(and(eq(orders.status, 'pending_payment'), lt(orders.createdAt, Date.now() - 12 * 60 * 60 * 1000)));
       for (const order of stale) {
+        const items = JSON.parse(order.items) as Array<{ productId: string; productName: string; isMeatPack?: boolean; weight?: number; weightKg?: number; quantity?: number; lineTotal: number }>;
+        await releaseDayStock(db, order.deliveryDayId, items);
+        await restoreStock(db, items, order.id, Date.now());
         await db.update(orders).set({
           status: 'cancelled',
           paymentStatus: 'cancelled',

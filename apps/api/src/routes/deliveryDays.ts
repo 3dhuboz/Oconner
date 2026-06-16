@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { notifyCustomer } from './push';
 import { drizzle } from 'drizzle-orm/d1';
-import { eq, asc, gte, and, sql, or, isNull } from 'drizzle-orm';
+import { eq, asc, gte, and, sql, or, isNull, inArray } from 'drizzle-orm';
 import { deliveryDays, orders, stops, notifications, subscriptions, customers, users, deliveryRuns, products, deliveryDayStock, auditLog } from '@butcher/db';
 import { deductStock, getStockDayId } from '../lib/stock';
 import { sendEmail, buildOrderEmail, getSubject, buildBroadcastEmail } from '../lib/email';
@@ -111,6 +111,53 @@ async function geocodeFreeformAddress(address: string): Promise<{ lat: number; l
     if (data.length > 0) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
   } catch {}
   return null;
+}
+
+function orderItemQty(item: { weight?: number; weightKg?: number; quantity?: number }): number {
+  const qty = item.weight ? item.weight / 1000 : (item.weightKg ?? item.quantity ?? 1);
+  return Number.isFinite(qty) && qty > 0 ? qty : 0;
+}
+
+function buildStockPaymentBreakdown(dayOrders: Array<typeof orders.$inferSelect>) {
+  const breakdown = new Map<string, { paid: number; awaitingPayment: number; cancelled: number; other: number }>();
+  const ensure = (productId: string) => {
+    const existing = breakdown.get(productId);
+    if (existing) return existing;
+    const next = { paid: 0, awaitingPayment: 0, cancelled: 0, other: 0 };
+    breakdown.set(productId, next);
+    return next;
+  };
+
+  for (const order of dayOrders) {
+    let items: Array<{ productId?: string; weight?: number; weightKg?: number; quantity?: number }> = [];
+    try {
+      items = JSON.parse(order.items) as typeof items;
+    } catch {
+      continue;
+    }
+
+    const paymentStatus = order.paymentStatus ?? '';
+    const orderStatus = order.status ?? '';
+    const isCancelled = ['cancelled', 'refunded', 'failed'].includes(orderStatus) || ['cancelled', 'refunded', 'failed'].includes(paymentStatus);
+    const isPaid = paymentStatus === 'paid' && !isCancelled;
+    const isAwaiting = !isCancelled && (
+      ['pending_payment', 'awaiting_payment', 'invoice_sent', 'payment_failed'].includes(paymentStatus)
+      || ['pending_payment'].includes(orderStatus)
+    );
+
+    for (const item of items) {
+      if (!item.productId) continue;
+      const qty = orderItemQty(item);
+      if (qty <= 0) continue;
+      const row = ensure(item.productId);
+      if (isPaid) row.paid += qty;
+      else if (isAwaiting) row.awaitingPayment += qty;
+      else if (isCancelled) row.cancelled += qty;
+      else row.other += qty;
+    }
+  }
+
+  return breakdown;
 }
 
 app.patch('/:id/route-endpoints', async (c) => {
@@ -616,7 +663,23 @@ app.get('/:id/stock', async (c) => {
     if (source) poolDays.unshift(source);
   }
 
-  return c.json({ allocations: rows, poolSourceId: stockDayId !== dayId ? stockDayId : null, poolDays: poolDays.length > 0 ? poolDays : undefined });
+  const poolDayIds = [...new Set([stockDayId, ...poolDays.map((d) => d.id)])];
+  const dayOrders = poolDayIds.length > 0
+    ? await db.select().from(orders).where(inArray(orders.deliveryDayId, poolDayIds))
+    : [];
+  const breakdown = buildStockPaymentBreakdown(dayOrders);
+  const allocations = rows.map((row) => {
+    const productBreakdown = breakdown.get(row.productId) ?? { paid: 0, awaitingPayment: 0, cancelled: 0, other: 0 };
+    return {
+      ...row,
+      paidSold: productBreakdown.paid,
+      awaitingPayment: productBreakdown.awaitingPayment,
+      cancelledQty: productBreakdown.cancelled,
+      otherQty: productBreakdown.other,
+    };
+  });
+
+  return c.json({ allocations, poolSourceId: stockDayId !== dayId ? stockDayId : null, poolDays: poolDays.length > 0 ? poolDays : undefined });
 });
 
 app.put('/:id/stock', async (c) => {

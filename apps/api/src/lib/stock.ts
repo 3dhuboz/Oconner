@@ -117,6 +117,24 @@ export async function reserveDayStock(db: any, allocations: AllocationRow[], ite
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function releaseDayStock(db: any, deliveryDayId: string, items: OrderItem[]): Promise<void> {
+  const stockDayId = await getStockDayId(db, deliveryDayId);
+  const allocations = await db.select().from(deliveryDayStock).where(eq(deliveryDayStock.deliveryDayId, stockDayId));
+
+  for (const item of items) {
+    const alloc = allocations.find((a: AllocationRow) => a.productId === item.productId);
+    if (!alloc) continue;
+
+    const qty = item.weight ? item.weight / 1000 : (item.weightKg ?? item.quantity ?? 1);
+    if (qty <= 0) continue;
+
+    await db.update(deliveryDayStock)
+      .set({ sold: sql`MAX(0, ${deliveryDayStock.sold} - ${qty})` })
+      .where(eq(deliveryDayStock.id, alloc.id));
+  }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function rollbackReservations(db: any, reserved: Array<{ allocId: string; qty: number }>): Promise<void> {
   for (const r of reserved) {
     try {

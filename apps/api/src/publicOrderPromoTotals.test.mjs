@@ -22,6 +22,12 @@ test('public order creation consumes promo usage after stock reservation', () =>
   assert.match(indexSource, /deliveryDayStock\.sold\} - \$\{qty\}/);
 });
 
+test('abandoned pending checkout sweep releases reserved stock', () => {
+  assert.match(indexSource, /releaseDayStock\(db,\s*order\.deliveryDayId,\s*items\)/);
+  assert.match(indexSource, /restoreStock\(db,\s*items,\s*order\.id,\s*Date\.now\(\)\)/);
+  assert.match(indexSource, /auto-cancelled by daily cron: pending_payment > 12h/);
+});
+
 test('orders expose promo fields to frontend views', () => {
   assert.match(indexSource, /promoCode: order\.promoCode/);
   assert.match(indexSource, /promoDiscount: order\.promoDiscount/);

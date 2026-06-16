@@ -13,3 +13,10 @@ test('stock allocation screen surfaces API save errors to admins', () => {
 test('stock allocation screen explains stock and delivery spots are separate', () => {
   assert.match(source, /Delivery spots are controlled separately\./);
 });
+
+test('stock allocation screen separates paid sales from awaiting-payment reservations', () => {
+  assert.match(source, /paidSold\?: number/);
+  assert.match(source, /awaitingPayment\?: number/);
+  assert.match(source, /\{totalSold\} reserved/);
+  assert.match(source, /\{paidSold\} paid\{awaitingPayment > 0 \? ` \+ \$\{awaitingPayment\} awaiting` : ''\}/);
+});

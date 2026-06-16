@@ -8,6 +8,10 @@ interface Allocation {
   productName: string;
   allocated: number;
   sold: number;
+  paidSold?: number;
+  awaitingPayment?: number;
+  cancelledQty?: number;
+  otherQty?: number;
 }
 
 interface ProductInfo {
@@ -107,6 +111,8 @@ export default function StockAllocationTab({ dayId, dayDate }: { dayId: string; 
   const allocatedProducts = allocations.filter((a) => a.allocated > 0);
   const totalAllocated = allocatedProducts.reduce((s, a) => s + a.allocated, 0);
   const totalSold = allocatedProducts.reduce((s, a) => s + a.sold, 0);
+  const totalPaidSold = allocatedProducts.reduce((s, a) => s + (a.paidSold ?? a.sold), 0);
+  const totalAwaitingPayment = allocatedProducts.reduce((s, a) => s + (a.awaitingPayment ?? 0), 0);
   const fillPct = totalAllocated > 0 ? Math.round((totalSold / totalAllocated) * 100) : 0;
 
   // Filter products
@@ -181,7 +187,8 @@ export default function StockAllocationTab({ dayId, dayDate }: { dayId: string; 
             <div className="px-5 py-3 border-b bg-gray-50 flex items-center gap-6 text-sm flex-wrap">
               <span className="text-gray-500">{allocatedProducts.length} product{allocatedProducts.length !== 1 ? 's' : ''} allocated</span>
               <span className="text-gray-500">{totalAllocated} total units</span>
-              <span className="text-gray-500">{totalSold} sold</span>
+              <span className="text-gray-500">{totalSold} reserved</span>
+              <span className="text-gray-500">{totalPaidSold} paid{totalAwaitingPayment > 0 ? ` + ${totalAwaitingPayment} awaiting payment` : ''}</span>
               <div className="flex items-center gap-2">
                 <div className="w-24 bg-gray-200 rounded-full h-1.5">
                   <div
@@ -224,6 +231,8 @@ export default function StockAllocationTab({ dayId, dayDate }: { dayId: string; 
               const alloc = allocations.find((a) => a.productId === product.id);
               const allocated = alloc?.allocated ?? 0;
               const sold = alloc?.sold ?? 0;
+              const paidSold = alloc?.paidSold ?? sold;
+              const awaitingPayment = alloc?.awaitingPayment ?? 0;
               const remaining = allocated - sold;
               const pct = allocated > 0 ? Math.min(100, (sold / allocated) * 100) : 0;
               return (
@@ -248,9 +257,14 @@ export default function StockAllocationTab({ dayId, dayDate }: { dayId: string; 
                         placeholder="0"
                       />
                     </div>
-                    <div className="text-right w-12">
-                      <label className="text-[10px] text-gray-400 block">Sold</label>
+                    <div className="text-right w-24">
+                      <label className="text-[10px] text-gray-400 block">Reserved</label>
                       <p className="text-sm font-medium text-gray-600">{sold}</p>
+                      {sold > 0 && (
+                        <p className={`text-[10px] ${awaitingPayment > 0 ? 'text-amber-600' : 'text-gray-400'}`}>
+                          {paidSold} paid{awaitingPayment > 0 ? ` + ${awaitingPayment} awaiting` : ''}
+                        </p>
+                      )}
                     </div>
                     <div className="text-right w-14">
                       <label className="text-[10px] text-gray-400 block">Left</label>

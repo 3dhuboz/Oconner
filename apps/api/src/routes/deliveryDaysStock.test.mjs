@@ -19,3 +19,11 @@ test('delivery day stock saves keep the rewrite batched', () => {
   assert.match(source, /INSERT INTO delivery_day_stock/);
   assert.match(source, /await c\.env\.DB\.batch\(statements\)/);
 });
+
+test('delivery day stock response explains reserved stock by payment state', () => {
+  assert.match(source, /function buildStockPaymentBreakdown/);
+  assert.match(source, /paidSold: productBreakdown\.paid/);
+  assert.match(source, /awaitingPayment: productBreakdown\.awaitingPayment/);
+  assert.match(source, /cancelledQty: productBreakdown\.cancelled/);
+  assert.match(source, /inArray\(orders\.deliveryDayId,\s*poolDayIds\)/);
+});
