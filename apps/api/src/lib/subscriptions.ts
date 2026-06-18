@@ -61,7 +61,7 @@ export interface CreateSubscriptionOrderOpts {
   boxName: string;
   /** Used in the customer-visible `notes` field, e.g. "Subscription: 10kg Box (monthly)" */
   frequency?: string;
-  /** Price in cents (GST inclusive). */
+  /** Price in cents. O'Connor beef products are GST-free. */
   price: number;
   /** Subscription this order was generated from — used for traceability and audit. */
   subscriptionId: string;
@@ -105,8 +105,8 @@ export async function createSubscriptionOrder(
   if (!nextDay) return null;
 
   const orderId = crypto.randomUUID();
-  const gst = Math.round(opts.price / 11); // GST inclusive
-  const subtotal = opts.price - gst;
+  const gst = 0;
+  const subtotal = opts.price;
 
   const item = {
     productId: opts.boxId,

@@ -112,7 +112,10 @@ export default function CheckoutPage() {
           return true;
         });
         setDeliveryDays(days);
-        if (days.length > 0) setSelectedDayId(days[0].id!);
+        if (days.length > 0) {
+          const defaultDay = days.find((d) => (d as any).type !== 'pickup') ?? days[0];
+          setSelectedDayId(defaultDay.id!);
+        }
       })
       .catch(() => {});
   }, [items]);
@@ -168,7 +171,11 @@ export default function CheckoutPage() {
     if (!selectedDayId) { setError('Please select a delivery day.'); return; }
     if (items.length === 0) { setError('Your cart is empty.'); return; }
     if (hasInvalidPricing || priceSyncing) { setError('Cart prices are still refreshing. Please try again in a moment.'); return; }
-    if (!isPickup && form.line1 && !/^\d/.test(form.line1.trim())) {
+    if (!isPickup && (!form.line1.trim() || !form.suburb.trim() || !/^\d{4}$/.test(form.postcode.trim()))) {
+      setError('Please enter your delivery address, suburb and 4-digit postcode.');
+      return;
+    }
+    if (!isPickup && !/^\d/.test(form.line1.trim())) {
       setError('Please include a street number in your address (e.g. 12 Katrina Boulevard).');
       return;
     }
@@ -268,17 +275,19 @@ export default function CheckoutPage() {
               <h2 className="text-lg font-semibold mb-4">Delivery Day</h2>
               {deliveryDays.length === 0 ? (
                 <p className="text-amber-600 text-sm">No delivery days available. Please check back soon.</p>
-              ) : !postcodeEntered ? (
-                <p className="text-gray-500 text-sm bg-gray-50 border border-gray-200 rounded-lg px-4 py-3">
-                  Enter your delivery address above and we'll show you the next runs that come through your area.
-                </p>
               ) : noDayServesPostcode ? (
                 <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
                   <p className="font-medium">We don't currently have a run scheduled for postcode {form.postcode}.</p>
                   <p className="mt-1 text-amber-700">Check the <a href="/delivery-days" className="underline font-medium">delivery calendar</a> for upcoming dates, or get in touch and we'll see what we can do.</p>
                 </div>
               ) : (
-                <select value={selectedDayId} onChange={(e) => setSelectedDayId(e.target.value)} className="w-full border rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand text-sm">
+                <div className="space-y-2">
+                  {!postcodeEntered && !isPickup && (
+                    <p className="text-gray-500 text-sm bg-gray-50 border border-gray-200 rounded-lg px-4 py-3">
+                      Choose a delivery day, then enter your address above so we can confirm that run comes through your area.
+                    </p>
+                  )}
+                  <select value={selectedDayId} onChange={(e) => setSelectedDayId(e.target.value)} className="w-full border rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand text-sm">
                   {availableDays.map((day) => {
                     const date = new Date(day.date);
                     return (
@@ -289,7 +298,8 @@ export default function CheckoutPage() {
                       </option>
                     );
                   })}
-                </select>
+                  </select>
+                </div>
               )}
             </section>
 

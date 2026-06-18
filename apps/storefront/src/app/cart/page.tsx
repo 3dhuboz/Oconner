@@ -11,7 +11,6 @@ import Footer from '@/components/Footer';
 import { api, formatCurrency } from '@butcher/shared';
 import type { Product } from '@butcher/shared';
 
-const GST_RATE = 0.1;
 const DELIVERY_FEE = 0; // was 1500 — re-enable when delivery fees return
 const FREE_DELIVERY_THRESHOLD = 0;
 
@@ -21,7 +20,6 @@ export default function CartPage() {
   const subtotal = total();
   const deliveryFee = subtotal >= FREE_DELIVERY_THRESHOLD ? 0 : DELIVERY_FEE;
   const grandTotal = subtotal + deliveryFee;
-  const gst = Math.round(grandTotal * GST_RATE / (1 + GST_RATE));
   const hasInvalidPricing = items.some((item) => item.lineTotal <= 0);
 
   useEffect(() => {
@@ -111,7 +109,7 @@ export default function CartPage() {
                 </span>
               </div>
               <div className="flex justify-between text-gray-500">
-                <span>GST (inc.)</span><span>{formatCurrency(gst)}</span>
+                <span>GST-free goods</span><span>{formatCurrency(0)}</span>
               </div>
               {subtotal < FREE_DELIVERY_THRESHOLD && (
                 <p className="text-xs text-green-600">Spend {formatCurrency(FREE_DELIVERY_THRESHOLD - subtotal)} more for free delivery!</p>

@@ -147,6 +147,7 @@ export default function AddressAutocomplete({ value, onChange, className }: Prop
           onChange={(e) => handleInputChange(e.target.value)}
           onFocus={() => { if (suggestions.length > 0) setShowDropdown(true); }}
           placeholder="Start typing your address..."
+          required
           className={cls}
           autoComplete="one-time-code"
           data-1p-ignore
