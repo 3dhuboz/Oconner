@@ -134,6 +134,29 @@ function parseOrderItemsForGuardrails(order: Pick<OrderRow, 'items' | 'id'>): Ar
   }
 }
 
+function parseAddressForGuardrails(value: string | null | undefined): Record<string, string> {
+  if (!value) return {};
+  try {
+    const parsed = JSON.parse(value) as Record<string, unknown>;
+    if (!parsed || typeof parsed !== 'object') return {};
+    return {
+      line1: String(parsed.line1 ?? '').trim(),
+      line2: String(parsed.line2 ?? '').trim(),
+      suburb: String(parsed.suburb ?? '').trim(),
+      state: String(parsed.state ?? '').trim(),
+      postcode: String(parsed.postcode ?? '').trim(),
+    };
+  } catch {
+    return {};
+  }
+}
+
+function addressKey(addr: Record<string, string>): string {
+  return [addr.line1, addr.line2, addr.suburb, addr.state, addr.postcode]
+    .map((part) => (part ?? '').trim().toLowerCase())
+    .join('|');
+}
+
 async function runOpsGuardrails(env: Env, options: { repair?: boolean } = {}): Promise<OpsGuardrailResult> {
   const db = drizzle(env.DB);
   const repair = options.repair === true;
@@ -151,9 +174,18 @@ async function runOpsGuardrails(env: Env, options: { repair?: boolean } = {}): P
   const daysById = new Map(days.map((day) => [day.id, day]));
   const activeDayIds = new Set(days.map((day) => day.id));
   const stopOrderIds = new Set(stops.map((stop) => stop.orderId).filter(Boolean));
+  const stopsByOrderId = new Map(stops.filter((stop) => stop.orderId).map((stop) => [stop.orderId as string, stop]));
+  const runsByDayId = new Map<string, Array<typeof deliveryRunsTable.$inferSelect>>();
   const expectedReservations = new Map<string, number>();
   const orderCountsByDay = new Map<string, number>();
   const stockKeys = new Set(stockRows.map((row) => `${row.deliveryDayId}:${row.productId}`));
+
+  const allRuns = await db.select().from(deliveryRunsTable);
+  for (const run of allRuns) {
+    const list = runsByDayId.get(run.deliveryDayId) ?? [];
+    list.push(run);
+    runsByDayId.set(run.deliveryDayId, list);
+  }
 
   for (const order of orders) {
     const day = daysById.get(order.deliveryDayId);
@@ -195,6 +227,53 @@ async function runOpsGuardrails(env: Env, options: { repair?: boolean } = {}): P
       if (repair) {
         const created = await ensureStopForPaidDeliveryOrder(db, order);
         if (created) repaired++;
+      }
+    }
+
+    const linkedStop = stopsByOrderId.get(order.id);
+    if (
+      linkedStop
+      && day.type === 'delivery'
+      && order.paymentStatus === 'paid'
+      && ['confirmed', 'preparing', 'packed', 'out_for_delivery'].includes(order.status)
+    ) {
+      const orderAddress = parseAddressForGuardrails(order.deliveryAddress);
+      const stopAddress = parseAddressForGuardrails(linkedStop.address);
+      const addressMismatch = addressKey(orderAddress) !== addressKey(stopAddress);
+      const dayMismatch = linkedStop.deliveryDayId !== order.deliveryDayId;
+      const detailMismatch = linkedStop.customerName !== order.customerName
+        || linkedStop.customerPhone !== (order.customerPhone ?? '')
+        || linkedStop.items !== order.items
+        || (linkedStop.customerNote ?? '') !== (order.notes ?? '');
+
+      if (addressMismatch || dayMismatch || detailMismatch) {
+        issues.push({
+          code: 'delivery_stop_order_drift',
+          severity: 'critical',
+          message: `${order.customerName || order.customerEmail} has a driver stop that no longer matches the order details.`,
+          details: {
+            orderId: order.id,
+            stopId: linkedStop.id,
+            deliveryDayId: order.deliveryDayId,
+            addressMismatch,
+            dayMismatch,
+            detailMismatch,
+          },
+        });
+        if (repair) {
+          const dayRuns = runsByDayId.get(order.deliveryDayId) ?? [];
+          await db.update(stopsTable).set({
+            deliveryDayId: order.deliveryDayId,
+            runId: dayRuns.length === 1 ? dayRuns[0].id : linkedStop.runId,
+            customerName: order.customerName,
+            customerPhone: order.customerPhone ?? '',
+            address: order.deliveryAddress,
+            items: order.items,
+            customerNote: order.notes ?? null,
+            ...(addressMismatch ? { lat: null, lng: null } : {}),
+          }).where(eq(stopsTable.id, linkedStop.id));
+          repaired++;
+        }
       }
     }
 
@@ -265,6 +344,23 @@ async function runOpsGuardrails(env: Env, options: { repair?: boolean } = {}): P
         await db.update(deliveryDaysTable).set({ orderCount: expected }).where(eq(deliveryDaysTable.id, day.id));
         repaired++;
       }
+    }
+  }
+
+  for (const stop of stops) {
+    if (!activeDayIds.has(stop.deliveryDayId)) continue;
+    if (stop.runId) continue;
+    const dayRuns = runsByDayId.get(stop.deliveryDayId) ?? [];
+    if (dayRuns.length !== 1) continue;
+    issues.push({
+      code: 'delivery_stop_unassigned_to_single_run',
+      severity: 'critical',
+      message: `${stop.customerName} is on an active delivery day but is not assigned to the only driver run.`,
+      details: { stopId: stop.id, deliveryDayId: stop.deliveryDayId, runId: dayRuns[0].id },
+    });
+    if (repair) {
+      await db.update(stopsTable).set({ runId: dayRuns[0].id }).where(eq(stopsTable.id, stop.id));
+      repaired++;
     }
   }
 
