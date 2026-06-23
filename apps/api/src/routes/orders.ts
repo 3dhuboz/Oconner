@@ -415,8 +415,11 @@ app.patch('/:id', async (c) => {
   if (body.status !== undefined) patch.status = body.status;
   if (body.paymentStatus !== undefined) patch.paymentStatus = body.paymentStatus;
 
+  const deliveryDayChanged = body.deliveryDayId !== undefined && body.deliveryDayId !== order.deliveryDayId;
+  let reassignedRunId: string | null | undefined;
+
   // Handle delivery day change — atomic deltas on both old and new day counters.
-  if (body.deliveryDayId !== undefined && body.deliveryDayId !== order.deliveryDayId) {
+  if (deliveryDayChanged && body.deliveryDayId) {
     await db.update(deliveryDays)
       .set({ orderCount: sql`MAX(0, ${deliveryDays.orderCount} - 1)` })
       .where(eq(deliveryDays.id, order.deliveryDayId));
@@ -424,8 +427,9 @@ app.patch('/:id', async (c) => {
       .set({ orderCount: sql`${deliveryDays.orderCount} + 1` })
       .where(eq(deliveryDays.id, body.deliveryDayId));
     patch.deliveryDayId = body.deliveryDayId;
-    // Move any existing stops to the new delivery day
-    await db.update(stops).set({ deliveryDayId: body.deliveryDayId }).where(eq(stops.orderId, orderId));
+    if ((body.paymentStatus ?? order.paymentStatus) === 'paid') {
+      reassignedRunId = await ensureDriverRunForDeliveryDay(db, body.deliveryDayId);
+    }
   }
 
   // Update customer totalSpent if total changed
@@ -437,8 +441,27 @@ app.patch('/:id', async (c) => {
     }
   }
 
-  await db.update(orders).set(patch).where(eq(orders.id, orderId));
   const effectiveOrder = { ...order, ...patch };
+
+  const stopPatch: Partial<typeof stops.$inferInsert> = {};
+  if (body.customerName !== undefined) stopPatch.customerName = body.customerName;
+  if (body.customerPhone !== undefined) stopPatch.customerPhone = body.customerPhone ?? '';
+  if (body.items !== undefined) stopPatch.items = JSON.stringify(body.items);
+  if (body.notes !== undefined) stopPatch.customerNote = body.notes ?? null;
+  if (body.deliveryAddress !== undefined) {
+    stopPatch.address = JSON.stringify(body.deliveryAddress);
+    stopPatch.lat = null;
+    stopPatch.lng = null;
+  }
+  if (deliveryDayChanged && body.deliveryDayId) {
+    stopPatch.deliveryDayId = body.deliveryDayId;
+    stopPatch.runId = reassignedRunId ?? null;
+  }
+
+  await db.update(orders).set(patch).where(eq(orders.id, orderId));
+  if (Object.keys(stopPatch).length > 0) {
+    await db.update(stops).set(stopPatch).where(eq(stops.orderId, orderId));
+  }
   if (effectiveOrder.paymentStatus === 'paid') {
     await ensureStopForPaidDeliveryOrder(db, effectiveOrder);
   }

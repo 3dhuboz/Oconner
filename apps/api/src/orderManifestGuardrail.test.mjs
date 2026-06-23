@@ -4,6 +4,7 @@ import { test } from 'node:test';
 
 const ordersRouteSource = readFileSync(new URL('./routes/orders.ts', import.meta.url), 'utf8');
 const deliveryDaysRouteSource = readFileSync(new URL('./routes/deliveryDays.ts', import.meta.url), 'utf8');
+const stopsRouteSource = readFileSync(new URL('./routes/stops.ts', import.meta.url), 'utf8');
 const indexSource = readFileSync(new URL('./index.ts', import.meta.url), 'utf8');
 
 test('paid delivery orders create a stop from admin and Square confirmation paths', () => {
@@ -37,4 +38,21 @@ test('public checkout orders are not fulfillable until Square confirms payment',
   assert.match(indexSource, /status:\s*'pending_payment'[\s\S]+paymentStatus:\s*initialPaymentStatus/);
   assert.match(deliveryDaysRouteSource, /const FULFILLABLE_PAYMENT_STATUSES = new Set\(\['paid'\]\)/);
   assert.match(deliveryDaysRouteSource, /!FULFILLABLE_PAYMENT_STATUSES\.has\(order\.paymentStatus\)/);
+});
+
+test('admin order edits keep existing delivery stops in sync for routing', () => {
+  assert.match(ordersRouteSource, /const stopPatch: Partial<typeof stops\.\$inferInsert>/);
+  assert.match(ordersRouteSource, /stopPatch\.address = JSON\.stringify\(body\.deliveryAddress\)/);
+  assert.match(ordersRouteSource, /stopPatch\.lat = null/);
+  assert.match(ordersRouteSource, /stopPatch\.lng = null/);
+  assert.match(ordersRouteSource, /stopPatch\.deliveryDayId = body\.deliveryDayId/);
+  assert.match(ordersRouteSource, /stopPatch\.runId = reassignedRunId \?\? null/);
+  assert.match(ordersRouteSource, /db\.update\(stops\)\.set\(stopPatch\)\.where\(eq\(stops\.orderId, orderId\)\)/);
+});
+
+test('manual stops inherit the single active run so the driver map can see them', () => {
+  assert.match(stopsRouteSource, /deliveryRuns/);
+  assert.match(stopsRouteSource, /existingRuns\.length === 1/);
+  assert.match(stopsRouteSource, /runId = existingRuns\[0\]\.id/);
+  assert.match(stopsRouteSource, /runId,/);
 });

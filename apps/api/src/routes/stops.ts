@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { drizzle } from 'drizzle-orm/d1';
 import { eq, asc, and, isNull, gt, inArray, ne } from 'drizzle-orm';
-import { stops, orders, driverSessions, notifications } from '@butcher/db';
+import { stops, orders, driverSessions, notifications, deliveryRuns } from '@butcher/db';
 import { notifyCustomer } from './push';
 import { sendSms } from '../lib/sms';
 import { parseJson } from '../lib/json';
@@ -168,9 +168,18 @@ app.post('/', async (c) => {
   const body = await c.req.json<typeof stops.$inferInsert & { address: object; items: object[] }>();
   const id = crypto.randomUUID();
   const isManual = !body.orderId || String(body.orderId).startsWith('manual');
+  let runId = body.runId ?? null;
+
+  if (!runId && body.deliveryDayId) {
+    const existingRuns = await db.select({ id: deliveryRuns.id })
+      .from(deliveryRuns)
+      .where(eq(deliveryRuns.deliveryDayId, body.deliveryDayId));
+    if (existingRuns.length === 1) runId = existingRuns[0].id;
+  }
 
   await db.insert(stops).values({
     ...body,
+    runId,
     id,
     orderId: isManual ? null : body.orderId,
     customerId: isManual ? null : body.customerId,
