@@ -2,7 +2,7 @@
 
 export const runtime = 'edge';
 // Stock availability is fetched per-request from the API, so this page must
-// not be statically pre-rendered â€” otherwise customers would see whatever
+// not be statically pre-rendered - otherwise customers would see whatever
 // allocations were live at build time. Same gotcha listed in the handover
 // for the About page.
 export const dynamic = 'force-dynamic';
@@ -17,7 +17,7 @@ import Footer from '@/components/Footer';
 import AddressAutocomplete from '@/components/AddressAutocomplete';
 
 const FREE_DELIVERY_THRESHOLD = 10000; // $100 in cents
-const DELIVERY_FEE_AMOUNT = 0;         // was 1000 ($10) â€” re-enable when delivery fees return
+const DELIVERY_FEE_AMOUNT = 0;         // was 1000 ($10) - re-enable when delivery fees return
 
 export default function CheckoutPage() {
   const { user } = useUser();
@@ -45,7 +45,7 @@ export default function CheckoutPage() {
   const hasBulkItem = items.some((i) => BULK_IDS.includes(i.productId));
 
   // Filter delivery days to those that actually serve the customer's postcode.
-  // Pickup days are never area-restricted â€” the customer collects, so any
+  // Pickup days are never area-restricted - the customer collects, so any
   // postcode is fine. Days with no zones configured also stay visible (legacy
   // safety: don't hide an admin-created day just because zones weren't filled).
   const availableDays = useMemo(() => {
@@ -96,9 +96,8 @@ export default function CheckoutPage() {
   useEffect(() => {
     api.get<any[]>('/api/delivery-days?upcoming=true&withStock=true')
       .then((data) => {
-        const tomorrow = Date.now() + 86_400_000;
         const days = (data as (DeliveryDay & { stockAvailability?: { productId: string; remaining: number }[] })[]).filter((d) => {
-          if (!d.active || d.date < tomorrow) return false;
+          if (!d.active) return false;
           if ((d.orderCount ?? 0) >= (d.maxOrders ?? 999)) return false;
           // If this day has stock allocations, check cart items are available
           if (d.stockAvailability && d.stockAvailability.length > 0) {
@@ -182,7 +181,7 @@ export default function CheckoutPage() {
     // Defence-in-depth: even if the dropdown filter is bypassed somehow,
     // refuse to submit when the chosen day doesn't actually serve this postcode.
     if (!isPickup && selectedDay && !dayServesPostcode((selectedDay as any).zones, form.postcode)) {
-      setError(`Sorry â€” postcode ${form.postcode} isn't on this run's route. Please pick a different delivery day.`);
+      setError(`Sorry - postcode ${form.postcode} isn't on this run's route. Please pick a different delivery day.`);
       return;
     }
     setSubmitting(true);
@@ -255,7 +254,7 @@ export default function CheckoutPage() {
 
             {isPickup ? (
               <section>
-                <h2 className="text-lg font-semibold mb-4">ðŸ“ Market Day Pickup</h2>
+                <h2 className="text-lg font-semibold mb-4">Market Day Pickup</h2>
                 <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
                   <p className="font-medium text-orange-800">{(selectedDay as any)?.marketLocation || (selectedDay as any)?.zones || 'Market Location'}</p>
                   <p className="text-sm text-orange-600 mt-1">Your order will be ready for collection. No delivery fee!</p>
@@ -292,9 +291,9 @@ export default function CheckoutPage() {
                     const date = new Date(day.date);
                     return (
                       <option key={day.id} value={day.id}>
-                        {(day as any).type === 'pickup' ? 'ðŸª ' : 'ðŸšš '}
-                        {date.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })} â€” {(day.maxOrders ?? 0) - (day.orderCount ?? 0)} spots left
-                        {(day as any).type === 'pickup' ? ` Â· Pickup: ${(day as any).marketLocation || (day as any).zones || 'Market'}` : (day as any).zones ? ` Â· ${(day as any).zones}` : ''}
+                        {(day as any).type === 'pickup' ? 'Pickup: ' : 'Delivery: '}
+                        {date.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })} - {(day.maxOrders ?? 0) - (day.orderCount ?? 0)} spots left
+                        {(day as any).type === 'pickup' ? ` - ${(day as any).marketLocation || (day as any).zones || 'Market'}` : (day as any).zones ? ` - ${(day as any).zones}` : ''}
                       </option>
                     );
                   })}
@@ -344,7 +343,7 @@ export default function CheckoutPage() {
               {promoApplied ? (
                 <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg px-4 py-3">
                   <div>
-                    <p className="text-sm font-medium text-green-800">{promoApplied.code} â€” {promoApplied.label}</p>
+                    <p className="text-sm font-medium text-green-800">{promoApplied.code} - {promoApplied.label}</p>
                     <p className="text-xs text-green-600">Saving {formatCurrency(promoApplied.discount)}</p>
                   </div>
                   <button onClick={() => { setPromoApplied(null); setPromoInput(''); }} className="text-xs text-red-500 hover:underline">Remove</button>
@@ -435,7 +434,7 @@ export default function CheckoutPage() {
                 disabled={Boolean(pendingPaymentOrderId) || submitting || priceSyncing || hasInvalidPricing || deliveryDays.length === 0 || (!isPickup && noDayServesPostcode) || !selectedDayId}
                 className="w-full mt-6 bg-brand text-white py-3 rounded-lg font-medium hover:bg-brand-mid transition-colors disabled:opacity-50"
               >
-                {submitting ? 'Placing Orderâ€¦' : priceSyncing || hasInvalidPricing ? 'Refreshing pricesâ€¦' : `Place Order â€” ${formatCurrency(grandTotal)}`}
+                {submitting ? 'Placing Order...' : priceSyncing || hasInvalidPricing ? 'Refreshing prices...' : `Place Order - ${formatCurrency(grandTotal)}`}
               </button>
               <p className="text-xs text-center text-gray-400 mt-3">You'll be redirected to Square to complete payment securely.</p>
             </div>
