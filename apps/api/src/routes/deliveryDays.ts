@@ -314,7 +314,7 @@ app.post('/:id/generate-stops', async (c) => {
   // already exist for those, but if for some reason it's missing we want
   // generate-stops to recreate it rather than silently skip.
   const DELIVERABLE_STATUSES = new Set([
-    'confirmed', 'preparing', 'packed', 'out_for_delivery',
+    'pending_payment', 'confirmed', 'preparing', 'packed', 'out_for_delivery',
   ]);
   const FULFILLABLE_PAYMENT_STATUSES = new Set(['paid']);
   const dayOrders = await db.select().from(orders).where(eq(orders.deliveryDayId, dayId));
@@ -325,7 +325,9 @@ app.post('/:id/generate-stops', async (c) => {
   for (const order of dayOrders) {
     if (existingOrderIds.has(order.id)) continue;
     if (!DELIVERABLE_STATUSES.has(order.status)) continue;
-    if (!FULFILLABLE_PAYMENT_STATUSES.has(order.paymentStatus)) continue;
+    const isInvoicedSubscription = order.paymentStatus === 'invoice_sent'
+      && (order.notes ?? '').startsWith('Subscription:');
+    if (!FULFILLABLE_PAYMENT_STATUSES.has(order.paymentStatus) && !isInvoicedSubscription) continue;
     const addr = JSON.parse(order.deliveryAddress) as { line1: string; suburb: string; postcode: string };
     const geo = await geocodeAddress(addr);
     await db.insert(stops).values({

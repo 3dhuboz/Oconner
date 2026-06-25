@@ -17,6 +17,8 @@ test('ops guardrails detect stock, manifest, route, subscription and stale check
   assert.match(source, /code: 'delivery_stop_order_drift'/);
   assert.match(source, /code: 'delivery_stop_unassigned_to_single_run'/);
   assert.match(source, /code: 'subscription_pending_without_invoice'/);
+  assert.match(source, /code: 'invoice_sent_subscription_missing_manifest_stop'/);
+  assert.match(source, /code: 'duplicate_active_subscription'/);
   assert.match(source, /code: 'stale_pending_checkout'/);
   assert.match(source, /code: 'delivery_day_order_count_drift'/);
 });

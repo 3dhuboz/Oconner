@@ -187,6 +187,43 @@ async function runOpsGuardrails(env: Env, options: { repair?: boolean } = {}): P
     runsByDayId.set(run.deliveryDayId, list);
   }
 
+  const activeSubscriptions = await db.select({
+    id: subscriptionsTable.id,
+    customerId: subscriptionsTable.customerId,
+    email: subscriptionsTable.email,
+    boxName: subscriptionsTable.boxName,
+    frequency: subscriptionsTable.frequency,
+    status: subscriptionsTable.status,
+    customerName: customersTable.name,
+  })
+    .from(subscriptionsTable)
+    .leftJoin(customersTable, eq(subscriptionsTable.customerId, customersTable.id))
+    .where(eq(subscriptionsTable.status, 'active'));
+
+  const subscriptionKeys = new Map<string, Array<typeof activeSubscriptions[number]>>();
+  for (const sub of activeSubscriptions) {
+    const key = `${String(sub.customerId ?? sub.email).toLowerCase()}|${sub.frequency}`;
+    const list = subscriptionKeys.get(key) ?? [];
+    list.push(sub);
+    subscriptionKeys.set(key, list);
+  }
+  for (const duplicateSubs of subscriptionKeys.values()) {
+    if (duplicateSubs.length < 2) continue;
+    const label = duplicateSubs[0].customerName || duplicateSubs[0].email;
+    issues.push({
+      code: 'duplicate_active_subscription',
+      severity: 'critical',
+      message: `${label} has ${duplicateSubs.length} active subscriptions on the same frequency.`,
+      details: {
+        subscriptionIds: duplicateSubs.map((sub) => sub.id),
+        customerId: duplicateSubs[0].customerId,
+        email: duplicateSubs[0].email,
+        frequency: duplicateSubs[0].frequency,
+        boxes: duplicateSubs.map((sub) => sub.boxName),
+      },
+    });
+  }
+
   for (const order of orders) {
     const day = daysById.get(order.deliveryDayId);
     if (!day) continue;
@@ -226,6 +263,24 @@ async function runOpsGuardrails(env: Env, options: { repair?: boolean } = {}): P
       });
       if (repair) {
         const created = await ensureStopForPaidDeliveryOrder(db, order);
+        if (created) repaired++;
+      }
+    }
+
+    if (
+      isInvoiceSentSubscriptionOrder(order)
+      && order.status === 'pending_payment'
+      && day.type === 'delivery'
+      && !stopOrderIds.has(order.id)
+    ) {
+      issues.push({
+        code: 'invoice_sent_subscription_missing_manifest_stop',
+        severity: 'critical',
+        message: `${order.customerName || order.customerEmail} has an invoiced subscription due, but no manifest stop.`,
+        details: { orderId: order.id, deliveryDayId: order.deliveryDayId, paymentStatus: order.paymentStatus },
+      });
+      if (repair) {
+        const created = await ensureStopForInvoiceSentSubscriptionOrder(db, order);
         if (created) repaired++;
       }
     }
@@ -508,7 +563,11 @@ function resolvePaidOrderStatus(order: OrderRow): string {
   return order.status === 'pending_payment' ? 'confirmed' : order.status;
 }
 
-async function ensureStopForPaidDeliveryOrder(db: ReturnType<typeof drizzle>, order: OrderRow): Promise<boolean> {
+function isInvoiceSentSubscriptionOrder(order: Pick<OrderRow, 'paymentStatus' | 'notes'>): boolean {
+  return order.paymentStatus === 'invoice_sent' && (order.notes ?? '').startsWith('Subscription:');
+}
+
+async function insertStopForDeliveryOrder(db: ReturnType<typeof drizzle>, order: OrderRow): Promise<boolean> {
   const [day] = await db.select().from(deliveryDaysTable).where(eq(deliveryDaysTable.id, order.deliveryDayId)).limit(1);
   if (!day || day.type !== 'delivery') return false;
 
@@ -539,6 +598,16 @@ async function ensureStopForPaidDeliveryOrder(db: ReturnType<typeof drizzle>, or
     createdAt: Date.now(),
   });
   return true;
+}
+
+async function ensureStopForPaidDeliveryOrder(db: ReturnType<typeof drizzle>, order: OrderRow): Promise<boolean> {
+  if (order.paymentStatus !== 'paid') return false;
+  return insertStopForDeliveryOrder(db, order);
+}
+
+async function ensureStopForInvoiceSentSubscriptionOrder(db: ReturnType<typeof drizzle>, order: OrderRow): Promise<boolean> {
+  if (!isInvoiceSentSubscriptionOrder(order)) return false;
+  return insertStopForDeliveryOrder(db, order);
 }
 
 async function ensureDriverRunForDeliveryDay(db: ReturnType<typeof drizzle>, deliveryDayId: string): Promise<string | null> {

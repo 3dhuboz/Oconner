@@ -37,7 +37,9 @@ test('paid delivery stops are assigned to a driver run when one active driver ex
 test('public checkout orders are not fulfillable until Square confirms payment', () => {
   assert.match(indexSource, /status:\s*'pending_payment'[\s\S]+paymentStatus:\s*initialPaymentStatus/);
   assert.match(deliveryDaysRouteSource, /const FULFILLABLE_PAYMENT_STATUSES = new Set\(\['paid'\]\)/);
-  assert.match(deliveryDaysRouteSource, /!FULFILLABLE_PAYMENT_STATUSES\.has\(order\.paymentStatus\)/);
+  assert.match(deliveryDaysRouteSource, /const isInvoicedSubscription = order\.paymentStatus === 'invoice_sent'/);
+  assert.match(deliveryDaysRouteSource, /startsWith\('Subscription:'\)/);
+  assert.match(deliveryDaysRouteSource, /!FULFILLABLE_PAYMENT_STATUSES\.has\(order\.paymentStatus\) && !isInvoicedSubscription/);
 });
 
 test('admin order edits keep existing delivery stops in sync for routing', () => {
