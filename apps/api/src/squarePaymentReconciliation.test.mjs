@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 const source = readFileSync(new URL('./index.ts', import.meta.url), 'utf8');
+const subscriptionsRouteSource = readFileSync(new URL('./routes/subscriptions.ts', import.meta.url), 'utf8');
 
 test('mark-paid falls back to completed Square payments when the payment-link order stays open', () => {
   assert.match(source, /findCompletedSquarePaymentByOrderReference/);
@@ -51,6 +52,15 @@ test('Square payment links can reconcile through Square order metadata when paym
   assert.match(source, /squareOrderMetadataMatchesOrder/);
   assert.match(source, /data\.order\?\.metadata\?\.orderId === orderId/);
   assert.match(source, /matchStrategy:\s*'square_order_metadata'/);
+});
+
+test('subscription fallback payment links are tied to the local order id', () => {
+  assert.match(subscriptionsRouteSource, /const orderId = await createSubscriptionOrder/);
+  assert.match(subscriptionsRouteSource, /metadata:\s*\{\s*orderId,\s*subscriptionId:\s*subId\s*\}/);
+  assert.match(subscriptionsRouteSource, /checkout\/success\?orderId=\$\{orderId\}/);
+  assert.match(subscriptionsRouteSource, /paymentStatus:\s*'awaiting_payment'/);
+  assert.match(subscriptionsRouteSource, /Square payment link:/);
+  assert.match(subscriptionsRouteSource, /Order #\$\{orderId\.slice\(0,\s*8\)\.toUpperCase\(\)\}/);
 });
 
 test('Square webhooks can mark paid orders without relying on browser redirects', () => {

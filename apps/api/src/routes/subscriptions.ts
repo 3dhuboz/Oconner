@@ -260,31 +260,6 @@ app.post('/checkout', async (c) => {
     }
   }
 
-  // ── Mode 2: No token — fallback to Square Payment Link ──
-  const result = await squareRequest(accessToken, '/online-checkout/payment-links', {
-    idempotency_key: crypto.randomUUID(),
-    quick_pay: {
-      name: `${body.boxName} — ${body.frequency} subscription`,
-      price_money: { amount: price, currency: 'AUD' },
-      location_id: locationId,
-    },
-    checkout_options: {
-      redirect_url: `${storefrontUrl}/subscribe/success`,
-      ask_for_shipping_address: false,
-    },
-    pre_populated_data: {
-      buyer_email: body.email,
-      ...(body.phone ? { buyer_phone_number: body.phone.replace(/^0/, '+61').replace(/\s/g, '') } : {}),
-    },
-    payment_note: `Subscription: ${body.boxName} (${body.frequency}). Customer: ${body.name}, ${body.address}, ${body.suburb} ${body.postcode}`,
-  });
-
-  const paymentLink = result.payment_link as { url?: string } | undefined;
-  if (!paymentLink?.url) {
-    console.error('Square checkout error:', JSON.stringify(result));
-    return c.json({ error: 'Failed to create checkout', details: result.errors ?? result }, 500);
-  }
-
   await db.insert(subscriptions).values({
     id: subId, customerId, email: body.email,
     boxId: body.boxId, boxName: body.boxName,
@@ -294,18 +269,71 @@ app.post('/checkout', async (c) => {
   });
 
   // Mode-2: customer is redirected to Square's hosted Payment Link. We don't
-  // know the outcome yet, so the order is created as pending_payment and
-  // status stays as 'pending_payment' (not 'confirmed') — it'll be confirmed
-  // only when payment lands. Cron-sweep cancels it if abandoned > 12h.
-  await createSubscriptionOrder(db, {
+  // know the outcome yet, so create the local order first, then create the
+  // Square link with the local order id embedded in metadata/payment_note. This
+  // lets the webhook/reconciler match the Square payment back to the order.
+  const orderId = await createSubscriptionOrder(db, {
     customerId: customerId!,
     email: body.email, name: body.name, phone: body.phone,
     address: { line1: body.address, suburb: body.suburb, state: 'QLD', postcode: body.postcode },
     boxId: body.boxId, boxName: body.boxName, frequency: body.frequency, price,
     subscriptionId: subId, now,
   });
+  if (!orderId) {
+    await db.update(subscriptions).set({ status: 'cancelled', updatedAt: Date.now() }).where(eq(subscriptions.id, subId));
+    return c.json({ error: 'No upcoming delivery day available' }, 400);
+  }
 
-  return c.json({ url: paymentLink.url });
+  const [createdOrder] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+  if (!createdOrder) return c.json({ error: 'Subscription order could not be created' }, 500);
+
+  const orderItems = JSON.parse(createdOrder.items) as Array<{ productName: string; quantity?: number; lineTotal: number }>;
+  const squareLineItems = orderItems.map((item) => {
+    const qty = item.quantity ?? 1;
+    return {
+      name: item.productName ?? 'Item',
+      quantity: String(qty),
+      base_price_money: { amount: Math.round(item.lineTotal / qty), currency: 'AUD' },
+    };
+  });
+
+  const result = await squareRequest(accessToken, '/online-checkout/payment-links', {
+    idempotency_key: crypto.randomUUID(),
+    order: {
+      location_id: locationId,
+      line_items: squareLineItems,
+      metadata: { orderId, subscriptionId: subId },
+    },
+    checkout_options: {
+      redirect_url: `${storefrontUrl}/checkout/success?orderId=${orderId}`,
+      ask_for_shipping_address: false,
+    },
+    pre_populated_data: {
+      buyer_email: body.email,
+      ...(body.phone ? { buyer_phone_number: body.phone.replace(/^0/, '+61').replace(/\s/g, '') } : {}),
+    },
+    payment_note: `O'Connor Agriculture — Order #${orderId.slice(0, 8).toUpperCase()} subscription: ${body.boxName} (${body.frequency})`,
+  });
+
+  const paymentLink = result.payment_link as { id?: string; url?: string; long_url?: string } | undefined;
+  const paymentUrl = paymentLink?.url ?? paymentLink?.long_url;
+  if (!paymentUrl) {
+    console.error('Square checkout error:', JSON.stringify(result));
+    await db.update(orders).set({
+      internalNotes: `${createdOrder.internalNotes ?? ''}\nSquare subscription payment link failed: ${JSON.stringify(result.errors ?? result).slice(0, 500)}`.trim(),
+      updatedAt: Date.now(),
+    }).where(eq(orders.id, orderId));
+    return c.json({ error: 'Failed to create checkout', details: result.errors ?? result }, 500);
+  }
+
+  await db.update(orders).set({
+    paymentStatus: 'awaiting_payment',
+    paymentProvider: 'square',
+    internalNotes: `${createdOrder.internalNotes ?? ''}\nSquare payment link: ${paymentLink?.id ?? 'unknown'}`.trim(),
+    updatedAt: Date.now(),
+  }).where(eq(orders.id, orderId));
+
+  return c.json({ url: paymentUrl });
 });
 
 app.get('/', async (c) => {
