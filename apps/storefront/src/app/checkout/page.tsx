@@ -99,12 +99,13 @@ export default function CheckoutPage() {
         const days = (data as (DeliveryDay & { stockAvailability?: { productId: string; remaining: number }[] })[]).filter((d) => {
           if (!d.active) return false;
           if ((d.orderCount ?? 0) >= (d.maxOrders ?? 999)) return false;
-          // If this day has stock allocations, check cart items are available
+          // Match the API stock guard exactly: if a day uses allocations, every
+          // cart item must be allocated to that day and have enough remaining.
           if (d.stockAvailability && d.stockAvailability.length > 0) {
             const hasUnavailable = items.some((item) => {
               const alloc = d.stockAvailability!.find((s) => s.productId === item.productId);
-              // If product has an allocation but no remaining stock, it's sold out for this day
-              return alloc !== undefined && alloc.remaining <= 0;
+              const qty = item.quantity ?? 1;
+              return alloc === undefined || alloc.remaining < qty;
             });
             if (hasUnavailable) return false;
           }

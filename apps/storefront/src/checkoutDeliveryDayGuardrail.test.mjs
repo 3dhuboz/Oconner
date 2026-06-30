@@ -24,6 +24,11 @@ test('checkout defaults to a delivery run before pickup when one exists', () => 
   assert.match(source, /const defaultDay = days\.find\(\(d\) => \(d as any\)\.type !== 'pickup'\) \?\? days\[0\]/);
 });
 
+test('checkout hides stock-pooled days when a cart item is not allocated', () => {
+  assert.match(source, /const alloc = d\.stockAvailability!\.find\(\(s\) => s\.productId === item\.productId\)/);
+  assert.match(source, /return alloc === undefined \|\| alloc\.remaining < qty/);
+});
+
 test('checkout requires a complete delivery address before order creation', () => {
   assert.match(source, /Please enter your delivery address, suburb and 4-digit postcode/);
   assert.match(source, /!\s*form\.line1\.trim\(\)/);
