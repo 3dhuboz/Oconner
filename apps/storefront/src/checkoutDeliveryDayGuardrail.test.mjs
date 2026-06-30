@@ -29,6 +29,11 @@ test('checkout hides stock-pooled days when a cart item is not allocated', () =>
   assert.match(source, /return alloc === undefined \|\| alloc\.remaining < qty/);
 });
 
+test('checkout explains when cart items are not available on the same run', () => {
+  assert.match(source, /No delivery days are available for everything in your cart/);
+  assert.match(source, /Some specials and add-ons are only packed for specific runs/);
+});
+
 test('checkout requires a complete delivery address before order creation', () => {
   assert.match(source, /Please enter your delivery address, suburb and 4-digit postcode/);
   assert.match(source, /!\s*form\.line1\.trim\(\)/);

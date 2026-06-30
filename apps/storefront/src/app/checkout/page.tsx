@@ -274,7 +274,12 @@ export default function CheckoutPage() {
             <section>
               <h2 className="text-lg font-semibold mb-4">Delivery Day</h2>
               {deliveryDays.length === 0 ? (
-                <p className="text-amber-600 text-sm">No delivery days available. Please check back soon.</p>
+                <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
+                  <p className="font-medium">No delivery days are available for everything in your cart.</p>
+                  <p className="mt-1 text-amber-700">
+                    Some specials and add-ons are only packed for specific runs. Please remove one item or place separate orders.
+                  </p>
+                </div>
               ) : noDayServesPostcode ? (
                 <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
                   <p className="font-medium">We don't currently have a run scheduled for postcode {form.postcode}.</p>
